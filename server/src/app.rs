@@ -7,7 +7,10 @@ use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use crate::{config::Config, error::route_not_found, modules, state::AppState};
 
 pub fn build_app(state: AppState, config: &Config) -> Router {
+    let api = Router::new().merge(modules::auth::routes(config.is_local()));
+
     Router::new()
+        .nest("/api/v1", api)
         .merge(modules::health::routes())
         .fallback(route_not_found)
         .layer(cors(&config.frontend_url))

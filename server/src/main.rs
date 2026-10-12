@@ -1,5 +1,7 @@
 mod app;
+mod auth;
 mod config;
+mod entities;
 mod error;
 mod modules;
 mod response;
@@ -8,7 +10,8 @@ mod state;
 use sea_orm::{ConnectOptions, Database};
 use tracing_subscriber::EnvFilter;
 
-use crate::{config::Config, state::AppState};
+use crate::{auth::JwtKeys, config::Config, state::AppState};
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() {
@@ -30,7 +33,15 @@ async fn main() {
         .await
         .expect("Không kết nối được database");
 
-    let app = app::build_app(AppState { db }, &config);
+    let state = AppState {
+        db,
+        jwt: Arc::new(JwtKeys::new(
+            &config.jwt_secret,
+            config.access_token_ttl_minutes,
+        )),
+    };
+
+    let app = app::build_app(state, &config);
 
     let listener = tokio::net::TcpListener::bind(&config.bind_addr)
         .await

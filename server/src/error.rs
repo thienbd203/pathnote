@@ -14,6 +14,8 @@ struct ErrorBody {
 
 #[derive(Debug)]
 pub enum AppError {
+    Unauthenticated,
+    BadRequest(String),
     NotFound(String),
     Internal(String),
 }
@@ -21,6 +23,11 @@ pub enum AppError {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, message) = match self {
+            AppError::Unauthenticated => (
+                StatusCode::UNAUTHORIZED,
+                "Bạn cần đăng nhập để tiếp tục".to_string(),
+            ),
+            AppError::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
             AppError::NotFound(message) => (StatusCode::NOT_FOUND, message),
             AppError::Internal(detail) => {
                 tracing::error!(%detail, "Lỗi nội bộ");
