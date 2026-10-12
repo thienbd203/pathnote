@@ -15,6 +15,7 @@ struct ErrorBody {
 #[derive(Debug)]
 pub enum AppError {
     Unauthenticated,
+    Forbidden,
     BadRequest(String),
     NotFound(String),
     Internal(String),
@@ -27,6 +28,7 @@ impl IntoResponse for AppError {
                 StatusCode::UNAUTHORIZED,
                 "Bạn cần đăng nhập để tiếp tục".to_string(),
             ),
+            AppError::Forbidden => (StatusCode::FORBIDDEN, "Nguồn yêu cầu không hợp lệ".into()),
             AppError::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
             AppError::NotFound(message) => (StatusCode::NOT_FOUND, message),
             AppError::Internal(detail) => {
@@ -56,3 +58,10 @@ impl From<DbErr> for AppError {
 pub async fn route_not_found() -> AppError {
     AppError::NotFound("Không tìm thấy đường dẫn".to_string())
 }
+
+impl std::fmt::Display for AppError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Authentication or application error")
+    }
+}
+impl std::error::Error for AppError {}

@@ -1,11 +1,11 @@
-use std::sync::Arc;
-
+use crate::{config::Config, modules::auth::google::GoogleAuth};
 use sea_orm::DatabaseConnection;
-
-use crate::auth::JwtKeys;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub db: DatabaseConnection,
-    pub jwt: Arc<JwtKeys>,
+    pub db: Arc<DatabaseConnection>,
+    pub access_tokens: Arc<crate::access_token::AccessTokens>,
+    pub google: Arc<GoogleAuth>,
+    pub config: Arc<Config>,
 }

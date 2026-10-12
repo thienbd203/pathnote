@@ -1,12 +1,6 @@
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::entities::users;
-
-#[derive(Deserialize)]
-pub struct DevLoginRequest {
-    pub email: String,
-    pub name: Option<String>,
-}
 
 #[derive(Serialize)]
 pub struct UserResource {
@@ -28,7 +22,7 @@ impl From<users::Model> for UserResource {
 }
 
 #[derive(Serialize)]
-pub struct TokenResponse {
+pub struct TokenResource {
     pub access_token: String,
     pub token_type: &'static str,
     pub expires_in: u64,

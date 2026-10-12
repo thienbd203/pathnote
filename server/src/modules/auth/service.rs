@@ -1,42 +1,63 @@
+use super::google::GoogleProfile;
+use crate::{entities::users, error::AppError};
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter,
+    sea_query::OnConflict, ActiveModelTrait, ActiveValue::Set, ColumnTrait, DatabaseConnection,
+    EntityTrait, QueryFilter,
 };
 
-use crate::{
-    entities::{prelude::Users, users},
-    error::AppError,
-};
-
-pub async fn find_or_create_by_email(
+pub async fn find_or_create_google_user(
     db: &DatabaseConnection,
-    email: &str,
-    name: Option<String>,
+    profile: GoogleProfile,
 ) -> Result<users::Model, AppError> {
-    if let Some(user) = Users::find()
-        .filter(users::Column::Email.eq(email))
+    // Identity is Google's subject, never an email supplied by the browser.
+    if let Some(owner) = users::Entity::find()
+        .filter(users::Column::Email.eq(&profile.email))
         .one(db)
         .await?
     {
-        return Ok(user);
+        if owner.google_id.as_deref() != Some(&profile.subject) {
+            return Err(AppError::BadRequest(
+                "Email đã thuộc một tài khoản khác".into(),
+            ));
+        }
     }
-
-    let name = name
-        .map(|name| name.trim().to_string())
-        .filter(|name| !name.is_empty())
-        .unwrap_or_else(|| email.split('@').next().unwrap_or(email).to_string());
-
-    let user = users::ActiveModel {
-        name: Set(name),
-        email: Set(email.to_string()),
+    let model = users::ActiveModel {
+        name: Set(profile.name.clone()),
+        email: Set(profile.email.clone()),
+        google_id: Set(Some(profile.subject.clone())),
+        avatar_url: Set(profile.avatar_url.clone()),
+        created_at: Set(chrono::Utc::now().fixed_offset()),
+        updated_at: Set(chrono::Utc::now().fixed_offset()),
         ..Default::default()
     };
-
-    Ok(user.insert(db).await?)
-}
-
-pub async fn find_by_id(db: &DatabaseConnection, id: i64) -> Result<users::Model, AppError> {
-    Users::find_by_id(id)
+    let result = users::Entity::insert(model)
+        .on_conflict(
+            OnConflict::column(users::Column::GoogleId)
+                .do_nothing()
+                .to_owned(),
+        )
+        .exec_without_returning(db)
+        .await;
+    if let Err(error) = result {
+        // A concurrent first login may have inserted this same Google identity.
+        if users::Entity::find()
+            .filter(users::Column::GoogleId.eq(&profile.subject))
+            .one(db)
+            .await?
+            .is_none()
+        {
+            return Err(error.into());
+        }
+    }
+    let user = users::Entity::find()
+        .filter(users::Column::GoogleId.eq(&profile.subject))
         .one(db)
         .await?
-        .ok_or_else(|| AppError::NotFound("Không tìm thấy người dùng".to_string()))
+        .ok_or(AppError::Unauthenticated)?;
+    let mut model: users::ActiveModel = user.into();
+    model.name = Set(profile.name);
+    model.email = Set(profile.email);
+    model.avatar_url = Set(profile.avatar_url);
+    model.updated_at = Set(chrono::Utc::now().fixed_offset());
+    Ok(model.update(db).await?)
 }
