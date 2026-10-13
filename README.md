@@ -55,6 +55,9 @@ SeaORM migration quản lý bảng nghiệp vụ.
 
 Session middleware chỉ gắn vào route Google, refresh và logout. API dùng JWT
 không đọc session store; endpoint me truy vấn bảng user để trả thông tin hiện tại.
+Route refresh có guard bắt buộc đăng nhập dùng `axum_login::predicate_required!`,
+trả lỗi JSON 401 theo định dạng của API. Login và callback là route công khai;
+logout có thể gọi khi phiên đã hết hạn để dọn trạng thái phía trình duyệt.
 
 ## Khóa công khai
 
