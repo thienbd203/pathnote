@@ -5,5 +5,7 @@ pub mod prelude;
 pub mod users;
 
 pub mod courses;
+pub mod note_collaborators;
+pub mod notes;
 pub mod places;
 pub mod sessions;

@@ -50,3 +50,13 @@ impl Related<super::courses::Entity> for Entity {
     }
 }
 impl ActiveModelBehavior for ActiveModel {}
+
+// A session has many collaborators through the junction table.
+impl Related<super::users::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::note_collaborators::Relation::User.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(super::note_collaborators::Relation::Session.def().rev())
+    }
+}

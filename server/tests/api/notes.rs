@@ -1,0 +1,286 @@
+use super::learning_helpers::LearningApp;
+use axum::http::StatusCode;
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use serde_json::{json, Value};
+use server::entities::{note_collaborators, notes};
+fn token(s: &str) -> String {
+    format!("Bearer {s}")
+}
+async fn lesson(app: &LearningApp) -> i64 {
+    let r = app
+        .api
+        .post("/api/v1/places")
+        .add_header("authorization", token(&app.owner_token))
+        .json(&json!({"name":"Notes school"}))
+        .await;
+    r.assert_status(StatusCode::CREATED);
+    let id = r.json::<Value>()["data"]["id"].as_i64().unwrap();
+    let r=app.api.post(&format!("/api/v1/places/{id}/sessions")).add_header("authorization",token(&app.owner_token)).json(&json!({"title":"Lesson","starts_at":"2026-10-13T11:00:00Z","duration_minutes":60,"timezone":"Asia/Ho_Chi_Minh"})).await;
+    r.assert_status(StatusCode::CREATED);
+    r.json::<Value>()["data"]["id"].as_i64().unwrap()
+}
+fn doc() -> Value {
+    json!({"type":"doc","content":[{"type":"paragraph","attrs":{"textAlign":null,"indent":0},"content":[{"type":"text","text":"Hello Jobs","marks":[{"type":"bold"}]}]}]})
+}
+fn save(content: Value, revision: i32) -> Value {
+    json!({"content":content,"schema_version":3,"base_revision":revision})
+}
+#[tokio::test]
+async fn notes_roundtrip_jsonb_and_revision_conflict_preserves_original() {
+    let app = LearningApp::spawn().await;
+    let id = lesson(&app).await;
+    let path = format!("/api/v1/sessions/{id}/note");
+    let auth = token(&app.owner_token);
+    app.api.get(&path).await.assert_status_unauthorized();
+    app.api
+        .get(&path)
+        .add_header("authorization", token(&app.other_token))
+        .await
+        .assert_status_not_found();
+    let r = app.api.get(&path).add_header("authorization", &auth).await;
+    r.assert_status_ok();
+    assert_eq!(r.json::<Value>()["data"]["revision"], 0);
+    let content = doc();
+    let r = app
+        .api
+        .put(&path)
+        .add_header("authorization", &auth)
+        .json(&save(content.clone(), 0))
+        .await;
+    r.assert_status_ok();
+    assert_eq!(r.json::<Value>()["data"]["content"], content);
+    assert_eq!(r.json::<Value>()["data"]["revision"], 1);
+    let r = app
+        .api
+        .put(&path)
+        .add_header("authorization", &auth)
+        .json(&save(
+            json!({"type":"doc","content":[{"type":"paragraph"}]}),
+            0,
+        ))
+        .await;
+    r.assert_status(StatusCode::CONFLICT);
+    assert_eq!(r.json::<Value>()["data"]["content"], content);
+    let stored = notes::Entity::find_by_id(id)
+        .one(app.db.as_ref())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.content, content);
+    app.cleanup().await;
+}
+#[tokio::test]
+async fn notes_typed_nodes_reject_wrong_attributes_shapes_links_and_limits() {
+    let app = LearningApp::spawn().await;
+    let id = lesson(&app).await;
+    let path = format!("/api/v1/sessions/{id}/note");
+    let auth = token(&app.owner_token);
+    let cases = vec![
+        json!({"type":"text","text":"not a block"}),
+        json!({"type":"heading","attrs":{"level":"1"}}),
+        json!({"type":"heading","attrs":{"level":4}}),
+        json!({"type":"paragraph","attrs":{"onclick":"attack"}}),
+        json!({"type":"paragraph","content":[{"type":"table"}]}),
+        json!({"type":"taskItem","attrs":{"checked":1},"content":[{"type":"paragraph"}]}),
+        json!({"type":"paragraph","content":[{"type":"text","text":"x","marks":[{"type":"link","attrs":{"href":"javascript:alert(1)"}}]}]}),
+        json!({"type":"paragraph","content":[{"type":"text","text":"x","marks":[{"type":"bold"},{"type":"bold"}]}]}),
+        json!({"type":"image","attrs":{"mediaId":1}}),
+        json!({"type":"exercise","attrs":{"exerciseId":1}}),
+        json!({"type":"table","content":[{"type":"tableRow","content":[{"type":"tableCell","attrs":{"rowspan":2},"content":[{"type":"paragraph"}]}]}]}),
+        json!({"type":"paragraph","content":[{"type":"text","text":"x".repeat(262144)}]}),
+    ];
+    for node in cases {
+        app.api
+            .put(&path)
+            .add_header("authorization", &auth)
+            .json(&save(json!({"type":"doc","content":[node]}), 0))
+            .await
+            .assert_status_unprocessable_entity();
+    }
+    let many = json!({"type":"doc","content":vec![json!({"type":"paragraph"});10000]});
+    app.api
+        .put(&path)
+        .add_header("authorization", &auth)
+        .json(&save(many, 0))
+        .await
+        .assert_status_unprocessable_entity();
+    let mut deep = json!({"type":"paragraph"});
+    for _ in 0..33 {
+        deep = json!({"type":"blockquote","content":[deep]});
+    }
+    app.api
+        .put(&path)
+        .add_header("authorization", &auth)
+        .json(&save(json!({"type":"doc","content":[deep]}), 0))
+        .await
+        .assert_status_unprocessable_entity();
+    let mut body = save(doc(), 0);
+    body["title"] = json!("Can't rename through note");
+    app.api
+        .put(&path)
+        .add_header("authorization", &auth)
+        .json(&body)
+        .await
+        .assert_status_unprocessable_entity();
+    assert!(notes::Entity::find_by_id(id)
+        .one(app.db.as_ref())
+        .await
+        .unwrap()
+        .is_none());
+    app.cleanup().await;
+}
+#[tokio::test]
+async fn notes_accept_rich_editor_blocks_and_preserve_json_without_normalizing() {
+    let app = LearningApp::spawn().await;
+    let id = lesson(&app).await;
+    let auth = token(&app.owner_token);
+    let content = json!({"type":"doc","content":[
+    {"type":"heading","attrs":{"level":2,"textAlign":"center","indent":1},"content":[{"type":"text","text":"Jobs"}]},
+    {"type":"taskList","content":[{"type":"taskItem","attrs":{"checked":false},"content":[{"type":"paragraph"}]}]},
+    {"type":"orderedList","attrs":{"start":2,"type":"a"},"content":[{"type":"listItem","content":[{"type":"paragraph"}]}]},
+    {"type":"codeBlock","attrs":{"language":"rust"},"content":[{"type":"text","text":"fn main() {}"}]},
+    {"type":"table","content":[{"type":"tableRow","content":[{"type":"tableCell","attrs":{"colspan":2,"rowspan":1,"colwidth":[80,100],"align":null},"content":[{"type":"paragraph"}]}]}]},
+    {"type":"vocabulary","attrs":{"locale":"en-US"},"content":[{"type":"vocabularyEntry","attrs":{"id":"00000000-0000-0000-0000-000000000001","word":"chef","ipa":"/ʃef/","topics":["Jobs"]},"content":[{"type":"vocabularySense","attrs":{"id":"00000000-0000-0000-0000-000000000002","partOfSpeech":"noun","meaning":"đầu bếp"},"content":[{"type":"vocabularyExample","attrs":{"id":"00000000-0000-0000-0000-000000000003","text":"I am a chef.","highlights":["chef"]}}]}]}]},
+    {"type":"paragraph","content":[{"type":"text","text":"Read","marks":[{"type":"link","attrs":{"href":"https://example.com","target":"_blank","rel":"noopener noreferrer nofollow","class":null}},{"type":"textStyle","attrs":{"color":"#ff0000","backgroundColor":null}}]}]}
+    ]});
+    let r = app
+        .api
+        .put(&format!("/api/v1/sessions/{id}/note"))
+        .add_header("authorization", &auth)
+        .json(&save(content.clone(), 0))
+        .await;
+    r.assert_status_ok();
+    assert_eq!(r.json::<Value>()["data"]["content"], content);
+    app.cleanup().await;
+}
+#[tokio::test]
+async fn sharing_is_idempotent_and_collaborators_edit_only_notes_until_revoked() {
+    let app = LearningApp::spawn().await;
+    let id = lesson(&app).await;
+    let owner = token(&app.owner_token);
+    let other = token(&app.other_token);
+    let path = format!("/api/v1/sessions/{id}/collaborators");
+    for _ in 0..2 {
+        app.api
+            .post(&path)
+            .add_header("authorization", &owner)
+            .json(&json!({"email":" OTHER@example.test "}))
+            .await
+            .assert_status(StatusCode::CREATED);
+    }
+    let members = app.api.get(&path).add_header("authorization", &owner).await;
+    members.assert_status_ok();
+    let list = members.json::<Value>()["data"].as_array().unwrap().clone();
+    assert_eq!(list.len(), 1);
+    let user = list[0]["id"].as_i64().unwrap();
+    app.api
+        .get(&path)
+        .add_header("authorization", &other)
+        .await
+        .assert_status_not_found();
+    app.api
+        .post(&path)
+        .add_header("authorization", &other)
+        .json(&json!({"email":"owner@example.test"}))
+        .await
+        .assert_status_not_found();
+    for email in ["owner@example.test", "missing@example.test"] {
+        app.api
+            .post(&path)
+            .add_header("authorization", &owner)
+            .json(&json!({"email":email}))
+            .await
+            .assert_status_unprocessable_entity();
+    }
+    app.api
+        .get(&format!("/api/v1/sessions/{id}"))
+        .add_header("authorization", &other)
+        .await
+        .assert_status_not_found();
+    app.api
+        .put(&format!("/api/v1/sessions/{id}/note"))
+        .add_header("authorization", &other)
+        .json(&save(doc(), 0))
+        .await
+        .assert_status_ok();
+    let shared = app
+        .api
+        .get("/api/v1/shared-notes")
+        .add_header("authorization", &other)
+        .await;
+    shared.assert_status_ok();
+    assert_eq!(shared.json::<Value>()["meta"]["total"], 1);
+    app.api
+        .get(&format!("/api/v1/shared-notes/{id}"))
+        .add_header("authorization", &other)
+        .await
+        .assert_status_ok();
+    app.api
+        .delete(&format!("{path}/{user}"))
+        .add_header("authorization", &owner)
+        .await
+        .assert_status_no_content();
+    app.api
+        .get(&format!("/api/v1/sessions/{id}/note"))
+        .add_header("authorization", &other)
+        .await
+        .assert_status_not_found();
+    app.api
+        .put(&format!("/api/v1/sessions/{id}/note"))
+        .add_header("authorization", &other)
+        .json(&save(doc(), 1))
+        .await
+        .assert_status_not_found();
+    assert!(note_collaborators::Entity::find()
+        .filter(note_collaborators::Column::SessionId.eq(id))
+        .all(app.db.as_ref())
+        .await
+        .unwrap()
+        .is_empty());
+    app.cleanup().await;
+}
+#[tokio::test]
+async fn concurrent_note_saves_have_one_winner_and_deleted_parents_hide_shared_notes() {
+    let app = LearningApp::spawn().await;
+    let id = lesson(&app).await;
+    let owner = token(&app.owner_token);
+    let path = format!("/api/v1/sessions/{id}/note");
+    let body = save(doc(), 0);
+    let (a, b) = tokio::join!(
+        app.api
+            .put(&path)
+            .add_header("authorization", &owner)
+            .json(&body),
+        app.api
+            .put(&path)
+            .add_header("authorization", &owner)
+            .json(&body)
+    );
+    let mut statuses = [a.status_code().as_u16(), b.status_code().as_u16()];
+    statuses.sort();
+    assert_eq!(statuses, [200, 409]);
+    app.api
+        .post(&format!("/api/v1/sessions/{id}/collaborators"))
+        .add_header("authorization", &owner)
+        .json(&json!({"email":"other@example.test"}))
+        .await
+        .assert_status(StatusCode::CREATED);
+    app.api
+        .delete(&format!("/api/v1/sessions/{id}"))
+        .add_header("authorization", &owner)
+        .await
+        .assert_status_no_content();
+    app.api
+        .get(&path)
+        .add_header("authorization", &owner)
+        .await
+        .assert_status_not_found();
+    let r = app
+        .api
+        .get("/api/v1/shared-notes")
+        .add_header("authorization", token(&app.other_token))
+        .await;
+    r.assert_status_ok();
+    assert_eq!(r.json::<Value>()["meta"]["total"], 0);
+    app.cleanup().await;
+}

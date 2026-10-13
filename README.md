@@ -103,9 +103,11 @@ Token có `typ=at+jwt`, `iss=JWT_ISSUER`, `aud=JWT_AUDIENCE`, `sub` là ID user,
 issuer, audience, loại token và thời hạn. Chỉ có một khóa hoạt động hiện tại;
 chưa có cơ chế giữ nhiều khóa để xoay khóa không gián đoạn.
 
-Frontend trên nhánh `feat/rust-auth-flow` đã nối auth Rust và mở trang tài khoản.
-Chưa nối các trang nghiệp vụ; collaboration vẫn dùng Laravel và chưa tích hợp
-Rust. JWT hiện có audience `pathnote-api`;
+Frontend trên nhánh `feat/rust-auth-flow` đã nối auth và CRUD Places/Courses/Sessions
+với Rust. Trang gốc mở hành trình học; trang buổi học dùng lại editor ghi chép.
+Editor autosave và chia sẻ đã nối với Rust; realtime/collaboration, media và bài tập
+chưa chuyển. Xem [Ghi chú Tiptap và chia sẻ](plans/03-notes-and-sharing.md).
+JWT hiện có audience `pathnote-api`;
 khi thêm collaboration cần thiết kế audience và quyền truy cập riêng.
 
 ## Test API

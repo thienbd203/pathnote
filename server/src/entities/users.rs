@@ -23,3 +23,12 @@ pub struct Model {
 pub enum Relation {}
 
 impl ActiveModelBehavior for ActiveModel {}
+
+impl Related<super::sessions::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::note_collaborators::Relation::Session.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(super::note_collaborators::Relation::User.def().rev())
+    }
+}
