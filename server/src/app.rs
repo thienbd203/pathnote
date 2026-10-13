@@ -36,15 +36,15 @@ pub fn build_app<S: SessionStore + Clone>(state: AppState, config: &Config, stor
     let api = Router::new()
         .merge(modules::auth::routes())
         .layer(auth)
-        .merge(modules::auth::access_routes());
+        .layer(middleware::from_fn_with_state(state.clone(), cookie_origin))
+        .merge(modules::auth::access_routes())
+        .merge(modules::places::routes())
+        .merge(modules::courses::routes());
 
     Router::new()
         .nest("/api/v1", api)
         .merge(modules::health::routes())
-        .layer(middleware::from_fn_with_state(
-            state.clone(),
-            browser_request,
-        ))
+        .layer(middleware::from_fn(browser_request))
         .fallback(route_not_found)
         .layer(cors(&config.frontend_url))
         .layer(TraceLayer::new_for_http().make_span_with(|request: &Request| tracing::info_span!("http_request", method = %request.method(), path = request.uri().path())))
@@ -65,7 +65,19 @@ fn cors(frontend_url: &str) -> CorsLayer {
         .allow_credentials(true)
 }
 
-async fn browser_request(
+async fn browser_request(request: Request, next: Next) -> Result<Response, AppError> {
+    let mut response = next.run(request).await;
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response.headers_mut().insert(
+        header::REFERRER_POLICY,
+        HeaderValue::from_static("no-referrer"),
+    );
+    Ok(response)
+}
+
+async fn cookie_origin(
     State(state): State<AppState>,
     request: Request,
     next: Next,
@@ -82,13 +94,5 @@ async fn browser_request(
             return Err(AppError::Forbidden);
         }
     }
-    let mut response = next.run(request).await;
-    response
-        .headers_mut()
-        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-    response.headers_mut().insert(
-        header::REFERRER_POLICY,
-        HeaderValue::from_static("no-referrer"),
-    );
-    Ok(response)
+    Ok(next.run(request).await)
 }

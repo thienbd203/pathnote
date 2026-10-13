@@ -9,6 +9,8 @@ use serde::Serialize;
 #[derive(Serialize)]
 struct ErrorBody {
     message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    errors: Option<std::collections::BTreeMap<String, Vec<String>>>,
 }
 
 #[derive(Debug)]
@@ -18,11 +20,20 @@ pub enum AppError {
     BadRequest(String),
     NotFound(String),
     Internal(String),
+    Validation(std::collections::BTreeMap<String, Vec<String>>),
 }
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
+        let mut errors = None;
         let (status, message) = match self {
+            AppError::Validation(fields) => {
+                errors = Some(fields);
+                (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "Dữ liệu không hợp lệ".into(),
+                )
+            }
             AppError::Unauthenticated => (
                 StatusCode::UNAUTHORIZED,
                 "Bạn cần đăng nhập để tiếp tục".to_string(),
@@ -39,7 +50,7 @@ impl IntoResponse for AppError {
             }
         };
 
-        let body = ErrorBody { message };
+        let body = ErrorBody { message, errors };
 
         (status, Json(body)).into_response()
     }
@@ -61,3 +72,12 @@ impl std::fmt::Display for AppError {
     }
 }
 impl std::error::Error for AppError {}
+
+impl AppError {
+    pub fn validation(field: &str, message: &str) -> Self {
+        Self::Validation(std::collections::BTreeMap::from([(
+            field.to_owned(),
+            vec![message.to_owned()],
+        )]))
+    }
+}

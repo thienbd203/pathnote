@@ -4,6 +4,31 @@ Axum, SeaORM và PostgreSQL. Google login dùng `openidconnect`; phiên dùng
 `axum-login`, `tower-sessions` và `tower-sessions-sqlx-store`. JWT dùng
 `jsonwebtoken`, ký RS256 bằng khóa riêng của Pathnote.
 
+Danh sách giai đoạn và checklist triển khai nằm trong [plans](plans/README.md).
+
+## Bước học Places
+
+Module đầu tiên của giai đoạn 2 đã có API dưới `/api/v1/places`: GET/POST cho
+collection và GET/PATCH/DELETE cho một ID. JWT xác định chủ sở hữu; dữ liệu của
+user khác hoặc đã xóa trả 404. Có page/per_page, tìm tên bằng q, xóa mềm và
+PATCH phân biệt missing/null. Courses đã có CRUD; sessions/schedule chưa triển khai.
+
+Đọc [Học Rust qua Places](plans/02a-places.md) để đi từ SeaQuery migration,
+entity đến extractor, handler, DTO và service. Khi muốn áp schema vào app local,
+chạy `cargo run -p migration -- up` như hướng dẫn bên dưới.
+
+Test Places dùng `TEST_DATABASE_URL` nếu được cấu hình; nếu không, dùng
+DATABASE_URL local để tạo schema `pathnote_learning_test_*` riêng từng test và
+xóa sau khi test thành công. Không sửa bảng trong schema public. Database
+test cần quyền tạo schema. Các test auth trước đó vẫn dùng SQLite riêng.
+
+## Bước học Courses
+
+Module Courses có GET/POST `/api/v1/places/{place_id}/courses` và
+GET/PATCH/DELETE `/api/v1/courses/{id}`. Dùng JOIN để giới hạn quyền qua place,
+transaction/row lock để phối hợp tạo course với xóa place. Xem
+[Courses, relation và transaction](plans/02b-courses.md).
+
 ## Chạy local
 
 Sao chép `.env.example` thành `.env`, điền PostgreSQL và Google Client ID/Secret.
@@ -67,8 +92,9 @@ Token có `typ=at+jwt`, `iss=JWT_ISSUER`, `aud=JWT_AUDIENCE`, `sub` là ID user,
 issuer, audience, loại token và thời hạn. Chỉ có một khóa hoạt động hiện tại;
 chưa có cơ chế giữ nhiều khóa để xoay khóa không gián đoạn.
 
-Collaboration và frontend hiện vẫn nối Laravel. Chưa tích hợp Rust vào hai repo
-đó và chưa có API quyền bài học trong Rust. JWT hiện có audience `pathnote-api`;
+Frontend trên nhánh `feat/rust-auth-flow` đã nối auth Rust và mở trang tài khoản.
+Chưa nối các trang nghiệp vụ; collaboration vẫn dùng Laravel và chưa tích hợp
+Rust. JWT hiện có audience `pathnote-api`;
 khi thêm collaboration cần thiết kế audience và quyền truy cập riêng.
 
 ## Test API

@@ -3,3 +3,6 @@
 pub mod prelude;
 
 pub mod users;
+
+pub mod courses;
+pub mod places;

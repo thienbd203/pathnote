@@ -16,6 +16,11 @@ pub struct ApiResponse<T> {
 }
 
 impl<T> ApiResponse<T> {
+    pub fn created(data: T) -> Self {
+        let mut response = Self::ok(data);
+        response.status = StatusCode::CREATED;
+        response
+    }
     pub fn ok(data: T) -> Self {
         Self {
             status: StatusCode::OK,
