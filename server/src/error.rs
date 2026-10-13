@@ -8,7 +8,6 @@ use serde::Serialize;
 
 #[derive(Serialize)]
 struct ErrorBody {
-    success: bool,
     message: String,
 }
 
@@ -40,10 +39,7 @@ impl IntoResponse for AppError {
             }
         };
 
-        let body = ErrorBody {
-            success: false,
-            message,
-        };
+        let body = ErrorBody { message };
 
         (status, Json(body)).into_response()
     }

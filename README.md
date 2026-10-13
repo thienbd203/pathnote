@@ -36,7 +36,6 @@ SeaORM migration quản lý bảng nghiệp vụ.
 
 ```json
 {
-  "success": true,
   "data": {
     "access_token": "<JWT>",
     "token_type": "Bearer",
