@@ -8,7 +8,8 @@ triển khai, mục tiêu học và điều kiện hoàn thành. Checklist chỉ
 | --- | --- | --- | --- |
 | 1 | Google login, session PostgreSQL, JWT access token | Đã có code và test API; chưa xác nhận Google login thật end-to-end | [README backend](../README.md) |
 | 2 | Places, courses, sessions và sinh lịch ban đầu | Đã có CRUD ba cấp; sinh lịch và bulk-delete chưa triển khai | [Kế hoạch giai đoạn 2](02-learning-hierarchy.md) |
-| 3 | Ghi chú JSONB và chia sẻ | Đã có API và editor autosave; realtime/media/bài tập chưa nối | [Ghi chú và chia sẻ](03-notes-and-sharing.md) |
+| 3 | Ghi chú JSONB và chia sẻ | Đã có API và editor autosave; realtime/bài tập chưa nối | [Ghi chú và chia sẻ](03-notes-and-sharing.md) |
+| 3b | Ảnh và tệp riêng tư | Upload/read và kiểm tra media reference; chưa có orphan cleanup job | [Private media](03b-private-media.md) |
 
 Bước thực hành đầu tiên: [Học Rust qua Places](02a-places.md). Triển khai từng
 module để đọc hiểu code trước khi mở rộng; không tạo cả hierarchy trong một bước.

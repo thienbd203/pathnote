@@ -16,6 +16,7 @@ pub struct LearningApp {
     pub owner_token: String,
     pub other_token: String,
     pub owner_id: i64,
+    pub media_root: String,
     admin: DatabaseConnection,
     schema: String,
 }
@@ -53,6 +54,10 @@ impl LearningApp {
             .unwrap();
         store.migrate().await.unwrap();
         let config = Arc::new(Config {
+            media_root: std::env::temp_dir()
+                .join(format!("pathnote_media_test_{}", uuid::Uuid::new_v4()))
+                .to_string_lossy()
+                .into_owned(),
             google_client_id: "test-client".into(),
             google_client_secret: "test-secret".into(),
             google_redirect_url: "http://localhost:3000/api/v1/auth/google/callback".into(),
@@ -78,6 +83,7 @@ impl LearningApp {
         let other = seed_user(&db, "other").await;
         let owner_token = access.issue(owner.id).unwrap();
         let other_token = access.issue(other.id).unwrap();
+        let media_root = config.media_root.clone();
         let state = AppState {
             db: db.clone(),
             access_tokens: access,
@@ -91,11 +97,13 @@ impl LearningApp {
             owner_token,
             other_token,
             owner_id: owner.id,
+            media_root,
             admin,
             schema,
         }
     }
     pub async fn cleanup(self) {
+        let _ = tokio::fs::remove_dir_all(&self.media_root).await;
         drop(self.api);
         Arc::try_unwrap(self.db)
             .expect("Test database still borrowed")

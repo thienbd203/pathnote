@@ -11,3 +11,5 @@ mod places;
 mod sessions;
 
 mod notes;
+
+mod media;

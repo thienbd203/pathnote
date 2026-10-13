@@ -34,7 +34,7 @@ fn memberships(user: i64) -> sea_orm::sea_query::SelectStatement {
         .and_where(Expr::col(note_collaborators::Column::UserId).eq(user))
         .to_owned()
 }
-async fn access<C: ConnectionTrait>(
+pub async fn access<C: ConnectionTrait>(
     db: &C,
     user: i64,
     id: i64,
@@ -98,7 +98,23 @@ pub async fn save(
     // Share/revoke/delete use the same parent lock; recheck access after waiting.
     place_service::lock_for_write(&txn, place.user_id, place.id).await?;
     access(&txn, user, id, false).await?;
-    super::document::validate(&input.content, input.schema_version)?;
+    let references = super::document::validate(&input.content, input.schema_version)?;
+    if !references.is_empty() {
+        let media = crate::entities::media::Entity::find()
+            .filter(crate::entities::media::Column::SessionId.eq(id))
+            .filter(crate::entities::media::Column::Id.is_in(references.iter().map(|r| r.id)))
+            .all(&txn)
+            .await?;
+        if !references
+            .iter()
+            .all(|r| media.iter().any(|m| m.id == r.id && m.kind == r.kind))
+        {
+            return Err(AppError::validation(
+                "content",
+                "Ảnh hoặc tệp không thuộc buổi học này.",
+            ));
+        }
+    }
     if !(0..i32::MAX).contains(&input.base_revision) {
         return Err(AppError::validation(
             "base_revision",

@@ -6,6 +6,10 @@ mod validation;
 use node::Node;
 use serde::Deserialize;
 pub use validation::validate;
+pub struct MediaReference {
+    pub id: i64,
+    pub kind: &'static str,
+}
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Document {

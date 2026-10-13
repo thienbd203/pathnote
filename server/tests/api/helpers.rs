@@ -60,6 +60,10 @@ impl TestApp {
             .unwrap();
         let google = MockServer::start().await;
         let config = Arc::new(Config {
+            media_root: std::env::temp_dir()
+                .join(format!("pathnote_media_test_{}", uuid::Uuid::new_v4()))
+                .to_string_lossy()
+                .into_owned(),
             google_client_id: "our-client".into(),
             google_client_secret: "test-secret".into(),
             google_redirect_url: "http://localhost:3000/api/v1/auth/google/callback".into(),

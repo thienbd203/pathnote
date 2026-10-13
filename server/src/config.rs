@@ -2,6 +2,7 @@ use std::env;
 
 #[derive(Clone)]
 pub struct Config {
+    pub media_root: String,
     pub google_client_id: String,
     pub google_client_secret: String,
     pub google_redirect_url: String,
@@ -50,6 +51,7 @@ impl Config {
             "FRONTEND_URL phải là origin, không chứa đường dẫn"
         );
         Self {
+            media_root: optional("MEDIA_ROOT", ".storage/media"),
             google_client_id: required("GOOGLE_CLIENT_ID"),
             google_client_secret: required("GOOGLE_CLIENT_SECRET"),
             google_redirect_url,

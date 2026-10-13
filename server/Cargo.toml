@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-axum.workspace = true
+axum = { workspace = true, features = ["multipart"] }
 dotenvy.workspace = true
 sea-orm.workspace = true
 serde.workspace = true
@@ -24,8 +24,14 @@ tower-sessions = { version = "0.14", default-features = false, features = ["axum
 time = "0.3"
 tower-sessions-sqlx-store = { version = "0.15", features = ["postgres"] }
 
-[dev-dependencies]
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp"] }
+infer = "0.19.0"
+percent-encoding = "2"
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+roxmltree = "0.21.1"
 uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
 migration = { path = "../migration" }
 axum-test = "21"
 sea-orm = { version = "1", features = ["sqlx-sqlite"] }

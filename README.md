@@ -105,7 +105,7 @@ chưa có cơ chế giữ nhiều khóa để xoay khóa không gián đoạn.
 
 Frontend trên nhánh `feat/rust-auth-flow` đã nối auth và CRUD Places/Courses/Sessions
 với Rust. Trang gốc mở hành trình học; trang buổi học dùng lại editor ghi chép.
-Editor autosave và chia sẻ đã nối với Rust; realtime/collaboration, media và bài tập
+Editor autosave và chia sẻ đã nối với Rust; ảnh/tệp riêng tư đã nối; realtime/collaboration và bài tập
 chưa chuyển. Xem [Ghi chú Tiptap và chia sẻ](plans/03-notes-and-sharing.md).
 JWT hiện có audience `pathnote-api`;
 khi thêm collaboration cần thiết kế audience và quyền truy cập riêng.
@@ -126,3 +126,6 @@ trình duyệt với cấu hình Google Console.
 
 Tham khảo: [jsonwebtoken](https://docs.rs/jsonwebtoken/10.4.0/jsonwebtoken/),
 [Tower Sessions SQLx store](https://docs.rs/tower-sessions-sqlx-store/0.15.0/tower_sessions_sqlx_store/).
+
+Ảnh và tài liệu: [Private media](plans/03b-private-media.md). Cấu hình `MEDIA_ROOT`
+ngoài public root; giá trị local mặc định `.storage/media`.

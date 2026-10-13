@@ -7,6 +7,8 @@ mod m20261013_064853_create_sessions;
 
 mod m20261013_090001_create_notes;
 
+mod m20261013_100001_create_media;
+
 pub struct Migrator;
 
 #[async_trait::async_trait]
@@ -18,6 +20,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261013_045811_create_courses::Migration),
             Box::new(m20261013_064853_create_sessions::Migration),
             Box::new(m20261013_090001_create_notes::Migration),
+            Box::new(m20261013_100001_create_media::Migration),
         ]
     }
 }

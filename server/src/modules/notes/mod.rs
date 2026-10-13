@@ -1,7 +1,7 @@
 mod document;
 mod dto;
 mod handlers;
-mod service;
+pub(super) mod service;
 use crate::state::AppState;
 use axum::{
     routing::{delete, get},

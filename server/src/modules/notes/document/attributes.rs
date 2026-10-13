@@ -108,3 +108,19 @@ pub struct PronunciationAttrs {
     pub locale: Locale,
     pub meaning: Option<String>,
 }
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct ImageAttrs {
+    pub media_id: i64,
+    pub alt: Option<String>,
+    pub align: Option<Align>,
+    pub width: Option<u16>,
+    pub height: Option<u16>,
+    pub caption_visible: Option<bool>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct FileAttrs {
+    pub media_id: i64,
+}

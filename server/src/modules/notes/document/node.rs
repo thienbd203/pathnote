@@ -3,6 +3,18 @@ use serde::Deserialize;
 #[derive(Deserialize)]
 #[serde(tag = "type", deny_unknown_fields)]
 pub enum Node {
+    #[serde(rename = "image")]
+    Image {
+        attrs: ImageAttrs,
+        #[serde(default)]
+        content: Vec<Node>,
+    },
+    #[serde(rename = "file")]
+    File {
+        attrs: FileAttrs,
+        #[serde(default)]
+        content: Vec<Node>,
+    },
     #[serde(rename = "text")]
     Text {
         text: String,

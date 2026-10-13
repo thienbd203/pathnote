@@ -1,10 +1,12 @@
-use super::{attributes::*, marks::Mark, node::Node, Document};
+use super::{attributes::*, marks::Mark, node::Node, Document, MediaReference};
 use crate::AppError;
 use std::collections::HashSet;
 impl Node {
     fn children(&self) -> &[Node] {
         match self {
-            Self::Paragraph { content, .. }
+            Self::Image { content, .. }
+            | Self::File { content, .. }
+            | Self::Paragraph { content, .. }
             | Self::Heading { content, .. }
             | Self::BulletList { content, .. }
             | Self::OrderedList { content, .. }
@@ -27,7 +29,9 @@ impl Node {
     fn block(&self) -> bool {
         matches!(
             self,
-            Self::Paragraph { .. }
+            Self::Image { .. }
+                | Self::File { .. }
+                | Self::Paragraph { .. }
                 | Self::Heading { .. }
                 | Self::BulletList { .. }
                 | Self::OrderedList { .. }
@@ -47,6 +51,10 @@ impl Node {
         }
         let c = self.children();
         let shape = match self {
+            Self::Image { .. } => c
+                .iter()
+                .all(|n| matches!(n,Self::Text {marks,..} if marks.is_empty())),
+            Self::File { .. } => c.is_empty(),
             Self::Paragraph { attrs, .. } => {
                 (version >= 3 || (attrs.text_align.is_none() && attrs.indent.is_none()))
                     && attrs.indent.unwrap_or(0) <= 6
@@ -126,7 +134,9 @@ impl Node {
         if version < 3
             && matches!(
                 self,
-                Self::Vocabulary { .. }
+                Self::Image { .. }
+                    | Self::File { .. }
+                    | Self::Vocabulary { .. }
                     | Self::VocabularyEntry { .. }
                     | Self::VocabularySense { .. }
                     | Self::VocabularyExample { .. }
@@ -136,6 +146,15 @@ impl Node {
             return false;
         }
         let attrs = match self {
+            Self::Image { attrs, .. } => {
+                attrs.media_id > 0
+                    && attrs.alt.as_deref().is_none_or(|s| len(s, 200))
+                    && !matches!(attrs.align, Some(Align::Justify))
+                    && [attrs.width, attrs.height]
+                        .iter()
+                        .all(|v| v.is_none_or(|n| (1..=8192).contains(&n)))
+            }
+            Self::File { attrs, .. } => attrs.media_id > 0,
             Self::OrderedList { attrs, .. } => {
                 attrs.start.unwrap_or(1) > 0
                     && attrs
@@ -309,7 +328,10 @@ fn unique_ids(nodes: &[Node]) -> bool {
     let mut seen = HashSet::new();
     nodes.iter().all(|n| visit(n, &mut seen))
 }
-pub fn validate(content: &serde_json::Value, version: i32) -> Result<(), AppError> {
+pub fn validate(
+    content: &serde_json::Value,
+    version: i32,
+) -> Result<Vec<MediaReference>, AppError> {
     if !(1..=3).contains(&version) {
         return Err(AppError::validation(
             "schema_version",
@@ -340,5 +362,25 @@ pub fn validate(content: &serde_json::Value, version: i32) -> Result<(), AppErro
             "Cấu trúc ghi chép không hợp lệ.",
         ));
     }
-    Ok(())
+    fn refs(node: &Node, found: &mut Vec<MediaReference>) {
+        match node {
+            Node::Image { attrs, .. } => found.push(MediaReference {
+                id: attrs.media_id,
+                kind: "image",
+            }),
+            Node::File { attrs, .. } => found.push(MediaReference {
+                id: attrs.media_id,
+                kind: "file",
+            }),
+            _ => {}
+        }
+        for child in node.children() {
+            refs(child, found)
+        }
+    }
+    let mut found = Vec::new();
+    for node in &doc.content {
+        refs(node, &mut found)
+    }
+    Ok(found)
 }
