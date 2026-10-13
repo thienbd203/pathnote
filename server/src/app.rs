@@ -39,7 +39,8 @@ pub fn build_app<S: SessionStore + Clone>(state: AppState, config: &Config, stor
         .layer(middleware::from_fn_with_state(state.clone(), cookie_origin))
         .merge(modules::auth::access_routes())
         .merge(modules::places::routes())
-        .merge(modules::courses::routes());
+        .merge(modules::courses::routes())
+        .merge(modules::sessions::routes());
 
     Router::new()
         .nest("/api/v1", api)

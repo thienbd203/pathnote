@@ -11,7 +11,7 @@ Danh sách giai đoạn và checklist triển khai nằm trong [plans](plans/REA
 Module đầu tiên của giai đoạn 2 đã có API dưới `/api/v1/places`: GET/POST cho
 collection và GET/PATCH/DELETE cho một ID. JWT xác định chủ sở hữu; dữ liệu của
 user khác hoặc đã xóa trả 404. Có page/per_page, tìm tên bằng q, xóa mềm và
-PATCH phân biệt missing/null. Courses đã có CRUD; sessions/schedule chưa triển khai.
+PATCH phân biệt missing/null. Courses và Sessions đã có CRUD; sinh lịch chưa triển khai.
 
 Đọc [Học Rust qua Places](plans/02a-places.md) để đi từ SeaQuery migration,
 entity đến extractor, handler, DTO và service. Khi muốn áp schema vào app local,
@@ -28,6 +28,17 @@ Module Courses có GET/POST `/api/v1/places/{place_id}/courses` và
 GET/PATCH/DELETE `/api/v1/courses/{id}`. Dùng JOIN để giới hạn quyền qua place,
 transaction/row lock để phối hợp tạo course với xóa place. Xem
 [Courses, relation và transaction](plans/02b-courses.md).
+
+## Bước học Sessions
+
+GET/POST `/api/v1/courses/{id}/sessions` cho buổi học thuộc khóa;
+GET/POST `/api/v1/places/{id}/sessions` chỉ cho buổi học độc lập.
+GET/PATCH/DELETE `/api/v1/sessions/{id}` cho từng buổi học.
+List có `page`, `per_page`, `q` tìm theo tên, sắp theo `starts_at` rồi ID.
+
+Thời điểm gửi RFC3339 có offset hoặc `Z`; response trả UTC. `timezone` cần khi
+tạo hoặc đổi thời gian/thời lượng để kiểm tra buổi học kết thúc cùng ngày địa
+phương. Xem [Sessions, UTC và relation tùy chọn](plans/02c-sessions.md).
 
 ## Chạy local
 
@@ -106,8 +117,8 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 Test đặt trong `server/tests/api`, tách theo API và dùng helper dựng app.
 Google được giả lập qua HTTP nhưng vẫn kiểm tra chữ ký ID token thật bằng
-`openidconnect`. Database test là SQLite riêng từng test; production là
-PostgreSQL. Test phiên chạy với store package, kiểm tra khôi phục sau khi tạo
+`openidconnect`. Test auth dùng SQLite riêng; test Places/Courses/Sessions chạy migration thật
+trên schema PostgreSQL riêng. Production dùng PostgreSQL. Test phiên chạy với store package, kiểm tra khôi phục sau khi tạo
 lại ứng dụng, hết hạn và đăng xuất. Đăng nhập Google thật cần thử riêng trên
 trình duyệt với cấu hình Google Console.
 

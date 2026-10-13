@@ -22,7 +22,7 @@ fn owned(user_id: i64) -> Select<courses::Entity> {
         .filter(places::Column::DeletedAt.is_null())
         .filter(courses::Column::DeletedAt.is_null())
 }
-async fn model<C: ConnectionTrait>(
+pub async fn model<C: ConnectionTrait>(
     db: &C,
     user_id: i64,
     id: i64,
@@ -163,6 +163,14 @@ pub async fn delete(db: &DatabaseConnection, user_id: i64, id: i64) -> Result<()
     let mut changes: courses::ActiveModel = current.into();
     changes.deleted_at = Set(Some(now));
     changes.updated_at = Set(now);
+    use crate::entities::sessions;
+    sessions::Entity::update_many()
+        .col_expr(sessions::Column::DeletedAt, Expr::value(now))
+        .col_expr(sessions::Column::UpdatedAt, Expr::value(now))
+        .filter(sessions::Column::CourseId.eq(id))
+        .filter(sessions::Column::DeletedAt.is_null())
+        .exec(&txn)
+        .await?;
     changes.update(&txn).await?;
     txn.commit().await?;
     Ok(())

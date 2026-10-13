@@ -3,6 +3,7 @@ pub use sea_orm_migration::prelude::*;
 mod m20261012_101052_create_users_table;
 mod m20261013_043011_create_places;
 mod m20261013_045811_create_courses;
+mod m20261013_064853_create_sessions;
 
 pub struct Migrator;
 
@@ -13,6 +14,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261012_101052_create_users_table::Migration),
             Box::new(m20261013_043011_create_places::Migration),
             Box::new(m20261013_045811_create_courses::Migration),
+            Box::new(m20261013_064853_create_sessions::Migration),
         ]
     }
 }

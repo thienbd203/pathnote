@@ -1,7 +1,7 @@
 # Giai đoạn 2 — Places, courses, sessions
 
-Trạng thái: **đang triển khai theo bước**. Places và Courses CRUD đã có;
-sessions, bulk-delete và sinh lịch ban đầu chưa triển khai.
+Trạng thái: **đang triển khai theo bước**. CRUD Places, Courses và Sessions đã có;
+bulk-delete, tìm ngày học và sinh lịch ban đầu chưa triển khai.
 
 Sau khi review cách tiếp cận, triển khai từng bước theo cấu trúc Rust thay vì
 copy schema/kiến trúc Laravel. Bắt đầu với [Places](02a-places.md); cấu trúc module
@@ -284,10 +284,10 @@ Nhóm coverage bắt buộc:
 ## 11. Thứ tự triển khai
 
 1. [ ] Chốt contract DTO, lỗi 422/pagination, query owner, các đề xuất soft-delete.
-2. [ ] Thu hẹp Origin check về cookie auth; kiểm tra giữ nguyên bảo vệ refresh/logout.
-3. [ ] Migration, entities, relation/FK/index; chuẩn bị PostgreSQL API test fixture.
-4. [ ] Places CRUD và courses CRUD không schedule; test quyền và PATCH.
-5. [ ] Course sessions và independent sessions; thời gian UTC và validation timezone.
+2. [x] Thu hẹp Origin check về cookie auth; kiểm tra giữ nguyên bảo vệ refresh/logout.
+3. [x] Migration, entities, relation/FK/index; chuẩn bị PostgreSQL API test fixture.
+4. [x] Places CRUD và courses CRUD không schedule; test quyền và PATCH.
+5. [x] Course sessions và independent sessions; thời gian UTC và validation timezone.
 6. [ ] Generator chrono-tz, create-course transaction, snapshot và idempotency.
 7. [ ] Xóa mềm ba cấp, xóa đơn và bulk; khóa cha/con và rollback.
 8. [ ] Search/phân trang; kiểm tra query count và kế hoạch query trên dữ liệu đại diện.

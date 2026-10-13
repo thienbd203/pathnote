@@ -2,8 +2,9 @@ use super::dto::{self, CreatePlace, ListPlaces, PageMeta, PlacePage, UpdatePlace
 use crate::{entities::places, AppError};
 use sea_orm::{
     sea_query::{Expr, Func, LikeExpr},
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, DatabaseTransaction, EntityTrait,
-    PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Select, Set, TransactionTrait,
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DatabaseTransaction,
+    EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Select, Set,
+    TransactionTrait,
 };
 
 // One ownership scope is reused for reads, lists, updates and deletion.
@@ -16,8 +17,8 @@ fn not_found() -> AppError {
     AppError::NotFound("Không tìm thấy nơi học.".into())
 }
 
-pub async fn get(
-    db: &DatabaseConnection,
+pub async fn get<C: ConnectionTrait>(
+    db: &C,
     user_id: i64,
     id: i64,
 ) -> Result<places::Model, AppError> {
@@ -122,6 +123,14 @@ pub async fn delete(db: &DatabaseConnection, user_id: i64, id: i64) -> Result<()
     let txn = db.begin().await?;
     lock_for_write(&txn, user_id, id).await?;
     let now = chrono::Utc::now().fixed_offset();
+    use crate::entities::sessions;
+    sessions::Entity::update_many()
+        .col_expr(sessions::Column::DeletedAt, Expr::value(now))
+        .col_expr(sessions::Column::UpdatedAt, Expr::value(now))
+        .filter(sessions::Column::PlaceId.eq(id))
+        .filter(sessions::Column::DeletedAt.is_null())
+        .exec(&txn)
+        .await?;
     use crate::entities::courses;
     courses::Entity::update_many()
         .col_expr(courses::Column::DeletedAt, Expr::value(now))

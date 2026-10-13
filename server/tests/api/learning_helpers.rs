@@ -49,7 +49,7 @@ impl LearningApp {
         let store = PostgresStore::new(db.get_postgres_connection_pool().clone())
             .with_schema_name(&schema)
             .unwrap()
-            .with_table_name("sessions")
+            .with_table_name("tower_sessions")
             .unwrap();
         store.migrate().await.unwrap();
         let config = Arc::new(Config {

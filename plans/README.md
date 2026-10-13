@@ -7,12 +7,14 @@ triển khai, mục tiêu học và điều kiện hoàn thành. Checklist chỉ
 | Giai đoạn | Nội dung | Trạng thái | Kế hoạch |
 | --- | --- | --- | --- |
 | 1 | Google login, session PostgreSQL, JWT access token | Đã có code và test API; chưa xác nhận Google login thật end-to-end | [README backend](../README.md) |
-| 2 | Places, courses, sessions và sinh lịch ban đầu | Đã có Places và Courses CRUD; sessions/schedule chưa triển khai | [Kế hoạch giai đoạn 2](02-learning-hierarchy.md) |
+| 2 | Places, courses, sessions và sinh lịch ban đầu | Đã có CRUD ba cấp; sinh lịch và bulk-delete chưa triển khai | [Kế hoạch giai đoạn 2](02-learning-hierarchy.md) |
 
 Bước thực hành đầu tiên: [Học Rust qua Places](02a-places.md). Triển khai từng
 module để đọc hiểu code trước khi mở rộng; không tạo cả hierarchy trong một bước.
 
 Bước tiếp theo: [Courses, relation và transaction](02b-courses.md).
+
+Bước thứ ba: [Sessions, thời điểm UTC và relation tùy chọn](02c-sessions.md).
 
 Nguyên tắc chung:
 

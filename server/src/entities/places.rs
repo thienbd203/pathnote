@@ -22,6 +22,8 @@ pub enum Relation {
         to = "super::users::Column::Id"
     )]
     User,
+    #[sea_orm(has_many = "super::sessions::Entity")]
+    Sessions,
     #[sea_orm(has_many = "super::courses::Entity")]
     Courses,
 }
@@ -35,5 +37,11 @@ impl ActiveModelBehavior for ActiveModel {}
 impl Related<super::courses::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Courses.def()
+    }
+}
+
+impl Related<super::sessions::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Sessions.def()
     }
 }

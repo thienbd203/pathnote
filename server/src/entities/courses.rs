@@ -22,6 +22,8 @@ pub enum Relation {
         to = "super::places::Column::Id"
     )]
     Place,
+    #[sea_orm(has_many = "super::sessions::Entity")]
+    Sessions,
 }
 impl Related<super::places::Entity> for Entity {
     fn to() -> RelationDef {
@@ -29,3 +31,9 @@ impl Related<super::places::Entity> for Entity {
     }
 }
 impl ActiveModelBehavior for ActiveModel {}
+
+impl Related<super::sessions::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Sessions.def()
+    }
+}

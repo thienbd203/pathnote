@@ -37,7 +37,7 @@ pub async fn show(
     Path(id): Path<i64>,
 ) -> Result<ApiResponse<PlaceResource>, AppError> {
     Ok(ApiResponse::ok(
-        service::get(&state.db, user.id, id).await?.into(),
+        service::get(state.db.as_ref(), user.id, id).await?.into(),
     ))
 }
 pub async fn update(

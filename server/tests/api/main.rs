@@ -8,3 +8,4 @@ mod me;
 mod courses;
 mod learning_helpers;
 mod places;
+mod sessions;

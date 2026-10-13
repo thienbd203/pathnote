@@ -1,0 +1,150 @@
+use sea_orm_migration::prelude::*;
+#[derive(DeriveMigrationName)]
+pub struct Migration;
+#[async_trait::async_trait]
+impl MigrationTrait for Migration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        // Composite FK prevents pairing a course with a different place.
+        manager
+            .create_index(
+                Index::create()
+                    .name("courses_id_place_unique")
+                    .table(Courses::Table)
+                    .col(Courses::Id)
+                    .col(Courses::PlaceId)
+                    .unique()
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .create_table(
+                Table::create()
+                    .table(Sessions::Table)
+                    .col(
+                        ColumnDef::new(Sessions::Id)
+                            .big_integer()
+                            .not_null()
+                            .auto_increment()
+                            .primary_key(),
+                    )
+                    .col(ColumnDef::new(Sessions::PlaceId).big_integer().not_null())
+                    .col(ColumnDef::new(Sessions::CourseId).big_integer())
+                    .col(ColumnDef::new(Sessions::Title).string_len(200).not_null())
+                    .col(
+                        ColumnDef::new(Sessions::StartsAt)
+                            .timestamp_with_time_zone()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(Sessions::DurationMinutes)
+                            .small_integer()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(Sessions::Status)
+                            .string_len(20)
+                            .not_null()
+                            .default("scheduled"),
+                    )
+                    .col(
+                        ColumnDef::new(Sessions::CreatedAt)
+                            .timestamp_with_time_zone()
+                            .not_null()
+                            .default(Expr::current_timestamp()),
+                    )
+                    .col(
+                        ColumnDef::new(Sessions::UpdatedAt)
+                            .timestamp_with_time_zone()
+                            .not_null()
+                            .default(Expr::current_timestamp()),
+                    )
+                    .col(ColumnDef::new(Sessions::DeletedAt).timestamp_with_time_zone())
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("sessions_place_fk")
+                            .from(Sessions::Table, Sessions::PlaceId)
+                            .to(Places::Table, Places::Id)
+                            .on_delete(ForeignKeyAction::Restrict),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("sessions_course_place_fk")
+                            .from_tbl(Sessions::Table)
+                            .from_col(Sessions::CourseId)
+                            .from_col(Sessions::PlaceId)
+                            .to_tbl(Courses::Table)
+                            .to_col(Courses::Id)
+                            .to_col(Courses::PlaceId)
+                            .on_delete(ForeignKeyAction::Restrict),
+                    )
+                    .check(Expr::col(Sessions::DurationMinutes).between(1, 1440))
+                    .check(Expr::col(Sessions::Status).is_in(["scheduled", "cancelled"]))
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .create_index(
+                Index::create()
+                    .name("sessions_course_timeline")
+                    .table(Sessions::Table)
+                    .col(Sessions::CourseId)
+                    .col(Sessions::DeletedAt)
+                    .col(Sessions::StartsAt)
+                    .col(Sessions::Id)
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .create_index(
+                Index::create()
+                    .name("sessions_place_timeline")
+                    .table(Sessions::Table)
+                    .col(Sessions::PlaceId)
+                    .col(Sessions::CourseId)
+                    .col(Sessions::DeletedAt)
+                    .col(Sessions::StartsAt)
+                    .col(Sessions::Id)
+                    .to_owned(),
+            )
+            .await?;
+        Ok(())
+    }
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table(Sessions::Table).to_owned())
+            .await?;
+        manager
+            .drop_index(
+                Index::drop()
+                    .name("courses_id_place_unique")
+                    .table(Courses::Table)
+                    .to_owned(),
+            )
+            .await
+    }
+}
+#[derive(DeriveIden)]
+enum Sessions {
+    Table,
+    Id,
+    PlaceId,
+    CourseId,
+    Title,
+    StartsAt,
+    DurationMinutes,
+    Status,
+    CreatedAt,
+    UpdatedAt,
+    DeletedAt,
+}
+#[derive(DeriveIden)]
+enum Places {
+    Table,
+    Id,
+}
+#[derive(DeriveIden)]
+enum Courses {
+    Table,
+    Id,
+    PlaceId,
+}

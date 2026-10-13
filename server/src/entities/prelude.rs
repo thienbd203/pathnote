@@ -2,4 +2,5 @@
 
 pub use super::courses::Entity as Courses;
 pub use super::places::Entity as Places;
+pub use super::sessions::Entity as Sessions;
 pub use super::users::Entity as Users;

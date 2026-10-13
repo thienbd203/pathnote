@@ -6,3 +6,4 @@ pub mod users;
 
 pub mod courses;
 pub mod places;
+pub mod sessions;
