@@ -33,3 +33,9 @@ mod exercise_types;
 mod ai_study;
 
 mod ipa;
+
+mod flashcards;
+
+mod fsrs_optimization;
+
+mod flashcard_history;

@@ -19,6 +19,9 @@ mod m20261014_020001_create_exercises;
 
 mod m20261014_030001_create_ai_imports;
 mod m20261014_040001_create_ipa_library;
+mod m20261014_050001_create_flashcards;
+mod m20261014_060001_add_personal_fsrs;
+mod m20261014_070001_add_review_snapshot;
 pub struct Migrator;
 
 #[async_trait::async_trait]
@@ -37,6 +40,9 @@ impl MigratorTrait for Migrator {
             Box::new(m20261014_020001_create_exercises::Migration),
             Box::new(m20261014_030001_create_ai_imports::Migration),
             Box::new(m20261014_040001_create_ipa_library::Migration),
+            Box::new(m20261014_050001_create_flashcards::Migration),
+            Box::new(m20261014_060001_add_personal_fsrs::Migration),
+            Box::new(m20261014_070001_add_review_snapshot::Migration),
         ]
     }
 }

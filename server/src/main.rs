@@ -55,6 +55,7 @@ async fn main() {
         config.jwt_key_id.clone(),
     )
     .expect("Không khởi tạo được access token");
+    let fsrs_worker = tokio::spawn(server::run_auto_fsrs(db.clone()));
     let cleanup_db = db.clone();
     let cleanup_root = std::path::PathBuf::from(&config.media_root);
     let media_cleanup = tokio::spawn(async move {
@@ -113,6 +114,7 @@ async fn main() {
         .with_graceful_shutdown(shutdown_signal())
         .await
         .expect("Server dừng bất thường");
+    fsrs_worker.abort();
     cleanup.abort();
     media_cleanup.abort();
 }

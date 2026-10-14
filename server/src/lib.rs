@@ -21,3 +21,7 @@ pub use modules::media::cleanup::{
 };
 
 pub use modules::ai_study::cleanup::clean as clean_pending_ai_imports;
+
+pub use modules::vocabulary::flashcards::optimization::{
+    run as run_auto_fsrs, run_once as optimize_fsrs_once,
+};

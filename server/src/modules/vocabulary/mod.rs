@@ -1,3 +1,4 @@
+pub(crate) mod flashcards;
 mod library;
 mod rebuild;
 mod reviews;
@@ -9,4 +10,5 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/vocabulary", get(library::list))
         .merge(reviews::routes())
+        .merge(flashcards::routes())
 }
