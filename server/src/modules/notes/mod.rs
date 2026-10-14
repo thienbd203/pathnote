@@ -1,4 +1,5 @@
-mod document;
+mod collaboration;
+pub(in crate::modules) mod document;
 mod dto;
 mod handlers;
 pub(super) mod service;
@@ -7,8 +8,9 @@ use axum::{
     routing::{delete, get},
     Router,
 };
-pub fn routes() -> Router<AppState> {
+pub fn routes(state: AppState) -> Router<AppState> {
     Router::new()
+        .merge(collaboration::routes(state))
         .route(
             "/sessions/{id}/note",
             get(handlers::show).put(handlers::save),

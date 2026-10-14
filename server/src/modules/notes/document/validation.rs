@@ -2,7 +2,7 @@ use super::{attributes::*, marks::Mark, node::Node, Document, MediaReference};
 use crate::AppError;
 use std::collections::HashSet;
 impl Node {
-    fn children(&self) -> &[Node] {
+    pub(super) fn children(&self) -> &[Node] {
         match self {
             Self::Image { content, .. }
             | Self::File { content, .. }

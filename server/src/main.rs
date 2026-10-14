@@ -56,6 +56,9 @@ async fn main() {
     )
     .expect("Không khởi tạo được access token");
     let state = AppState {
+        learning_services: Arc::new(
+            server::LearningServices::new(&config).expect("Không tạo được HTTP client"),
+        ),
         access_tokens: Arc::new(access_tokens),
         db,
         google: Arc::new(

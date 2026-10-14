@@ -60,6 +60,10 @@ impl TestApp {
             .unwrap();
         let google = MockServer::start().await;
         let config = Arc::new(Config {
+            collaboration_url: None,
+            collaboration_secret: None,
+            pronunciation_url: None,
+            translation_url: None,
             media_root: std::env::temp_dir()
                 .join(format!("pathnote_media_test_{}", uuid::Uuid::new_v4()))
                 .to_string_lossy()
@@ -97,6 +101,7 @@ impl TestApp {
         )
         .unwrap();
         let state = AppState {
+            learning_services: Arc::new(server::LearningServices::new(&config).unwrap()),
             access_tokens: Arc::new(access_tokens),
             db: db.clone(),
             google: Arc::new(google_client),

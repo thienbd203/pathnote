@@ -22,6 +22,12 @@ pub async fn save(
     Path(id): Path<i64>,
     body: Result<Json<dto::SaveNote>, JsonRejection>,
 ) -> Result<Response, AppError> {
+    service::access(s.db.as_ref(), u.id, id, false).await?;
+    if s.config.collaboration_url.is_some() {
+        return Err(AppError::BadRequest(
+            "Ghi chép đang dùng realtime. Hãy tải lại trang.".into(),
+        ));
+    }
     let Json(input) =
         body.map_err(|_| AppError::validation("content", "Dữ liệu ghi chép không hợp lệ."))?;
     match service::save(&s.db, u.id, id, input).await? {

@@ -13,3 +13,13 @@ mod sessions;
 mod notes;
 
 mod media;
+
+mod bulk;
+mod session_search;
+
+mod collaboration;
+
+mod vocabulary;
+
+mod enrichment;
+mod vocabulary_reviews;

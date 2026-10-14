@@ -2,6 +2,7 @@
 name = "server"
 version = "0.1.0"
 edition = "2021"
+default-run = "server"
 
 [dependencies]
 axum = { workspace = true, features = ["multipart"] }
@@ -14,7 +15,7 @@ tower-http.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 openidconnect = { version = "4.0.1", default-features = false, features = ["reqwest", "rustls-tls", "timing-resistant-secret-traits"] }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 chrono = { version = "0.4", features = ["serde"] }
 chrono-tz = "0.10.4"
 serde_with = { version = "3", default-features = false, features = ["std"] }
@@ -30,6 +31,11 @@ percent-encoding = "2"
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 roxmltree = "0.21.1"
 uuid = { version = "1", features = ["v4"] }
+
+rand = "0.8"
+sha2 = "0.10"
+base64 = "0.22"
+subtle = "2"
 
 [dev-dependencies]
 migration = { path = "../migration" }

@@ -22,7 +22,7 @@ pub enum Parent {
 fn missing() -> AppError {
     AppError::NotFound("Không tìm thấy buổi học.".into())
 }
-fn owned(user: i64) -> Select<sessions::Entity> {
+pub(in crate::modules) fn owned(user: i64) -> Select<sessions::Entity> {
     sessions::Entity::find()
         .join(JoinType::InnerJoin, sessions::Relation::Place.def())
         .join(JoinType::LeftJoin, sessions::Relation::Course.def())
@@ -87,7 +87,7 @@ pub async fn list(
     input: ListQuery,
 ) -> Result<SessionPage, AppError> {
     let (place_id, course_id) = parent(db, user, scope).await?;
-    let size = input.page_size()?;
+    input.page_size()?;
     let mut query = owned(user).filter(sessions::Column::PlaceId.eq(place_id));
     query = match course_id {
         Some(id) => query.filter(sessions::Column::CourseId.eq(id)),
@@ -107,6 +107,14 @@ pub async fn list(
             .like(LikeExpr::new(format!("%{literal}%")).escape('!')),
         );
     }
+    page(db, query, input).await
+}
+pub(super) async fn page(
+    db: &DatabaseConnection,
+    query: Select<sessions::Entity>,
+    input: ListQuery,
+) -> Result<SessionPage, AppError> {
+    let size = input.page_size()?;
     let paginator = query
         .order_by_asc(sessions::Column::StartsAt)
         .order_by_asc(sessions::Column::Id)

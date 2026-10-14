@@ -2,6 +2,10 @@ use std::env;
 
 #[derive(Clone)]
 pub struct Config {
+    pub collaboration_url: Option<String>,
+    pub collaboration_secret: Option<String>,
+    pub pronunciation_url: Option<String>,
+    pub translation_url: Option<String>,
     pub media_root: String,
     pub google_client_id: String,
     pub google_client_secret: String,
@@ -50,7 +54,35 @@ impl Config {
             reqwest::Url::parse(&frontend_url).unwrap().path() == "/",
             "FRONTEND_URL phải là origin, không chứa đường dẫn"
         );
+        let collaboration_url = env::var("COLLABORATION_URL").ok().filter(|v| !v.is_empty());
+        let collaboration_secret = env::var("COLLABORATION_SECRET")
+            .ok()
+            .filter(|v| !v.is_empty());
+        if let Some(value) = &collaboration_url {
+            let url = reqwest::Url::parse(value).expect("COLLABORATION_URL không hợp lệ");
+            assert!(
+                url.scheme() == "wss"
+                    || (url.scheme() == "ws"
+                        && matches!(url.host_str(), Some("localhost" | "127.0.0.1"))),
+                "WebSocket cần WSS, ngoại trừ localhost"
+            );
+            assert!(
+                url.username().is_empty()
+                    && url.password().is_none()
+                    && url.query().is_none()
+                    && url.fragment().is_none(),
+                "WebSocket URL không được chứa thông tin xác thực"
+            );
+            assert!(
+                collaboration_secret.as_ref().is_some_and(|s| s.len() >= 32),
+                "COLLABORATION_SECRET cần ít nhất 32 ký tự"
+            );
+        }
         Self {
+            pronunciation_url: service_url("PRONUNCIATION_URL"),
+            translation_url: service_url("TRANSLATION_URL"),
+            collaboration_url,
+            collaboration_secret,
             media_root: optional("MEDIA_ROOT", ".storage/media"),
             google_client_id: required("GOOGLE_CLIENT_ID"),
             google_client_secret: required("GOOGLE_CLIENT_SECRET"),
@@ -76,4 +108,23 @@ fn required(name: &str) -> String {
 
 fn optional(name: &str, default: &str) -> String {
     env::var(name).unwrap_or_else(|_| default.to_string())
+}
+
+fn service_url(name: &str) -> Option<String> {
+    let value = env::var(name).ok().filter(|s| !s.is_empty())?;
+    let url = reqwest::Url::parse(&value).expect("Service URL không hợp lệ");
+    assert!(
+        url.scheme() == "https"
+            || (url.scheme() == "http"
+                && matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "::1"))),
+        "Service URL cần HTTPS hoặc localhost"
+    );
+    assert!(
+        url.username().is_empty()
+            && url.password().is_none()
+            && url.query().is_none()
+            && url.fragment().is_none(),
+        "Service URL không được chứa thông tin xác thực"
+    );
+    Some(value.trim_end_matches('/').into())
 }

@@ -7,9 +7,15 @@ triển khai, mục tiêu học và điều kiện hoàn thành. Checklist chỉ
 | Giai đoạn | Nội dung | Trạng thái | Kế hoạch |
 | --- | --- | --- | --- |
 | 1 | Google login, session PostgreSQL, JWT access token | Đã có code và test API; chưa xác nhận Google login thật end-to-end | [README backend](../README.md) |
-| 2 | Places, courses, sessions và sinh lịch ban đầu | Đã có CRUD ba cấp; sinh lịch và bulk-delete chưa triển khai | [Kế hoạch giai đoạn 2](02-learning-hierarchy.md) |
-| 3 | Ghi chú JSONB và chia sẻ | Đã có API và editor autosave; realtime/bài tập chưa nối | [Ghi chú và chia sẻ](03-notes-and-sharing.md) |
+| 2 | Places, courses, sessions | Đã có CRUD, bulk API và tìm ngày; sinh lịch tự động đã bỏ | [Kế hoạch giai đoạn 2](02-learning-hierarchy.md) |
+| 3 | Ghi chú JSONB và chia sẻ | Đã có API và editor autosave; bài tập chưa nối | [Ghi chú và chia sẻ](03-notes-and-sharing.md) |
 | 3b | Ảnh và tệp riêng tư | Upload/read và kiểm tra media reference; chưa có orphan cleanup job | [Private media](03b-private-media.md) |
+
+| 3c | Realtime Hocuspocus → Rust | Test hai client, persistence và thu hồi quyền đã qua; cần thử UI với Google thật | [Realtime bridge](03c-realtime.md) |
+
+| 4 | Kho từ vựng từ ghi chú | Đồng bộ cùng transaction, lọc và frontend | [Kho từ vựng](04-vocabulary-library.md) |
+
+| 5 | IPA/dịch và flashcard | API, UI và tiến độ riêng; service local thật đã test | [Flashcard](05-vocabulary-reviews.md) |
 
 Bước thực hành đầu tiên: [Học Rust qua Places](02a-places.md). Triển khai từng
 module để đọc hiểu code trước khi mở rộng; không tạo cả hierarchy trong một bước.

@@ -15,7 +15,7 @@ use sea_orm::{
 fn missing() -> AppError {
     AppError::NotFound("Không tìm thấy khóa học.".into())
 }
-fn owned(user_id: i64) -> Select<courses::Entity> {
+pub(in crate::modules) fn owned(user_id: i64) -> Select<courses::Entity> {
     courses::Entity::find()
         .join(JoinType::InnerJoin, courses::Relation::Place.def())
         .filter(places::Column::UserId.eq(user_id))

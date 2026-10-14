@@ -5,6 +5,7 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub session_id: i64,
     pub content: Json,
+    pub yjs_state: Option<Vec<u8>>,
     pub schema_version: i32,
     pub revision: i32,
     pub saved_at: DateTimeWithTimeZone,

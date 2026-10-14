@@ -6,7 +6,12 @@ use axum::{routing::get, Router};
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/places", get(handlers::list).post(handlers::create))
+        .route(
+            "/places",
+            get(handlers::list)
+                .post(handlers::create)
+                .delete(super::bulk::places),
+        )
         .route(
             "/places/{id}",
             get(handlers::show)

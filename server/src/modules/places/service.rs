@@ -8,7 +8,7 @@ use sea_orm::{
 };
 
 // One ownership scope is reused for reads, lists, updates and deletion.
-fn owned(user_id: i64) -> Select<places::Entity> {
+pub(in crate::modules) fn owned(user_id: i64) -> Select<places::Entity> {
     places::Entity::find()
         .filter(places::Column::UserId.eq(user_id))
         .filter(places::Column::DeletedAt.is_null())

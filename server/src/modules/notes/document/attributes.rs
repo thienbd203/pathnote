@@ -1,5 +1,5 @@
 #![allow(dead_code)] // Field types constrain accepted JSON even when values need no extra rule.
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 #[derive(Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct Empty {}
@@ -49,7 +49,7 @@ pub struct CellAttrs {
     pub colwidth: Option<Vec<u16>>,
     pub align: Option<Align>,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub enum Locale {
     #[serde(rename = "en-US")]
     Us,
@@ -69,7 +69,7 @@ pub struct EntryAttrs {
     pub ipa: String,
     pub topics: Vec<String>,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PartOfSpeech {
     Verb,
@@ -90,7 +90,7 @@ pub struct SenseAttrs {
     pub part_of_speech: PartOfSpeech,
     pub meaning: String,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ExampleAttrs {
     pub id: String,

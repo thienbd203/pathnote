@@ -9,6 +9,12 @@ mod m20261013_090001_create_notes;
 
 mod m20261013_100001_create_media;
 
+mod m20261013_120001_add_note_yjs_state;
+
+mod m20261014_000001_create_vocabulary_cards;
+
+mod m20261014_010001_create_vocabulary_reviews;
+
 pub struct Migrator;
 
 #[async_trait::async_trait]
@@ -21,6 +27,9 @@ impl MigratorTrait for Migrator {
             Box::new(m20261013_064853_create_sessions::Migration),
             Box::new(m20261013_090001_create_notes::Migration),
             Box::new(m20261013_100001_create_media::Migration),
+            Box::new(m20261013_120001_add_note_yjs_state::Migration),
+            Box::new(m20261014_000001_create_vocabulary_cards::Migration),
+            Box::new(m20261014_010001_create_vocabulary_reviews::Migration),
         ]
     }
 }

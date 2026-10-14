@@ -125,7 +125,7 @@ pub enum Node {
     #[serde(rename = "vocabulary")]
     Vocabulary {
         #[serde(rename = "attrs")]
-        _attrs: VocabularyAttrs,
+        attrs: VocabularyAttrs,
         #[serde(default)]
         content: Vec<Node>,
     },

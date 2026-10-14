@@ -15,7 +15,7 @@ use serde_json::json;
 fn missing() -> AppError {
     AppError::NotFound("Không tìm thấy ghi chép.".into())
 }
-fn active() -> Select<sessions::Entity> {
+pub(super) fn active() -> Select<sessions::Entity> {
     sessions::Entity::find()
         .join(JoinType::InnerJoin, sessions::Relation::Place.def())
         .join(JoinType::LeftJoin, sessions::Relation::Course.def())
@@ -40,19 +40,21 @@ pub async fn access<C: ConnectionTrait>(
     id: i64,
     owner_only: bool,
 ) -> Result<(sessions::Model, places::Model), AppError> {
-    let mut condition = Condition::any().add(places::Column::UserId.eq(user));
-    if !owner_only {
-        condition = condition
-            .add(Expr::col((sessions::Entity, sessions::Column::Id)).in_subquery(memberships(user)))
-    }
-    let (session, place) = active()
+    let (session, place) = accessible(user, owner_only)
         .filter(sessions::Column::Id.eq(id))
-        .filter(condition)
         .select_also(places::Entity)
         .one(db)
         .await?
         .ok_or_else(missing)?;
     Ok((session, place.ok_or_else(missing)?))
+}
+pub(in crate::modules) fn accessible(user: i64, owner_only: bool) -> Select<sessions::Entity> {
+    let mut condition = Condition::any().add(places::Column::UserId.eq(user));
+    if !owner_only {
+        condition = condition
+            .add(Expr::col((sessions::Entity, sessions::Column::Id)).in_subquery(memberships(user)))
+    }
+    active().filter(condition)
 }
 pub async fn metadata(db: &DatabaseConnection, user: i64, id: i64) -> Result<SharedNote, AppError> {
     let (s, _) = access(db, user, id, false).await?;
@@ -65,7 +67,7 @@ pub async fn metadata(db: &DatabaseConnection, user: i64, id: i64) -> Result<Sha
             .map(|n| n.saved_at),
     })
 }
-async fn note<C: ConnectionTrait>(db: &C, id: i64) -> Result<NoteResource, AppError> {
+pub(super) async fn note<C: ConnectionTrait>(db: &C, id: i64) -> Result<NoteResource, AppError> {
     Ok(match notes::Entity::find_by_id(id).one(db).await? {
         Some(n) => NoteResource {
             session_id: id,
@@ -98,23 +100,7 @@ pub async fn save(
     // Share/revoke/delete use the same parent lock; recheck access after waiting.
     place_service::lock_for_write(&txn, place.user_id, place.id).await?;
     access(&txn, user, id, false).await?;
-    let references = super::document::validate(&input.content, input.schema_version)?;
-    if !references.is_empty() {
-        let media = crate::entities::media::Entity::find()
-            .filter(crate::entities::media::Column::SessionId.eq(id))
-            .filter(crate::entities::media::Column::Id.is_in(references.iter().map(|r| r.id)))
-            .all(&txn)
-            .await?;
-        if !references
-            .iter()
-            .all(|r| media.iter().any(|m| m.id == r.id && m.kind == r.kind))
-        {
-            return Err(AppError::validation(
-                "content",
-                "Ảnh hoặc tệp không thuộc buổi học này.",
-            ));
-        }
-    }
+    validate_content(&txn, id, &input.content, input.schema_version).await?;
     if !(0..i32::MAX).contains(&input.base_revision) {
         return Err(AppError::validation(
             "base_revision",
@@ -131,9 +117,19 @@ pub async fn save(
     if current.revision != input.base_revision {
         return Ok(SaveOutcome::Conflict(current));
     }
+    if notes::Entity::find_by_id(id)
+        .one(&txn)
+        .await?
+        .is_some_and(|n| n.yjs_state.is_some())
+    {
+        return Err(AppError::BadRequest(
+            "Ghi chép này dùng realtime. Hãy tải lại trang để tiếp tục.".into(),
+        ));
+    }
     let next = notes::ActiveModel {
         session_id: Set(id),
         content: Set(input.content),
+        yjs_state: Set(None),
         schema_version: Set(input.schema_version),
         revision: Set(current.revision + 1),
         saved_at: Set(chrono::Utc::now().fixed_offset()),
@@ -152,6 +148,7 @@ pub async fn save(
         .exec(&txn)
         .await?;
     let result = note(&txn, id).await?;
+    crate::modules::vocabulary::sync::sync(&txn, id, &result.content).await?;
     txn.commit().await?;
     Ok(SaveOutcome::Saved(result))
 }
@@ -275,4 +272,30 @@ pub async fn shared(
             total,
         },
     })
+}
+
+pub(super) async fn validate_content<C: ConnectionTrait>(
+    db: &C,
+    id: i64,
+    content: &serde_json::Value,
+    version: i32,
+) -> Result<(), AppError> {
+    let references = super::document::validate(content, version)?;
+    if !references.is_empty() {
+        let media = crate::entities::media::Entity::find()
+            .filter(crate::entities::media::Column::SessionId.eq(id))
+            .filter(crate::entities::media::Column::Id.is_in(references.iter().map(|r| r.id)))
+            .all(db)
+            .await?;
+        if !references
+            .iter()
+            .all(|r| media.iter().any(|m| m.id == r.id && m.kind == r.kind))
+        {
+            return Err(AppError::validation(
+                "content",
+                "Ảnh hoặc tệp không thuộc buổi học này.",
+            ));
+        }
+    }
+    Ok(())
 }

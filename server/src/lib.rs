@@ -11,3 +11,7 @@ pub mod state;
 pub use error::AppError;
 pub use modules::auth::google::GoogleAuth;
 pub mod pagination;
+
+pub use modules::vocabulary::rebuild as rebuild_vocabulary;
+
+pub use modules::enrichment::LearningServices;

@@ -15,6 +15,8 @@ struct ErrorBody {
 
 #[derive(Debug)]
 pub enum AppError {
+    Unavailable(String),
+    Conflict(String),
     Unauthenticated,
     Forbidden,
     BadRequest(String),
@@ -34,6 +36,8 @@ impl IntoResponse for AppError {
                     "Dữ liệu không hợp lệ".into(),
                 )
             }
+            AppError::Unavailable(message) => (StatusCode::SERVICE_UNAVAILABLE, message),
+            AppError::Conflict(message) => (StatusCode::CONFLICT, message),
             AppError::Unauthenticated => (
                 StatusCode::UNAUTHORIZED,
                 "Bạn cần đăng nhập để tiếp tục".to_string(),

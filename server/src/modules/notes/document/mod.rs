@@ -22,3 +22,6 @@ pub enum Root {
     #[serde(rename = "doc")]
     Doc,
 }
+
+mod vocabulary;
+pub(in crate::modules) use vocabulary::{extract, ExtractedSense};

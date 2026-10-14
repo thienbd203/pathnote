@@ -10,3 +10,8 @@ pub mod note_collaborators;
 pub mod notes;
 pub mod places;
 pub mod sessions;
+
+pub mod vocabulary_cards;
+
+pub mod vocabulary_progress;
+pub mod vocabulary_reviews;

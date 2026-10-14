@@ -11,7 +11,7 @@ Danh sách giai đoạn và checklist triển khai nằm trong [plans](plans/REA
 Module đầu tiên của giai đoạn 2 đã có API dưới `/api/v1/places`: GET/POST cho
 collection và GET/PATCH/DELETE cho một ID. JWT xác định chủ sở hữu; dữ liệu của
 user khác hoặc đã xóa trả 404. Có page/per_page, tìm tên bằng q, xóa mềm và
-PATCH phân biệt missing/null. Courses và Sessions đã có CRUD; sinh lịch chưa triển khai.
+PATCH phân biệt missing/null. Courses và Sessions đã có CRUD; sinh lịch tự động đã loại khỏi phạm vi.
 
 Đọc [Học Rust qua Places](plans/02a-places.md) để đi từ SeaQuery migration,
 entity đến extractor, handler, DTO và service. Khi muốn áp schema vào app local,
@@ -105,10 +105,10 @@ chưa có cơ chế giữ nhiều khóa để xoay khóa không gián đoạn.
 
 Frontend trên nhánh `feat/rust-auth-flow` đã nối auth và CRUD Places/Courses/Sessions
 với Rust. Trang gốc mở hành trình học; trang buổi học dùng lại editor ghi chép.
-Editor autosave và chia sẻ đã nối với Rust; ảnh/tệp riêng tư đã nối; realtime/collaboration và bài tập
-chưa chuyển. Xem [Ghi chú Tiptap và chia sẻ](plans/03-notes-and-sharing.md).
-JWT hiện có audience `pathnote-api`;
-khi thêm collaboration cần thiết kế audience và quyền truy cập riêng.
+Editor, chia sẻ và ảnh/tệp riêng tư đã nối. Realtime dùng Hocuspocus hiện có qua API Rust; bài tập chưa chuyển. Xem [Ghi chú Tiptap và chia sẻ](plans/03-notes-and-sharing.md).
+JWT hiện có audience `pathnote-api`: Hocuspocus gửi token tới Rust để xác minh và kiểm tra quyền bài học, không tự xác minh JWT.
+
+Realtime và cấu hình local: [Hocuspocus bridge](plans/03c-realtime.md).
 
 ## Test API
 
@@ -129,3 +129,9 @@ Tham khảo: [jsonwebtoken](https://docs.rs/jsonwebtoken/10.4.0/jsonwebtoken/),
 
 Ảnh và tài liệu: [Private media](plans/03b-private-media.md). Cấu hình `MEDIA_ROOT`
 ngoài public root; giá trị local mặc định `.storage/media`.
+
+Bulk deletion và tìm ngày: [hướng dẫn](plans/02d-bulk-and-search.md).
+
+Kho từ vựng từ ghi chú, quyết định chưa dùng queue và lệnh backfill: [hướng dẫn](plans/04-vocabulary-library.md).
+
+Flashcard gõ/chọn, tiến độ riêng và cấu hình IPA/dịch tự động: [hướng dẫn](plans/05-vocabulary-reviews.md).

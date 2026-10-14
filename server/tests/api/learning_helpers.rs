@@ -22,6 +22,21 @@ pub struct LearningApp {
 }
 impl LearningApp {
     pub async fn spawn() -> Self {
+        Self::spawn_with_collaboration(false).await
+    }
+    pub async fn spawn_with_collaboration(enabled: bool) -> Self {
+        Self::spawn_bridge(enabled, false).await
+    }
+    pub async fn spawn_bridge(enabled: bool, network: bool) -> Self {
+        Self::spawn_config(enabled, network, None).await
+    }
+    pub async fn spawn_services(url: &str) -> Self {
+        Self::spawn_config(false, false, Some((url, url))).await
+    }
+    pub async fn spawn_service_urls(ipa: &str, translation: &str) -> Self {
+        Self::spawn_config(false, false, Some((ipa, translation))).await
+    }
+    async fn spawn_config(enabled: bool, network: bool, service_url: Option<(&str, &str)>) -> Self {
         dotenvy::dotenv().ok();
         let explicit = std::env::var("TEST_DATABASE_URL").ok();
         let url = explicit.clone().unwrap_or_else(|| {
@@ -54,6 +69,10 @@ impl LearningApp {
             .unwrap();
         store.migrate().await.unwrap();
         let config = Arc::new(Config {
+            collaboration_url: enabled.then(|| "ws://localhost:1234".into()),
+            collaboration_secret: enabled.then(|| "test-collaboration-secret-32-characters".into()),
+            pronunciation_url: service_url.map(|(ipa, _)| ipa.to_owned()),
+            translation_url: service_url.map(|(_, translation)| translation.to_owned()),
             media_root: std::env::temp_dir()
                 .join(format!("pathnote_media_test_{}", uuid::Uuid::new_v4()))
                 .to_string_lossy()
@@ -85,12 +104,18 @@ impl LearningApp {
         let other_token = access.issue(other.id).unwrap();
         let media_root = config.media_root.clone();
         let state = AppState {
+            learning_services: Arc::new(server::LearningServices::new(&config).unwrap()),
             db: db.clone(),
             access_tokens: access,
             google: Arc::new(GoogleAuth::new(config.clone()).unwrap()),
             config: config.clone(),
         };
-        let api = TestServer::new(build_app(state, &config, store));
+        let builder = if network {
+            TestServer::builder().http_transport()
+        } else {
+            TestServer::builder()
+        };
+        let api = builder.build(build_app(state, &config, store));
         Self {
             api,
             db,
@@ -105,11 +130,9 @@ impl LearningApp {
     pub async fn cleanup(self) {
         let _ = tokio::fs::remove_dir_all(&self.media_root).await;
         drop(self.api);
-        Arc::try_unwrap(self.db)
-            .expect("Test database still borrowed")
-            .close()
-            .await
-            .unwrap();
+        // HTTP transport stops its server task asynchronously; close the shared pool explicitly.
+        self.db.close_by_ref().await.unwrap();
+        drop(self.db);
         self.admin
             .execute_unprepared(&format!("DROP SCHEMA {} CASCADE", self.schema))
             .await
