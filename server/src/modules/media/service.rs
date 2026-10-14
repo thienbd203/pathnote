@@ -1,13 +1,12 @@
 use super::Kind;
 use crate::{
-    entities::media,
+    entities::{media, places as place_model, sessions},
     modules::{notes::service as notes, places::service as places},
     state::AppState,
     AppError,
 };
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TransactionTrait};
 use serde::Serialize;
-use tokio::io::AsyncWriteExt;
 #[derive(Serialize)]
 pub struct MediaResource {
     pub id: i64,
@@ -32,15 +31,16 @@ fn path(state: &AppState, key: &str) -> Result<std::path::PathBuf, AppError> {
     uuid::Uuid::parse_str(key).map_err(|_| AppError::Internal("Invalid storage key".into()))?;
     Ok(std::path::Path::new(&state.config.media_root).join(key))
 }
-pub async fn create(
+pub(super) async fn create(
     state: &AppState,
     user: i64,
-    id: i64,
     kind: Kind,
     name: String,
     data: Vec<u8>,
+    access: (sessions::Model, place_model::Model),
 ) -> Result<MediaResource, AppError> {
-    notes::access(state.db.as_ref(), user, id, false).await?;
+    let (session, place) = access;
+    let id = session.id;
     let mut name = name
         .chars()
         .map(|c| {
@@ -69,35 +69,26 @@ pub async fn create(
     })
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
-    let (_, place) = notes::access(state.db.as_ref(), user, id, false).await?;
-    let txn = state.db.begin().await?;
-    places::lock_for_write(&txn, place.user_id, place.id).await?;
-    notes::access(&txn, user, id, false).await?;
     let key = uuid::Uuid::new_v4().to_string();
     let target = path(state, &key)?;
-    let mut directory = tokio::fs::DirBuilder::new();
-    directory.recursive(true);
-    #[cfg(unix)]
-    directory.mode(0o700);
-    directory
-        .create(&state.config.media_root)
+    let size = data.len() as i64;
+    let root = std::path::PathBuf::from(&state.config.media_root);
+    let disk_target = target.clone();
+    // File I/O and fsync run before BEGIN. Hold the OS file lock until the DB outcome is known.
+    let lease = tokio::task::spawn_blocking(move || super::storage::write(root, disk_target, data))
         .await
-        .map_err(io)?;
-    let mut options = tokio::fs::OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    options.mode(0o600);
+        .map_err(|e| AppError::Internal(e.to_string()))??;
     let result = async {
-        let mut file = options.open(&target).await.map_err(io)?;
-        file.write_all(&data).await.map_err(io)?;
-        file.sync_all().await.map_err(io)?;
+        let txn = state.db.begin().await?;
+        places::lock_for_write(&txn, place.user_id, place.id).await?;
+        notes::access(&txn, user, id, false).await?;
         let model = media::ActiveModel {
             session_id: Set(id),
             kind: Set(kind.field().into()),
             name: Set(name),
-            storage_key: Set(key),
+            storage_key: Set(key.clone()),
             mime_type: Set(mime),
-            size: Set(data.len() as i64),
+            size: Set(size),
             created_at: Set(chrono::Utc::now().fixed_offset()),
             ..Default::default()
         }
@@ -108,8 +99,25 @@ pub async fn create(
     }
     .await;
     if result.is_err() {
-        let _ = tokio::fs::remove_file(target).await;
+        // A COMMIT error can mean its acknowledgement was lost. Never remove a file
+        // if its record exists, or if the DB cannot confirm the outcome.
+        match media::Entity::find()
+            .filter(media::Column::StorageKey.eq(&key))
+            .one(state.db.as_ref())
+            .await
+        {
+            Ok(None) => {
+                if let Err(e) = tokio::fs::remove_file(&target).await {
+                    tracing::warn!(%e, "Không xóa được upload thất bại; cleanup sẽ thử lại");
+                }
+            }
+            Ok(Some(_)) => {}
+            Err(e) => {
+                tracing::warn!(%e, "Chưa xác định được kết quả upload; giữ file để cleanup kiểm tra lại")
+            }
+        }
     }
+    drop(lease);
     result
 }
 pub async fn get(

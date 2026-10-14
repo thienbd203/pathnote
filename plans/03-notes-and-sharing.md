@@ -2,7 +2,7 @@
 
 Đã triển khai lưu JSONB, revision chống ghi đè, chia sẻ theo tài khoản Google
 và danh sách được chia sẻ. Frontend dùng lại trang SessionView, editor và
-autosave hiện có. Realtime Yjs/WebSocket là bước riêng, chưa nối ở giai đoạn này.
+autosave hiện có. Realtime đã nối ở [bước 3c](03c-realtime.md).
 
 ## Đọc code để học Rust
 
@@ -57,12 +57,12 @@ frontend giữ draft và cho người dùng xem/giải quyết xung đột.
 Schema 1..3 được nhận để kiểm tra cấu trúc; note mới khởi tạo schema 3, không
 cho hạ phiên bản đã tải. Document hỗ trợ văn bản, heading, danh sách/checklist,
 blockquote, code, bảng, marks và dữ liệu vocabulary/pronunciation. Ảnh và file đã được mở trong [bước private media](03b-private-media.md), có
-kiểm tra reference đúng buổi học. Exercise chưa được nhận vì chưa có bảng/API
-để xác minh quyền đối với tài nguyên bài tập.
+kiểm tra reference đúng buổi học. Exercise đã được nhận ở [bước 6a](06a-inline-exercises.md): chỉ lưu ID,
+kiểm tra resource thuộc bài; đáp án nằm trong DB.
 
 Frontend mở rich text, checklist, code, bảng và định dạng chữ trong editor cũ.
-Menu upload ảnh/file đã mở trong bước private media. Bài tập, vocabulary và AI
-chưa mở vì API exercise/pronunciation/translation chưa có ở Rust. Không fallback sang Laravel bằng JWT Rust.
+Menu upload ảnh/file, bảng từ vựng và IPA/dịch tự động đã mở ở các bước 3b–5.
+Bài tập bảy dạng đã mở ở bước 6a; Học cùng AI đã nối ở [bước 7](07-ai-study.md). Không fallback sang Laravel bằng JWT Rust.
 
 ## Quyền và chia sẻ
 

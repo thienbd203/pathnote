@@ -6,9 +6,10 @@ mod validation;
 use node::Node;
 use serde::Deserialize;
 pub use validation::validate;
-pub struct MediaReference {
-    pub id: i64,
-    pub kind: &'static str,
+pub enum Reference {
+    AIStudy(uuid::Uuid),
+    Media { id: i64, kind: &'static str },
+    Exercise(i64),
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -25,3 +26,5 @@ pub enum Root {
 
 mod vocabulary;
 pub(in crate::modules) use vocabulary::{extract, ExtractedSense};
+
+pub(in crate::modules) use attributes::{Locale, PartOfSpeech};

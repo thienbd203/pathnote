@@ -8,7 +8,7 @@ use std::io::{Cursor, Write};
 fn bearer(token: &str) -> String {
     format!("Bearer {token}")
 }
-async fn lesson(app: &LearningApp) -> i64 {
+pub(super) async fn lesson(app: &LearningApp) -> i64 {
     let r = app
         .api
         .post("/api/v1/places")
@@ -21,7 +21,7 @@ async fn lesson(app: &LearningApp) -> i64 {
     r.assert_status(StatusCode::CREATED);
     r.json::<Value>()["data"]["id"].as_i64().unwrap()
 }
-fn form(field: &str, name: &str, bytes: Vec<u8>) -> MultipartForm {
+pub(super) fn form(field: &str, name: &str, bytes: Vec<u8>) -> MultipartForm {
     MultipartForm::new().add_part(
         field,
         Part::bytes(bytes)

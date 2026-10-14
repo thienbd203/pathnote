@@ -16,7 +16,7 @@ async fn upload(
     kind: Kind,
     mut body: Multipart,
 ) -> Result<ApiResponse<service::MediaResource>, AppError> {
-    notes::access(s.db.as_ref(), u.id, id, false).await?;
+    let access = notes::access(s.db.as_ref(), u.id, id, false).await?;
     let mut field = body
         .next_field()
         .await
@@ -57,7 +57,7 @@ async fn upload(
         ));
     }
     Ok(ApiResponse::created(
-        service::create(&s, u.id, id, kind, name, bytes).await?,
+        service::create(&s, u.id, kind, name, bytes, access).await?,
     ))
 }
 pub async fn image_upload(

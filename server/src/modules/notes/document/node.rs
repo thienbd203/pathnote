@@ -3,6 +3,8 @@ use serde::Deserialize;
 #[derive(Deserialize)]
 #[serde(tag = "type", deny_unknown_fields)]
 pub enum Node {
+    #[serde(rename = "exercise")]
+    Exercise { attrs: ExerciseAttrs },
     #[serde(rename = "image")]
     Image {
         attrs: ImageAttrs,

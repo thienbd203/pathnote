@@ -14,7 +14,8 @@ validation JSON/media và persistence qua HTTP.
 - Migration thêm `notes.yjs_state` nullable (BYTEA). JSONB và binary state được lưu trong cùng transaction.
 - Hocuspocus dùng transformer tạo Yjs từ JSON đúng một lần; các lần sau nạp binary đã lưu.
   Không tái tạo từ JSON mỗi lần mở: sẽ mất lịch sử và có thể nhân đôi nội dung.
-- PUT kiểm tra revision, cấu trúc Tiptap, media thuộc bài, base64 và giới hạn state.
+- PUT validate Tiptap, decode base64 và chuẩn bị từ vựng trước transaction.
+  Trong khóa cha, kiểm tra lại quyền, revision/schema và media thuộc bài.
   Retry cùng binary/content là idempotent. Rust tin binary do bridge Hocuspocus tạo;
   Rust không tự giải mã Yjs hay đối chiếu binary với JSON.
 - HTTP autosave bị chặn khi bật realtime hoặc note đã có binary; không có fallback âm thầm
@@ -77,8 +78,8 @@ cargo test -p server --test api collaboration::hocuspocus_two_clients_save_to_ru
   Khi hết hạn provider lấy JWT mới qua luồng refresh/reconnect. Logout frontend đóng kết nối;
   JWT đã cấp vẫn hợp lệ tối đa 15 phút như mô hình auth đã chốt.
 - Chạy một Hocuspocus instance cho dữ liệu này. Chưa bật Redis coordination cho nhiều instance.
-- Kho từ vựng, flashcard và IPA/dịch đã nối ở bước 4–5; bài tập/AI chưa có API Rust.
-- Chưa deploy hoặc commit các thay đổi này.
+- Kho từ vựng, flashcard và IPA/dịch đã nối ở bước 4–5; bảy dạng bài tập đã nối ở bước 6a–6b; Học cùng AI đã nối ở [bước 7](07-ai-study.md).
+- Bridge đã commit local trong lượt triển khai trước; chưa xác nhận deploy production.
 
 Nguồn thư viện:
 [Database extension](https://tiptap.dev/docs/hocuspocus/server/extensions/database),

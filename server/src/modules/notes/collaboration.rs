@@ -131,13 +131,6 @@ async fn store(
     Json(input): Json<SaveState>,
 ) -> Result<Response, AppError> {
     let session = active(s.db.as_ref(), id).await?;
-    let txn = s.db.begin().await?;
-    let place = crate::entities::places::Entity::find_by_id(session.place_id)
-        .one(&txn)
-        .await?
-        .ok_or(AppError::Forbidden)?;
-    places::lock_for_write(&txn, place.user_id, place.id).await?;
-    active(&txn, id).await?;
     if !(0..i32::MAX).contains(&input.base_revision) || input.state.len() > 2_800_000 {
         return Err(AppError::validation(
             "state",
@@ -153,10 +146,26 @@ async fn store(
             "Trạng thái đồng bộ quá lớn hoặc rỗng.",
         ));
     }
+    let version = service::note(s.db.as_ref(), id)
+        .await?
+        .schema_version
+        .max(3);
+    let references = super::document::validate(&input.content, version)?;
+    let vocabulary = crate::modules::vocabulary::sync::prepare(&input.content)?;
+    let txn = s.db.begin().await?;
+    let place = crate::entities::places::Entity::find_by_id(session.place_id)
+        .one(&txn)
+        .await?
+        .ok_or(AppError::Forbidden)?;
+    places::lock_for_write(&txn, place.user_id, place.id).await?;
+    active(&txn, id).await?;
     let current = service::note(&txn, id).await?;
-    // Only the trusted Hocuspocus bridge supplies binary state; Rust still validates the JSON and media ownership.
-    let version = current.schema_version.max(3);
-    service::validate_content(&txn, id, &input.content, version).await?;
+    if version != current.schema_version.max(3) {
+        return Err(AppError::Conflict(
+            "Phiên bản ghi chép đã thay đổi. Hãy thử lại.".into(),
+        ));
+    }
+    service::validate_references(&txn, id, &references).await?;
     let old = notes::Entity::find_by_id(id).one(&txn).await?;
     if old
         .as_ref()
@@ -191,7 +200,8 @@ async fn store(
         .exec(&txn)
         .await?;
     let note: NoteResource = service::note(&txn, id).await?;
-    crate::modules::vocabulary::sync::sync(&txn, id, &note.content).await?;
+    crate::modules::ai_study::service::attach(&txn, id, &references).await?;
+    crate::modules::vocabulary::sync::sync(&txn, id, vocabulary).await?;
     txn.commit().await?;
     Ok(ApiResponse::ok(note).into_response())
 }

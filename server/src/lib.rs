@@ -15,3 +15,9 @@ pub mod pagination;
 pub use modules::vocabulary::rebuild as rebuild_vocabulary;
 
 pub use modules::enrichment::LearningServices;
+
+pub use modules::media::cleanup::{
+    clean as clean_orphan_media, Report as MediaCleanupReport, GRACE as MEDIA_CLEANUP_GRACE,
+};
+
+pub use modules::ai_study::cleanup::clean as clean_pending_ai_imports;

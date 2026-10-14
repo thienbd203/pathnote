@@ -97,14 +97,17 @@ pub async fn create(
     place_id: i64,
     input: CreateCourse,
 ) -> Result<CourseResource, AppError> {
+    place_service::get(db, user_id, place_id).await?;
+    dto::validate_dates(input.starts_on, input.ends_on)?;
+    let name = dto::validate_name(input.name)?;
+    let description = dto::validate_description(input.description)?;
     let txn = db.begin().await?;
     let parent = place_service::lock_for_write(&txn, user_id, place_id).await?;
-    dto::validate_dates(input.starts_on, input.ends_on)?;
     let now = chrono::Utc::now().fixed_offset();
     let course = courses::ActiveModel {
         place_id: Set(place_id),
-        name: Set(dto::validate_name(input.name)?),
-        description: Set(dto::validate_description(input.description)?),
+        name: Set(name),
+        description: Set(description),
         starts_on: Set(input.starts_on),
         ends_on: Set(input.ends_on),
         created_at: Set(now),

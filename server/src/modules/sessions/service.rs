@@ -151,19 +151,20 @@ pub async fn create(
     input: CreateSession,
 ) -> Result<SessionResource, AppError> {
     let (place_id, _) = parent(db, user, scope).await?;
-    let txn = db.begin().await?;
-    place_service::lock_for_write(&txn, user, place_id).await?;
-    let (_, course_id) = parent(&txn, user, scope).await?;
     dto::time(
         input.starts_at,
         input.duration_minutes,
         dto::timezone(&input.timezone)?,
     )?;
+    let title = dto::title(input.title)?;
+    let txn = db.begin().await?;
+    place_service::lock_for_write(&txn, user, place_id).await?;
+    let (_, course_id) = parent(&txn, user, scope).await?;
     let now = chrono::Utc::now().fixed_offset();
     let session = sessions::ActiveModel {
         place_id: Set(place_id),
         course_id: Set(course_id),
-        title: Set(dto::title(input.title)?),
+        title: Set(title),
         starts_at: Set(input.starts_at.fixed_offset()),
         duration_minutes: Set(input.duration_minutes as i16),
         status: Set(input.status.unwrap_or(SessionStatus::Scheduled)),

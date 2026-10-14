@@ -1,4 +1,4 @@
-use super::{attributes::*, marks::Mark, node::Node, Document, MediaReference};
+use super::{attributes::*, marks::Mark, node::Node, Document, Reference};
 use crate::AppError;
 use std::collections::HashSet;
 impl Node {
@@ -29,7 +29,8 @@ impl Node {
     fn block(&self) -> bool {
         matches!(
             self,
-            Self::Image { .. }
+            Self::Exercise { .. }
+                | Self::Image { .. }
                 | Self::File { .. }
                 | Self::Paragraph { .. }
                 | Self::Heading { .. }
@@ -63,6 +64,7 @@ impl Node {
             }
             Self::Heading { attrs, .. } => {
                 (1..=3).contains(&attrs.level)
+                    && (attrs.ai_import_id.is_none() || version >= 3 && attrs.level == 2)
                     && (version >= 3 || (attrs.text_align.is_none() && attrs.indent.is_none()))
                     && attrs.indent.unwrap_or(0) <= 6
                     && c.iter()
@@ -134,7 +136,8 @@ impl Node {
         if version < 3
             && matches!(
                 self,
-                Self::Image { .. }
+                Self::Exercise { .. }
+                    | Self::Image { .. }
                     | Self::File { .. }
                     | Self::Vocabulary { .. }
                     | Self::VocabularyEntry { .. }
@@ -146,6 +149,7 @@ impl Node {
             return false;
         }
         let attrs = match self {
+            Self::Exercise { attrs } => attrs.exercise_id > 0,
             Self::Image { attrs, .. } => {
                 attrs.media_id > 0
                     && attrs.alt.as_deref().is_none_or(|s| len(s, 200))
@@ -328,10 +332,7 @@ fn unique_ids(nodes: &[Node]) -> bool {
     let mut seen = HashSet::new();
     nodes.iter().all(|n| visit(n, &mut seen))
 }
-pub fn validate(
-    content: &serde_json::Value,
-    version: i32,
-) -> Result<Vec<MediaReference>, AppError> {
+pub fn validate(content: &serde_json::Value, version: i32) -> Result<Vec<Reference>, AppError> {
     if !(1..=3).contains(&version) {
         return Err(AppError::validation(
             "schema_version",
@@ -362,13 +363,17 @@ pub fn validate(
             "Cấu trúc ghi chép không hợp lệ.",
         ));
     }
-    fn refs(node: &Node, found: &mut Vec<MediaReference>) {
+    fn refs(node: &Node, found: &mut Vec<Reference>) {
         match node {
-            Node::Image { attrs, .. } => found.push(MediaReference {
+            Node::Heading { attrs, .. } if attrs.ai_import_id.is_some() => {
+                found.push(Reference::AIStudy(attrs.ai_import_id.unwrap()))
+            }
+            Node::Exercise { attrs } => found.push(Reference::Exercise(attrs.exercise_id)),
+            Node::Image { attrs, .. } => found.push(Reference::Media {
                 id: attrs.media_id,
                 kind: "image",
             }),
-            Node::File { attrs, .. } => found.push(MediaReference {
+            Node::File { attrs, .. } => found.push(Reference::Media {
                 id: attrs.media_id,
                 kind: "file",
             }),

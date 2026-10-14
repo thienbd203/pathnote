@@ -37,11 +37,19 @@ pub async fn rebuild(db: &DatabaseConnection) -> Result<u64, AppError> {
                 Err(AppError::NotFound(_)) => continue,
                 Err(error) => return Err(error),
             }
+            let Some(snapshot) = notes::Entity::find_by_id(id).one(db).await? else {
+                continue;
+            };
+            let prepared = super::sync::prepare(&snapshot.content)?;
             let txn = db.begin().await?;
             place_service::lock_for_write(&txn, place.user_id, place.id).await?;
             note_service::access(&txn, place.user_id, id, true).await?;
             if let Some(note) = notes::Entity::find_by_id(id).one(&txn).await? {
-                super::sync::sync(&txn, id, &note.content).await?;
+                if note.revision != snapshot.revision {
+                    txn.rollback().await?;
+                    continue;
+                }
+                super::sync::sync(&txn, id, prepared).await?;
                 count += 1;
             }
             txn.commit().await?;

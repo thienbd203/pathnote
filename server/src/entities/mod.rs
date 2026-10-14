@@ -15,3 +15,10 @@ pub mod vocabulary_cards;
 
 pub mod vocabulary_progress;
 pub mod vocabulary_reviews;
+
+pub mod exercise_attempts;
+pub mod exercises;
+
+pub mod ai_imports;
+
+pub mod ipa_library;

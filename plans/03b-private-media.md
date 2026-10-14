@@ -51,23 +51,30 @@ không dùng tên do client gửi làm đường dẫn. Tên hiển thị loại
 Content-Disposition dùng filename UTF-8 theo RFC 5987. Trên Unix thư mục mới 0700,
 file mới 0600. Process chạy Rust cần quyền ghi vào MEDIA_ROOT.
 
-Metadata tạo trong transaction; lỗi ghi file/insert/commit được xử lý bằng cleanup
-file best-effort. Filesystem và DB không có một transaction chung: crash/cancel ở
-ranh giới có thể để lại file mồ côi. Chưa có job tự quét/dọn orphan; không tuyên bố
-storage không thể có orphan khi tiến trình chết.
+Validate bytes và ghi file + fsync chạy trước transaction. Transaction chỉ khóa cha,
+kiểm tra lại quyền và insert metadata. Upload kiểm tra quyền hai lần: trước đọc
+multipart và sau khi lấy khóa. Nếu DB thất bại, xóa file khi đã xác nhận không có
+metadata; nếu kết quả commit chưa rõ thì giữ file để tránh mất dữ liệu.
+
+Server quét mỗi giờ, xóa file UUID chưa có metadata và cũ ít nhất 24 giờ.
+Upload giữ khóa file của hệ điều hành đến khi ghi DB/compensation xong; cleanup
+bỏ qua file đang khóa, kể cả upload kéo dài. Cleanup không xóa media có record,
+file mới, symlink hoặc tên không phải UUID. Filesystem cần hỗ trợ khóa file.
+Có thể chạy thủ công: `cargo run -p server --bin media-cleanup`.
+Crash vẫn có thể để lại orphan tạm thời trước lượt quét kế tiếp.
 
 Xóa node không xóa file ngay vì undo/redo và draft ở tab khác có thể cần nó.
 Xóa mềm session chặn API nhưng giữ bytes. Chưa có endpoint hard-delete media.
 
 ## Tiptap và frontend
 
-Node image/file có attrs typed bằng Serde. Duyệt cây thu thập media references,
-query một lần theo session và IDs trong transaction lưu note. Media của buổi khác
+Node image/file có attrs typed bằng Serde. Validate và duyệt cây thu thập media
+references trước transaction; query theo session và IDs bên trong transaction lưu note. Media của buổi khác
 hoặc khác loại bị trả 422, kể cả người gọi sở hữu cả hai buổi.
 
 Frontend dùng lại picker, progress, retry/cancel, resize/caption và file node.
 Adapter chuyển sang `/api/v1`; slash và paste/drop ảnh/file đã mở lại. Các block
-cần API pronunciation, vocabulary hay exercise chưa được mở trong bước này.
+vocabulary và IPA/dịch đã mở ở bước 4–5; exercise còn chờ API Rust.
 
 ## Kiểm tra
 

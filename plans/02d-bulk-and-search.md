@@ -45,7 +45,7 @@ xóa, tìm theo tên/ngày và phạm vi khóa hoặc mọi buổi. Khi chọn b
 xóa, autosave phải hoàn tất trước. DELETE gửi một request chứa cả ids, không gửi
 nhiều DELETE rời tạo tình trạng xóa một phần.
 
-UI chọn nhiều nơi/khóa chưa được bổ sung; backend đã hỗ trợ bulk Places/Courses.
+UI chọn nhiều nơi/khóa đã được bổ sung ở [bước 8](08-ipa-and-bulk-ui.md).
 
 ## Test
 

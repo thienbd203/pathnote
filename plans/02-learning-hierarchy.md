@@ -14,7 +14,7 @@ vi theo quyết định của người dùng; không thêm generator, snapshot h
 - Xóa mềm cha/con trong transaction, không sửa timestamp của con đã xóa.
 - Xóa hàng loạt ở cả ba cấp; tìm buổi học theo tên/ngày có timezone.
 - Frontend đã nối CRUD, sidebar buổi học, tìm kiếm và chọn nhiều buổi để xóa.
-  UI chọn nhiều Places/Courses chưa thêm; API bulk hai cấp này đã có.
+  UI chọn nhiều Places/Courses đã nối ở [bước 8](08-ipa-and-bulk-ui.md).
 
 ## Học theo từng bước
 

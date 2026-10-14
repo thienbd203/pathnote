@@ -30,7 +30,8 @@ Chưa có benchmark tải production để kết luận throughput của cách h
 
 1. `notes/document/vocabulary.rs` deserialize sang cây enum đã định nghĩa, dùng
    pattern matching và đệ quy để lấy table → entry → sense → example.
-2. `vocabulary/sync.rs` nhận connection transaction từ bước lưu ghi chú.
+2. `vocabulary/sync.rs::prepare` trích xuất và chuẩn hóa khóa từ trước transaction.
+   `sync` nhận dữ liệu đã chuẩn bị và connection transaction để đọc/ghi DB.
 3. Khóa `(session_id, source_sense_id)` giữ ID thẻ khi sửa hoặc undo.
    Chỉ upsert thẻ có nội dung thay đổi, theo lô 100; số 100 là kích thước lô SQL,
    không phải giới hạn số từ trong một bảng.
@@ -65,7 +66,9 @@ cargo run -p server --bin vocabulary-sync
 ```
 
 Lệnh thứ hai duyệt ghi chú cũ theo trang 100, mỗi bài một transaction và khóa cha,
-không sửa revision/nội dung ghi chú. Chạy lại không nhân đôi thẻ. Ghi chú mới tự đồng bộ
+không sửa revision/nội dung ghi chú. Trích xuất ngoài khóa, rồi kiểm tra lại revision
+sau khi lấy khóa; bài thay đổi trong lúc chờ được bỏ qua vì luồng lưu mới đã sync.
+Chạy lại không nhân đôi thẻ. Ghi chú mới tự đồng bộ
 khi lưu, không phải chạy cron. Đã áp migration và backfill trên database local.
 
 ## Kiểm tra

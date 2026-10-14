@@ -1,5 +1,8 @@
 # Bước tiếp theo — Courses, relation và transaction
 
+> Tài liệu bước học tại thời điểm triển khai. Trạng thái hiện tại xem
+> [Hierarchy](02-learning-hierarchy.md) và [kế hoạch hoàn thiện](06-completion-roadmap.md).
+
 Đã có CRUD courses, phân trang/search, ownership 404 và xóa mềm. Chưa có
 sessions, sinh lịch ban đầu hoặc creation key. Frontend vẫn chưa nối API nghiệp vụ.
 

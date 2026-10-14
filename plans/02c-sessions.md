@@ -1,5 +1,8 @@
 # Học Rust qua Sessions
 
+> Tài liệu bước học tại thời điểm triển khai. Trạng thái hiện tại xem
+> [Hierarchy](02-learning-hierarchy.md) và [kế hoạch hoàn thiện](06-completion-roadmap.md).
+
 Đã có CRUD buổi học thuộc khóa và buổi học độc lập. Đây là bước riêng trước
 khi thêm sinh lịch tự động; chưa có bulk-delete hoặc tìm kiếm theo ngày.
 

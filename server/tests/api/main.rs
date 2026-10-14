@@ -23,3 +23,13 @@ mod vocabulary;
 
 mod enrichment;
 mod vocabulary_reviews;
+
+mod write_locks;
+
+mod exercises;
+
+mod exercise_types;
+
+mod ai_study;
+
+mod ipa;

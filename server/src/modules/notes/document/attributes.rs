@@ -20,6 +20,7 @@ pub struct TextAttrs {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct HeadingAttrs {
+    pub ai_import_id: Option<uuid::Uuid>,
     pub level: u8,
     pub text_align: Option<Align>,
     pub indent: Option<u8>,
@@ -123,4 +124,10 @@ pub struct ImageAttrs {
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct FileAttrs {
     pub media_id: i64,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ExerciseAttrs {
+    pub exercise_id: i64,
 }

@@ -96,17 +96,19 @@ pub async fn save(
     input: SaveNote,
 ) -> Result<SaveOutcome, AppError> {
     let (_, place) = access(db, user, id, false).await?;
-    let txn = db.begin().await?;
-    // Share/revoke/delete use the same parent lock; recheck access after waiting.
-    place_service::lock_for_write(&txn, place.user_id, place.id).await?;
-    access(&txn, user, id, false).await?;
-    validate_content(&txn, id, &input.content, input.schema_version).await?;
+    let references = super::document::validate(&input.content, input.schema_version)?;
+    let vocabulary = crate::modules::vocabulary::sync::prepare(&input.content)?;
     if !(0..i32::MAX).contains(&input.base_revision) {
         return Err(AppError::validation(
             "base_revision",
             "Phiên bản ghi chép không hợp lệ.",
         ));
     }
+    let txn = db.begin().await?;
+    // Share/revoke/delete use the same parent lock; recheck access after waiting.
+    place_service::lock_for_write(&txn, place.user_id, place.id).await?;
+    access(&txn, user, id, false).await?;
+    validate_references(&txn, id, &references).await?;
     let current = note(&txn, id).await?;
     if input.schema_version < current.schema_version {
         return Err(AppError::validation(
@@ -148,7 +150,8 @@ pub async fn save(
         .exec(&txn)
         .await?;
     let result = note(&txn, id).await?;
-    crate::modules::vocabulary::sync::sync(&txn, id, &result.content).await?;
+    crate::modules::ai_study::service::attach(&txn, id, &references).await?;
+    crate::modules::vocabulary::sync::sync(&txn, id, vocabulary).await?;
     txn.commit().await?;
     Ok(SaveOutcome::Saved(result))
 }
@@ -274,22 +277,28 @@ pub async fn shared(
     })
 }
 
-pub(super) async fn validate_content<C: ConnectionTrait>(
+pub(super) async fn validate_references<C: ConnectionTrait>(
     db: &C,
     id: i64,
-    content: &serde_json::Value,
-    version: i32,
+    references: &[super::document::Reference],
 ) -> Result<(), AppError> {
-    let references = super::document::validate(content, version)?;
-    if !references.is_empty() {
+    use super::document::Reference;
+    let media_refs: Vec<_> = references
+        .iter()
+        .filter_map(|r| match r {
+            Reference::Media { id, kind } => Some((*id, *kind)),
+            _ => None,
+        })
+        .collect();
+    if !media_refs.is_empty() {
         let media = crate::entities::media::Entity::find()
             .filter(crate::entities::media::Column::SessionId.eq(id))
-            .filter(crate::entities::media::Column::Id.is_in(references.iter().map(|r| r.id)))
+            .filter(crate::entities::media::Column::Id.is_in(media_refs.iter().map(|r| r.0)))
             .all(db)
             .await?;
-        if !references
+        if !media_refs
             .iter()
-            .all(|r| media.iter().any(|m| m.id == r.id && m.kind == r.kind))
+            .all(|r| media.iter().any(|m| m.id == r.0 && m.kind == r.1))
         {
             return Err(AppError::validation(
                 "content",
@@ -297,5 +306,13 @@ pub(super) async fn validate_content<C: ConnectionTrait>(
             ));
         }
     }
-    Ok(())
+    let exercises: Vec<_> = references
+        .iter()
+        .filter_map(|r| match r {
+            Reference::Exercise(id) => Some(*id),
+            _ => None,
+        })
+        .collect();
+    crate::modules::ai_study::service::references(db, id, references).await?;
+    crate::modules::exercises::service::references(db, id, &exercises).await
 }

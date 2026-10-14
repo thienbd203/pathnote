@@ -31,13 +31,25 @@ fn unchanged(old: &cards::Model, new: &ExtractedSense) -> bool {
         && old.topics == new.topics
         && old.examples == new.examples
 }
-/// Runs inside the note save's transaction and parent lock, including Hocuspocus saves.
+pub(in crate::modules) struct PreparedSense {
+    sense: ExtractedSense,
+    word_key: String,
+}
+pub(in crate::modules) fn prepare(document: &Value) -> Result<Vec<PreparedSense>, AppError> {
+    Ok(extract(document)?
+        .into_iter()
+        .map(|sense| {
+            let word_key = word_key(&sense.word);
+            PreparedSense { sense, word_key }
+        })
+        .collect())
+}
+/// Only compare the prepared values to current DB rows and apply the delta under the parent lock.
 pub(in crate::modules) async fn sync<C: ConnectionTrait>(
     db: &C,
     session: i64,
-    document: &Value,
+    senses: Vec<PreparedSense>,
 ) -> Result<(), AppError> {
-    let senses = extract(document)?;
     let old: HashMap<_, _> = cards::Entity::find()
         .filter(cards::Column::SessionId.eq(session))
         .all(db)
@@ -45,21 +57,20 @@ pub(in crate::modules) async fn sync<C: ConnectionTrait>(
         .into_iter()
         .map(|c| (c.source_sense_id.clone(), c))
         .collect();
-    let ids: Vec<_> = senses.iter().map(|c| c.sense_id.clone()).collect();
+    let ids: Vec<_> = senses.iter().map(|c| c.sense.sense_id.clone()).collect();
     let now = chrono::Utc::now().fixed_offset();
     let mut rows = Vec::new();
-    for sense in senses {
+    for PreparedSense { sense, word_key } in senses {
         let previous = old.get(&sense.sense_id);
         if previous.is_some_and(|p| unchanged(p, &sense)) {
             continue;
         }
-        let key = word_key(&sense.word);
         rows.push(cards::ActiveModel {
             session_id: Set(session),
             source_entry_id: Set(sense.entry_id),
             source_sense_id: Set(sense.sense_id),
             word: Set(sense.word),
-            word_key: Set(key),
+            word_key: Set(word_key),
             locale: Set(sense.locale),
             ipa: Set(sense.ipa),
             part_of_speech: Set(sense.part_of_speech),

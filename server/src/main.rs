@@ -55,6 +55,40 @@ async fn main() {
         config.jwt_key_id.clone(),
     )
     .expect("Không khởi tạo được access token");
+    let cleanup_db = db.clone();
+    let cleanup_root = std::path::PathBuf::from(&config.media_root);
+    let media_cleanup = tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(60 * 60));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            interval.tick().await;
+            match server::clean_pending_ai_imports(
+                &cleanup_db,
+                chrono::Utc::now().fixed_offset() - chrono::Duration::hours(24),
+            )
+            .await
+            {
+                Ok(removed) => tracing::info!(removed, "Dọn lượt nhập AI chưa dùng"),
+                Err(error) => tracing::error!(?error, "Dọn lượt nhập AI lỗi; sẽ thử lại"),
+            }
+            match server::clean_orphan_media(
+                &cleanup_db,
+                &cleanup_root,
+                server::MEDIA_CLEANUP_GRACE,
+            )
+            .await
+            {
+                Ok(report) => tracing::info!(
+                    scanned = report.scanned,
+                    removed = report.removed,
+                    "Dọn file media mồ côi"
+                ),
+                Err(error) => {
+                    tracing::error!(?error, "Dọn file media mồ côi lỗi; sẽ thử lại ở lượt sau")
+                }
+            }
+        }
+    });
     let state = AppState {
         learning_services: Arc::new(
             server::LearningServices::new(&config).expect("Không tạo được HTTP client"),
@@ -80,6 +114,7 @@ async fn main() {
         .await
         .expect("Server dừng bất thường");
     cleanup.abort();
+    media_cleanup.abort();
 }
 
 async fn shutdown_signal() {

@@ -1,5 +1,8 @@
 # Bước đầu giai đoạn 2 — Học Rust qua Places
 
+> Tài liệu bước học tại thời điểm triển khai. Trạng thái hiện tại xem
+> [Hierarchy](02-learning-hierarchy.md) và [kế hoạch hoàn thiện](06-completion-roadmap.md).
+
 Mục đích của bước này là đọc được toàn bộ một request Rust từ route đến database.
 Chỉ triển khai Places; courses, sessions và schedule sẽ mở rộng sau bước này.
 Laravel dùng để đối chiếu yêu cầu sản phẩm, không quyết định cấu trúc code Rust.

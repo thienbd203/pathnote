@@ -105,7 +105,7 @@ chưa có cơ chế giữ nhiều khóa để xoay khóa không gián đoạn.
 
 Frontend trên nhánh `feat/rust-auth-flow` đã nối auth và CRUD Places/Courses/Sessions
 với Rust. Trang gốc mở hành trình học; trang buổi học dùng lại editor ghi chép.
-Editor, chia sẻ và ảnh/tệp riêng tư đã nối. Realtime dùng Hocuspocus hiện có qua API Rust; bài tập chưa chuyển. Xem [Ghi chú Tiptap và chia sẻ](plans/03-notes-and-sharing.md).
+Editor, chia sẻ và ảnh/tệp riêng tư đã nối. Realtime dùng Hocuspocus hiện có qua API Rust; bài tập bảy dạng đã nối. Xem [Ghi chú Tiptap và chia sẻ](plans/03-notes-and-sharing.md).
 JWT hiện có audience `pathnote-api`: Hocuspocus gửi token tới Rust để xác minh và kiểm tra quyền bài học, không tự xác minh JWT.
 
 Realtime và cấu hình local: [Hocuspocus bridge](plans/03c-realtime.md).
@@ -128,10 +128,19 @@ Tham khảo: [jsonwebtoken](https://docs.rs/jsonwebtoken/10.4.0/jsonwebtoken/),
 [Tower Sessions SQLx store](https://docs.rs/tower-sessions-sqlx-store/0.15.0/tower_sessions_sqlx_store/).
 
 Ảnh và tài liệu: [Private media](plans/03b-private-media.md). Cấu hình `MEDIA_ROOT`
-ngoài public root; giá trị local mặc định `.storage/media`.
+ngoài public root; giá trị local mặc định `.storage/media`. Server dọn file mồ côi
+mỗi giờ, chỉ xóa file chưa có metadata và cũ ít nhất 24 giờ. Chạy thủ công bằng
+`cargo run -p server --bin media-cleanup`. Khóa file dùng API chuẩn từ Rust 1.89;
+filesystem lưu media cần hỗ trợ khóa file.
 
 Bulk deletion và tìm ngày: [hướng dẫn](plans/02d-bulk-and-search.md).
 
 Kho từ vựng từ ghi chú, quyết định chưa dùng queue và lệnh backfill: [hướng dẫn](plans/04-vocabulary-library.md).
 
 Flashcard gõ/chọn, tiến độ riêng và cấu hình IPA/dịch tự động: [hướng dẫn](plans/05-vocabulary-reviews.md).
+
+Bài tập từng node, API và JSON mẫu: [hướng dẫn](plans/06a-inline-exercises.md).
+
+Copy prompt/import nội dung học thêm: [Học cùng AI](plans/07-ai-study.md).
+
+IPA riêng và xóa nhiều nơi/khóa: [hướng dẫn](plans/08-ipa-and-bulk-ui.md).

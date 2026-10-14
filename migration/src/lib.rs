@@ -15,6 +15,10 @@ mod m20261014_000001_create_vocabulary_cards;
 
 mod m20261014_010001_create_vocabulary_reviews;
 
+mod m20261014_020001_create_exercises;
+
+mod m20261014_030001_create_ai_imports;
+mod m20261014_040001_create_ipa_library;
 pub struct Migrator;
 
 #[async_trait::async_trait]
@@ -30,6 +34,9 @@ impl MigratorTrait for Migrator {
             Box::new(m20261013_120001_add_note_yjs_state::Migration),
             Box::new(m20261014_000001_create_vocabulary_cards::Migration),
             Box::new(m20261014_010001_create_vocabulary_reviews::Migration),
+            Box::new(m20261014_020001_create_exercises::Migration),
+            Box::new(m20261014_030001_create_ai_imports::Migration),
+            Box::new(m20261014_040001_create_ipa_library::Migration),
         ]
     }
 }
