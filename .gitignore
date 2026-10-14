@@ -3,3 +3,6 @@
 /.keys/
 
 .storage/
+
+__pycache__/
+*.pyc

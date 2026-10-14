@@ -1,0 +1,151 @@
+name: Rust CI and deployment
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pathnote-rust-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test-only-password
+          POSTGRES_DB: pathnote_test
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d pathnote_test"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgres://postgres:test-only-password@127.0.0.1:5432/pathnote_test
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy,rustfmt
+          rustup default stable
+      - name: Check format, test and lint
+        run: |
+          cargo fmt --all --check
+          cargo test --workspace --locked
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          bash -n .github/deploy.sh
+          sudo -n python3 -m unittest discover -s deploy/tests -v
+
+  build:
+    needs: check
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+    # Choose ubuntu-24.04-arm for an ARM64 VPS. Build natively for that architecture.
+    runs-on: ${{ vars.BUILD_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 30
+    env:
+      PATHNOTE_BUILD_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Prepare Linux musl toolchain
+        run: |
+          set -euo pipefail
+          case "$(uname -m)" in
+            x86_64) target=x86_64-unknown-linux-musl ;;
+            aarch64) target=aarch64-unknown-linux-musl ;;
+            *) echo 'Unsupported runner architecture' >&2; exit 1 ;;
+          esac
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add "$target"
+          printf 'RUST_TARGET=%s\n' "$target" >> "$GITHUB_ENV"
+          # musl-gcc is native to the selected Linux runner.
+          printf 'RUSTFLAGS=-C linker=musl-gcc\n' >> "$GITHUB_ENV"
+      - name: Build release and assemble artifact
+        run: |
+          set -euo pipefail
+          cargo build --release --locked --target "$RUST_TARGET" -p server -p migration
+          mkdir artifact
+          install -m 755 "target/$RUST_TARGET/release/server" artifact/server
+          install -m 755 "target/$RUST_TARGET/release/migration" artifact/migration
+          install -m 644 deploy/healthcheck.py artifact/healthcheck.py
+          printf '%s\n' "$GITHUB_SHA" > artifact/deploy-version.txt
+          printf '%s\n' "$RUST_TARGET" > artifact/build-target.txt
+          cd artifact
+          sha256sum server migration healthcheck.py deploy-version.txt build-target.txt > SHA256SUMS
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pathnote-rust-release
+          path: artifact/
+          retention-days: 7
+          if-no-files-found: error
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    environment: production
+    timeout-minutes: 15
+    env:
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/pathnote-rust' }}
+      HEALTHCHECK_URL: ${{ vars.HEALTHCHECK_URL }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: pathnote-rust-release
+          path: artifact
+      - name: Configure pinned SSH connection
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          : "${SSH_PRIVATE_KEY:?Missing SSH_PRIVATE_KEY}"
+          : "${SSH_KNOWN_HOSTS:?Missing SSH_KNOWN_HOSTS}"
+          install -m 700 -d ~/.ssh
+          umask 077
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh-keygen -y -P '' -f ~/.ssh/id_ed25519 > /dev/null
+      - name: Upload and activate release
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+        run: |
+          set -euo pipefail
+          : "${SSH_HOST:?Missing SSH_HOST}" "${SSH_USER:?Missing SSH_USER}" "${SSH_PORT:?Missing SSH_PORT}"
+          [[ "$SSH_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]
+          [[ "$SSH_USER" =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$ ]]
+          [[ "$SSH_PORT" =~ ^[0-9]+$ ]]
+          [[ "$DEPLOY_PATH" =~ ^/opt/[a-zA-Z0-9_-]+$ ]]
+          [[ "$HEALTHCHECK_URL" =~ ^https://[a-zA-Z0-9.-]+(:[0-9]+)?/health$ ]]
+          RELEASE="$(date -u +%Y%m%d%H%M%S)-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          RELEASE_PATH="$DEPLOY_PATH/releases/$RELEASE"
+          SSH=(ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -p "$SSH_PORT")
+          printf -v CREATE_COMMAND 'mkdir -p %q' "$RELEASE_PATH"
+          "${SSH[@]}" "$SSH_USER@$SSH_HOST" "$CREATE_COMMAND"
+          rsync -az --delete --chmod=D750,F640 \
+            -e "ssh -i $HOME/.ssh/id_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -p $SSH_PORT" \
+            artifact/ "$SSH_USER@$SSH_HOST:$RELEASE_PATH/"
+          printf -v DEPLOY_COMMAND 'bash -s -- %q %q %q %q' "$DEPLOY_PATH" "$RELEASE" "$HEALTHCHECK_URL" "$GITHUB_SHA"
+          "${SSH[@]}" "$SSH_USER@$SSH_HOST" "$DEPLOY_COMMAND" < .github/deploy.sh
+      - name: Remove SSH credentials
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519 ~/.ssh/known_hosts

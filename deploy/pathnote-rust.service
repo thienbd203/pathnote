@@ -1,0 +1,25 @@
+[Unit]
+Description=Pathnote Rust API
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=pathnote
+Group=pathnote
+WorkingDirectory=/opt/pathnote-rust/current
+EnvironmentFile=/opt/pathnote-rust/shared/.env
+ExecStart=/opt/pathnote-rust/current/server
+Restart=on-failure
+RestartSec=3
+KillSignal=SIGTERM
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/pathnote-rust/shared/media
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

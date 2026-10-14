@@ -11,6 +11,7 @@ pub fn routes() -> Router<AppState> {
 struct HealthStatus {
     status: &'static str,
     database: &'static str,
+    version: &'static str,
 }
 
 async fn health(State(state): State<AppState>) -> Result<ApiResponse<HealthStatus>, AppError> {
@@ -19,5 +20,6 @@ async fn health(State(state): State<AppState>) -> Result<ApiResponse<HealthStatu
     Ok(ApiResponse::ok(HealthStatus {
         status: "ok",
         database: "ok",
+        version: option_env!("PATHNOTE_BUILD_SHA").unwrap_or("development"),
     }))
 }

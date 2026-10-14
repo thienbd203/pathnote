@@ -144,3 +144,7 @@ Bài tập từng node, API và JSON mẫu: [hướng dẫn](plans/06a-inline-ex
 Copy prompt/import nội dung học thêm: [Học cùng AI](plans/07-ai-study.md).
 
 IPA riêng và xóa nhiều nơi/khóa: [hướng dẫn](plans/08-ipa-and-bulk-ui.md).
+
+## Deploy VPS
+
+[Hướng dẫn cấu hình PostgreSQL, systemd, Nginx, pgAdmin và GitHub Actions lần đầu](deploy/README.md).
