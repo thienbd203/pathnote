@@ -295,9 +295,11 @@ async fn grade(
     saved.reviewed_at = Set(Some(now));
     saved.rating = Set(Some(i32::from(input.rating)));
     saved.due_at = Set(Some(result.due_at));
-    saved.update(&txn).await?;
+    // Return the persisted timestamp: PostgreSQL stores microseconds, while
+    // the scheduler's in-memory timestamp can contain nanoseconds.
+    let saved = saved.update(&txn).await?;
     txn.commit().await?;
     Ok(ApiResponse::ok(
-        json!({"rating":input.rating,"due_at":result.due_at}),
+        json!({"rating":input.rating,"due_at":saved.due_at}),
     ))
 }

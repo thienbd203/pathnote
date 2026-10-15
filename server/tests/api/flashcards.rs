@@ -90,11 +90,15 @@ async fn directions_settings_and_fsrs_intervals_are_independent_and_ratings_idem
     );
     let (a, b) = tokio::join!(grade(&app, ticket, 4), grade(&app, ticket, 4));
     assert_eq!(a, b);
+    // A later retry must return the exact persisted result too, regardless of
+    // which concurrent request originally performed the write.
+    assert_eq!(a, grade(&app, ticket, 4).await);
     let rows = memory::Entity::find().all(app.db.as_ref()).await.unwrap();
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].reviews, 1);
     assert_eq!(rows[0].stability, expected.memory.stability);
     assert_eq!(rows[0].difficulty, expected.memory.difficulty);
+    assert_eq!(a["due_at"], json!(rows[0].due_at));
     assert!(next(&app, &app.owner_token, f.clone()).await["card"].is_null());
     assert_eq!(settings(&app, f.clone(), "both", 0.95).await["new"], 1);
     let reverse = next(&app, &app.owner_token, f.clone()).await;
