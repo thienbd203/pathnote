@@ -39,3 +39,4 @@ mod flashcards;
 mod fsrs_optimization;
 
 mod flashcard_history;
+mod settings;

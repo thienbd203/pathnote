@@ -47,7 +47,8 @@ pub fn build_app<S: SessionStore + Clone>(state: AppState, config: &Config, stor
         .merge(modules::enrichment::routes())
         .merge(modules::exercises::routes())
         .merge(modules::ai_study::routes())
-        .merge(modules::ipa::routes());
+        .merge(modules::ipa::routes())
+        .merge(modules::settings::routes());
 
     Router::new()
         .nest("/api/v1", api)

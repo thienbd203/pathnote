@@ -147,4 +147,6 @@ IPA riêng và xóa nhiều nơi/khóa: [hướng dẫn](plans/08-ipa-and-bulk-u
 
 ## Deploy VPS
 
+Cài đặt cá nhân và giờ học mặc định: [hướng dẫn](plans/09-personal-settings.md).
+
 [Hướng dẫn cấu hình PostgreSQL, systemd, Nginx, pgAdmin và GitHub Actions lần đầu](deploy/README.md).

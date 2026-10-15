@@ -28,3 +28,4 @@ pub mod flashcard_memory;
 pub mod flashcard_settings;
 
 pub mod flashcard_models;
+pub mod user_settings;
