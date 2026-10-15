@@ -131,11 +131,11 @@ jobs:
         run: |
           set -euo pipefail
           : "${SSH_HOST:?Missing SSH_HOST}" "${SSH_USER:?Missing SSH_USER}" "${SSH_PORT:?Missing SSH_PORT}"
-          [[ "$SSH_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]
-          [[ "$SSH_USER" =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$ ]]
-          [[ "$SSH_PORT" =~ ^[0-9]+$ ]]
-          [[ "$DEPLOY_PATH" =~ ^/opt/[a-zA-Z0-9_-]+$ ]]
-          [[ "$HEALTHCHECK_URL" =~ ^https://[a-zA-Z0-9.-]+(:[0-9]+)?/health$ ]]
+          [[ "$SSH_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]] || { echo '::error::SSH_HOST must contain only the hostname or IPv4 address, without spaces, protocol or port.'; exit 1; }
+          [[ "$SSH_USER" =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$ ]] || { echo '::error::SSH_USER must contain only the Linux username, without spaces or host.'; exit 1; }
+          [[ "$SSH_PORT" =~ ^[0-9]+$ ]] || { echo '::error::SSH_PORT must contain only the numeric SSH port, without spaces.'; exit 1; }
+          [[ "$DEPLOY_PATH" =~ ^/opt/[a-zA-Z0-9_-]+$ ]] || { echo '::error::DEPLOY_PATH must be /opt followed by one directory name, without spaces or a trailing slash.'; exit 1; }
+          [[ "$HEALTHCHECK_URL" =~ ^https://[a-zA-Z0-9.-]+(:[0-9]+)?/health$ ]] || { echo '::error::HEALTHCHECK_URL must be https://YOUR_HOST/health without surrounding spaces, quotes or a trailing slash.'; exit 1; }
           RELEASE="$(date -u +%Y%m%d%H%M%S)-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           RELEASE_PATH="$DEPLOY_PATH/releases/$RELEASE"
           SSH=(ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -p "$SSH_PORT")

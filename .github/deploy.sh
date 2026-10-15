@@ -90,7 +90,9 @@ check_release() {
   return 1
 }
 # Service template fixes APP_BIND to loopback port 3000 in production .env.
+echo 'Checking Rust health on localhost...'
 check_release http://127.0.0.1:3000/health
+echo 'Checking Rust health through public HTTPS...'
 check_release "$HEALTHCHECK_URL?release=$RELEASE"
 systemctl is-active --quiet "$SERVICE"
 

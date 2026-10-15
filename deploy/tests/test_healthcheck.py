@@ -29,6 +29,14 @@ class HealthcheckTests(unittest.TestCase):
             healthcheck.check('http://example.com/health', 'new')
         request.assert_not_called()
 
+    def test_version_mismatch_is_distinguished_from_unhealthy_database(self):
+        for data, message in (
+            ({'status': 'ok', 'database': 'ok', 'version': 'old'}, 'process version'),
+            ({'status': 'ok', 'database': 'error', 'version': 'new'}, 'database status'),
+        ):
+            with self.subTest(data=data), self.response({'data': data}), self.assertRaisesRegex(ValueError, message):
+                healthcheck.check('https://example.com/health', 'new')
+
     def test_oversized_response_is_rejected(self):
         with patch.object(healthcheck.urllib.request, 'urlopen', return_value=io.BytesIO(b' ' * 4097)), self.assertRaises(ValueError):
             healthcheck.check('https://example.com/health', 'new')
