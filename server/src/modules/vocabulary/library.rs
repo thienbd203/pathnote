@@ -23,6 +23,7 @@ fn first() -> u64 {
 #[serde(deny_unknown_fields)]
 pub struct Filters {
     session_id: Option<i64>,
+    course_id: Option<i64>,
     topic: Option<String>,
     q: Option<String>,
     #[serde(default = "first")]
@@ -41,6 +42,24 @@ pub(super) fn scope(user: i64, session: Option<i64>) -> sea_orm::Select<cards::E
     }
     query
 }
+pub(super) fn within_course(
+    query: sea_orm::Select<cards::Entity>,
+    course: Option<i64>,
+) -> sea_orm::Select<cards::Entity> {
+    if let Some(id) = course {
+        query.filter(
+            cards::Column::SessionId.in_subquery(
+                sessions::Entity::find()
+                    .select_only()
+                    .column(sessions::Column::Id)
+                    .filter(sessions::Column::CourseId.eq(id))
+                    .into_query(),
+            ),
+        )
+    } else {
+        query
+    }
+}
 pub async fn list(
     State(s): State<AppState>,
     user: CurrentUser,
@@ -56,6 +75,12 @@ pub async fn list(
     {
         return Err(AppError::validation("q", "Bộ lọc quá dài."));
     }
+    if let Some(id) = input.course_id {
+        if id <= 0 {
+            return Err(AppError::validation("course_id", "Khóa học không hợp lệ."));
+        }
+        crate::modules::courses::service::model(s.db.as_ref(), user.id, id).await?;
+    }
     let source = if let Some(id) = input.session_id {
         if id <= 0 {
             return Err(AppError::validation("session_id", "Buổi học không hợp lệ."));
@@ -65,7 +90,7 @@ pub async fn list(
     } else {
         None
     };
-    let base = scope(user.id, input.session_id);
+    let base = within_course(scope(user.id, input.session_id), input.course_id);
     let topics: Vec<String> = base
         .clone()
         .select_only()

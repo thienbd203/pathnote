@@ -302,3 +302,131 @@ async fn invalid_settings_and_filters_are_rejected_and_empty_decks_work() {
     );
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn runs_freeze_configuration_group_history_and_finish_without_double_counting() {
+    let app = LearningApp::spawn().await;
+    let (session, _) = seed(&app).await;
+    let filters = json!({"session_id":session});
+    settings(&app, filters.clone(), "both", 0.9).await;
+    let response = app
+        .api
+        .post("/api/v1/flashcards/runs")
+        .add_header("authorization", auth(&app.owner_token))
+        .json(&filters)
+        .await;
+    response.assert_status(StatusCode::CREATED);
+    let run = response.json::<Value>()["data"].clone();
+    assert_eq!(run["initial_total"], 2);
+    let id = run["id"].as_str().unwrap();
+    settings(&app, filters.clone(), "vi_en", 0.8).await;
+    for _ in 0..2 {
+        let card = next(&app, &app.owner_token, json!({"run_id":id})).await;
+        assert_eq!(card["overview"]["settings"]["direction"], "both");
+        let ticket = card["card"]["id"].as_str().unwrap();
+        reveal(&app, &app.owner_token, ticket).await;
+        grade(&app, ticket, 4).await;
+        grade(&app, ticket, 4).await;
+    }
+    assert!(next(&app, &app.owner_token, json!({"run_id":id})).await["card"].is_null());
+    let path = format!("/api/v1/flashcards/runs/{id}");
+    let response = app
+        .api
+        .get(&path)
+        .add_header("authorization", auth(&app.owner_token))
+        .await;
+    response.assert_status_ok();
+    let summary = response.json::<Value>()["data"].clone();
+    assert_eq!(summary["reviewed"], 2);
+    assert_eq!(summary["unique_reviewed"], 2);
+    assert_eq!(summary["ratings"], json!([0, 0, 0, 2]));
+    assert!(summary["finished_at"].is_string());
+    app.api
+        .get(&path)
+        .add_header("authorization", auth(&app.other_token))
+        .await
+        .assert_status_not_found();
+    app.api
+        .post(&format!("{path}/finish"))
+        .add_header("authorization", auth(&app.other_token))
+        .await
+        .assert_status_not_found();
+    let response = app
+        .api
+        .get(&format!("/api/v1/flashcards/history?run_id={id}"))
+        .add_header("authorization", auth(&app.owner_token))
+        .await;
+    response.assert_status_ok();
+    assert_eq!(response.json::<Value>()["meta"]["total"], 2);
+    app.api
+        .get(&format!("/api/v1/flashcards/history?run_id={id}"))
+        .add_header("authorization", auth(&app.other_token))
+        .await
+        .assert_status_not_found();
+    let today = chrono::Utc::now().date_naive();
+    let response = app
+        .api
+        .get(&format!(
+            "/api/v1/flashcards/history?from={today}&to={today}"
+        ))
+        .add_header("authorization", auth(&app.owner_token))
+        .await;
+    response.assert_status_ok();
+    assert_eq!(response.json::<Value>()["meta"]["total"], 2);
+    app.api
+        .get("/api/v1/flashcards/history?from=2026-10-15&to=2026-10-01")
+        .add_header("authorization", auth(&app.owner_token))
+        .await
+        .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+    app.cleanup().await;
+}
+
+#[tokio::test]
+async fn new_only_excludes_due_cards_and_closed_runs_reject_ungraded_tickets() {
+    let app = LearningApp::spawn().await;
+    let (session, _) = seed(&app).await;
+    let first = next(&app, &app.owner_token, json!({"session_id":session})).await;
+    let ticket = first["card"]["id"].as_str().unwrap();
+    reveal(&app, &app.owner_token, ticket).await;
+    grade(&app, ticket, 1).await;
+    memory::Entity::update_many()
+        .col_expr(
+            memory::Column::DueAt,
+            sea_orm::sea_query::Expr::value(Utc::now().fixed_offset() - Duration::minutes(1)),
+        )
+        .exec(app.db.as_ref())
+        .await
+        .unwrap();
+    assert!(next(
+        &app,
+        &app.owner_token,
+        json!({"session_id":session,"new_only":true})
+    )
+    .await["card"]
+        .is_null());
+    let response = app
+        .api
+        .post("/api/v1/flashcards/runs")
+        .add_header("authorization", auth(&app.owner_token))
+        .json(&json!({"session_id":session}))
+        .await;
+    let run = response.json::<Value>()["data"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let pending = next(&app, &app.owner_token, json!({"run_id":run})).await;
+    let ticket = pending["card"]["id"].as_str().unwrap();
+    reveal(&app, &app.owner_token, ticket).await;
+    app.api
+        .post(&format!("/api/v1/flashcards/runs/{run}/finish"))
+        .add_header("authorization", auth(&app.owner_token))
+        .await
+        .assert_status_ok();
+    app.api
+        .post(&format!("/api/v1/flashcards/{ticket}/grade"))
+        .add_header("authorization", auth(&app.owner_token))
+        .json(&json!({"rating":3}))
+        .await
+        .assert_status(StatusCode::CONFLICT);
+    app.cleanup().await;
+}

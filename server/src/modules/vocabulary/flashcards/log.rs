@@ -23,9 +23,14 @@ use serde_json::{json, Value};
 #[serde(deny_unknown_fields)]
 pub struct Filters {
     session_id: Option<i64>,
+    course_id: Option<i64>,
     topic: Option<String>,
     q: Option<String>,
     date: Option<NaiveDate>,
+    from: Option<NaiveDate>,
+    to: Option<NaiveDate>,
+    run_id: Option<uuid::Uuid>,
+    card_id: Option<i64>,
     timezone: Option<String>,
     page: Option<u64>,
     per_page: Option<u64>,
@@ -40,8 +45,10 @@ pub async fn list(
         input.map_err(|_| AppError::validation("filters", "Bộ lọc lịch sử không hợp lệ."))?;
     let mut filters = dto::Filters {
         session_id: input.session_id,
+        course_id: input.course_id,
         topic: input.topic,
         q: input.q,
+        ..Default::default()
     };
     filters.validate()?;
     let paging = ListQuery {
@@ -51,7 +58,11 @@ pub async fn list(
     };
     let size = paging.page_size()?;
     queue::authorize(s.db.as_ref(), user.id, &filters).await?;
-    let ids = notes::accessible(user.id, false)
+    let mut accessible = notes::accessible(user.id, false);
+    if let Some(course) = filters.course_id {
+        accessible = accessible.filter(sessions::Column::CourseId.eq(course));
+    }
+    let ids = accessible
         .select_only()
         .column(sessions::Column::Id)
         .into_query();
@@ -63,6 +74,16 @@ pub async fn list(
         .filter(cards::Column::SessionId.in_subquery(ids));
     if let Some(session) = filters.session_id {
         query = query.filter(cards::Column::SessionId.eq(session));
+    }
+    if let Some(id) = input.run_id {
+        super::runs::load(s.db.as_ref(), user.id, id).await?;
+        query = query.filter(attempts::Column::RunId.eq(id));
+    }
+    if let Some(id) = input.card_id {
+        if id <= 0 {
+            return Err(AppError::validation("card_id", "Thẻ không hợp lệ."));
+        }
+        query = query.filter(attempts::Column::CardId.eq(id));
     }
     if let Some(rating) = input.rating {
         if !(1..=4).contains(&rating) {
@@ -92,8 +113,17 @@ pub async fn list(
         .unwrap_or("UTC")
         .parse()
         .map_err(|_| AppError::validation("timezone", "Múi giờ không hợp lệ."))?;
-    if let Some(day) = input.date {
-        let next = day
+    if input.date.is_some() && (input.from.is_some() || input.to.is_some())
+        || input.from.is_some() != input.to.is_some()
+        || input.from.zip(input.to).is_some_and(|(from, to)| from > to)
+    {
+        return Err(AppError::validation("date", "Khoảng ngày không hợp lệ."));
+    }
+    if let Some(day) = input.date.or(input.from) {
+        let next = input
+            .date
+            .or(input.to)
+            .unwrap_or(day)
             .succ_opt()
             .ok_or_else(|| AppError::validation("date", "Ngày không hợp lệ."))?;
         let start = timezone
@@ -137,7 +167,7 @@ pub async fn list(
         let card=card?;let (session,place)=sources.get(&card.session_id)?;
         let snapshot=attempt.snapshot.is_some();
         let content=attempt.snapshot.or_else(||(queue::key(&card)==attempt.study_key).then(||json!({"word":card.word,"meaning":card.meaning,"ipa":card.ipa,"locale":card.locale,"part_of_speech":card.part_of_speech,"topics":card.topics,"examples":card.examples})));
-        Some(json!({"id":attempt.id,"direction":attempt.direction,"rating":attempt.rating,"reviewed_at":attempt.reviewed_at,"due_at":attempt.due_at,"snapshot":snapshot,"card":content,"source":{"id":session.id,"title":session.title,"shared":place.as_ref().is_some_and(|p|p.user_id!=user.id)}}))
+        Some(json!({"id":attempt.id,"card_id":card.id,"run_id":attempt.run_id,"direction":attempt.direction,"rating":attempt.rating,"reviewed_at":attempt.reviewed_at,"due_at":attempt.due_at,"snapshot":snapshot,"card":content,"source":{"id":session.id,"title":session.title,"shared":place.as_ref().is_some_and(|p|p.user_id!=user.id)}}))
     }).collect();
     Ok(Json(Page {
         data,

@@ -90,6 +90,7 @@ async fn seed_history(app: &LearningApp) -> Vec<cards::Model> {
                 next.good.memory
             });
             attempts::ActiveModel {
+                run_id: Set(None),
                 id: Set(uuid::Uuid::new_v4()),
                 user_id: Set(app.owner_id),
                 card_id: Set(c.id),

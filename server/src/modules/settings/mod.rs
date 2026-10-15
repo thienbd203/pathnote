@@ -1,3 +1,4 @@
+mod navigation;
 use crate::{
     access_token::CurrentUser, entities::user_settings, response::ApiResponse, state::AppState,
     AppError,
@@ -65,6 +66,12 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/settings", get(read))
         .route("/settings/learning", put(save_learning))
+        .route(
+            "/settings/navigation",
+            get(navigation::read)
+                .put(navigation::save)
+                .layer(DefaultBodyLimit::max(16384)),
+        )
         .layer(DefaultBodyLimit::max(4096))
 }
 

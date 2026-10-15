@@ -300,3 +300,120 @@ async fn concurrent_course_creation_and_place_deletion_leave_no_active_children(
     assert!(active.is_empty());
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn library_stats_and_course_decks_follow_ownership_and_current_notes() {
+    use super::vocabulary::{doc, entry, save};
+    let app = LearningApp::spawn().await;
+    let p = place(&app, &app.owner_token, "Library").await;
+    let c = course(&app, p, input()).await;
+    let other = course(&app, p, input()).await;
+    let mut ids = Vec::new();
+    for (course_id, word) in [(c, "teacher"), (other, "doctor")] {
+        let response = app.api.post(&format!("/api/v1/courses/{course_id}/sessions"))
+            .add_header("authorization", bearer(&app.owner_token))
+            .json(&json!({"title":"Lesson","starts_at":"2026-10-15T11:00:00Z","duration_minutes":90,"timezone":"Asia/Ho_Chi_Minh"})).await;
+        response.assert_status(axum::http::StatusCode::CREATED);
+        let id = response.json::<Value>()["data"]["id"].as_i64().unwrap();
+        save(
+            &app,
+            id,
+            &doc(vec![entry(word, "nghĩa", &[]), entry("", "", &[])]),
+            0,
+        )
+        .await;
+        ids.push(id);
+    }
+    let url = format!("/api/v1/courses/{c}/library-stats");
+    let response = app
+        .api
+        .get(&url)
+        .add_header("authorization", bearer(&app.owner_token))
+        .await;
+    response.assert_status_ok();
+    assert_eq!(
+        response.json::<Value>()["data"],
+        json!({"words":1,"exercises":0,"sessions":[{"id":ids[0],"words":1,"exercises":0}]})
+    );
+    app.api
+        .get(&url)
+        .add_header("authorization", bearer(&app.other_token))
+        .await
+        .assert_status_not_found();
+    let response = app
+        .api
+        .get(&format!("/api/v1/vocabulary?course_id={c}"))
+        .add_header("authorization", bearer(&app.owner_token))
+        .await;
+    response.assert_status_ok();
+    assert_eq!(response.json::<Value>()["meta"]["word_count"], 1);
+    let response = app
+        .api
+        .post("/api/v1/flashcards/next")
+        .add_header("authorization", bearer(&app.owner_token))
+        .json(&json!({"course_id":c}))
+        .await;
+    response.assert_status_ok();
+    assert_eq!(response.json::<Value>()["data"]["overview"]["new"], 1);
+    app.api
+        .get(&format!("/api/v1/flashcards?course_id={c}"))
+        .add_header("authorization", bearer(&app.other_token))
+        .await
+        .assert_status_not_found();
+    app.api
+        .get(&format!("/api/v1/flashcards/history?course_id={c}"))
+        .add_header("authorization", bearer(&app.other_token))
+        .await
+        .assert_status_not_found();
+    app.api
+        .get("/api/v1/flashcards?course_id=0")
+        .add_header("authorization", bearer(&app.owner_token))
+        .await
+        .assert_status(axum::http::StatusCode::UNPROCESSABLE_ENTITY);
+    let mut exercise_ids = Vec::new();
+    for _ in 0..2 {
+        let response = app.api.post(&format!("/api/v1/sessions/{}/exercises",ids[0]))
+            .add_header("authorization",bearer(&app.owner_token))
+            .json(&json!({"title":"Test","questions":[{"type":"choice","prompt":"Pick one","options":["a","b"],"answers":["a"],"explanation":"","caseSensitive":false}]})).await;
+        response.assert_status(axum::http::StatusCode::CREATED);
+        exercise_ids.push(response.json::<Value>()["data"]["id"].as_i64().unwrap());
+    }
+    let mut content = doc(vec![entry("teacher", "nghĩa", &[])]);
+    content["content"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"type":"exercise","attrs":{"exerciseId":exercise_ids[0]}}));
+    save(&app, ids[0], &content, 1).await;
+    let response = app
+        .api
+        .get(&url)
+        .add_header("authorization", bearer(&app.owner_token))
+        .await;
+    response.assert_status_ok();
+    assert_eq!(response.json::<Value>()["data"]["exercises"], 1);
+    save(
+        &app,
+        ids[0],
+        &json!({"type":"doc","content":[{"type":"paragraph"}]}),
+        2,
+    )
+    .await;
+    let response = app
+        .api
+        .get(&url)
+        .add_header("authorization", bearer(&app.owner_token))
+        .await;
+    assert_eq!(response.json::<Value>()["data"]["words"], 0);
+    app.api
+        .delete(&format!("/api/v1/sessions/{}", ids[0]))
+        .add_header("authorization", bearer(&app.owner_token))
+        .await
+        .assert_status_no_content();
+    let response = app
+        .api
+        .get(&url)
+        .add_header("authorization", bearer(&app.owner_token))
+        .await;
+    assert_eq!(response.json::<Value>()["data"]["sessions"], json!([]));
+    app.cleanup().await;
+}

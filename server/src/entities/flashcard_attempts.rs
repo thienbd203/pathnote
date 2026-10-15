@@ -6,6 +6,7 @@ pub struct Model {
     pub id: Uuid,
     pub user_id: i64,
     pub card_id: i64,
+    pub run_id: Option<Uuid>,
     pub direction: String,
     pub study_key: String,
     pub version: i32,

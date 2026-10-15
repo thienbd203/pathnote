@@ -40,3 +40,5 @@ mod fsrs_optimization;
 
 mod flashcard_history;
 mod settings;
+
+mod initial_notes;

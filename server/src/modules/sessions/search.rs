@@ -17,10 +17,26 @@ use serde::Deserialize;
 #[serde(deny_unknown_fields)]
 pub struct SearchQuery {
     q: Option<String>,
+    place_id: Option<i64>,
     course_id: Option<i64>,
+    independent: Option<bool>,
+    order: Option<SearchOrder>,
+    period: Option<SearchPeriod>,
     timezone: String,
     page: Option<u64>,
     per_page: Option<u64>,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum SearchOrder {
+    Asc,
+    Desc,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum SearchPeriod {
+    Past,
+    Upcoming,
 }
 fn calendar_day(term: &str, year: i32) -> Option<NaiveDate> {
     let parts = term.split('/').collect::<Vec<_>>();
@@ -61,11 +77,37 @@ pub async fn search(
     };
     paging.page_size()?;
     let mut query = service::owned(u.id);
+    if let Some(id) = input.place_id {
+        if id <= 0 {
+            return Err(AppError::validation("place_id", "Nơi học không hợp lệ."));
+        }
+        super::super::places::service::get(s.db.as_ref(), u.id, id).await?;
+        query = query.filter(crate::entities::sessions::Column::PlaceId.eq(id));
+    }
+    if input.independent == Some(true) {
+        if input.course_id.is_some() {
+            return Err(AppError::validation(
+                "course_id",
+                "Buổi học độc lập không thuộc khóa học.",
+            ));
+        }
+        query = query.filter(crate::entities::sessions::Column::CourseId.is_null());
+    }
+    if let Some(period) = input.period {
+        let now = Utc::now().fixed_offset();
+        query = query.filter(match period {
+            SearchPeriod::Past => crate::entities::sessions::Column::StartsAt.lte(now),
+            SearchPeriod::Upcoming => crate::entities::sessions::Column::StartsAt.gt(now),
+        });
+    }
     if let Some(id) = input.course_id {
         if id <= 0 {
             return Err(AppError::validation("course_id", "Khóa học không hợp lệ."));
         }
-        super::super::courses::service::model(s.db.as_ref(), u.id, id).await?;
+        let course = super::super::courses::service::model(s.db.as_ref(), u.id, id).await?;
+        if input.place_id.is_some_and(|p| p != course.place_id) {
+            return Err(AppError::NotFound("Không tìm thấy khóa học.".into()));
+        }
         query = query.filter(crate::entities::sessions::Column::CourseId.eq(id));
     }
     let term = input.q.as_deref().unwrap_or("").trim();
@@ -117,5 +159,13 @@ pub async fn search(
         }
         query = query.filter(matching);
     }
-    Ok(Json(service::page(s.db.as_ref(), query, paging).await?))
+    Ok(Json(
+        service::ordered_page(
+            s.db.as_ref(),
+            query,
+            paging,
+            matches!(input.order, Some(SearchOrder::Desc)),
+        )
+        .await?,
+    ))
 }

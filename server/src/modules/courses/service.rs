@@ -53,8 +53,19 @@ pub async fn list(
     input: ListQuery,
 ) -> Result<CoursePage, AppError> {
     place_service::get(db, user_id, place_id).await?;
+    search(db, user_id, Some(place_id), input).await
+}
+pub async fn search(
+    db: &DatabaseConnection,
+    user_id: i64,
+    place_id: Option<i64>,
+    input: ListQuery,
+) -> Result<CoursePage, AppError> {
     let size = input.page_size()?;
-    let mut query = owned(user_id).filter(courses::Column::PlaceId.eq(place_id));
+    let mut query = owned(user_id);
+    if let Some(id) = place_id {
+        query = query.filter(courses::Column::PlaceId.eq(id));
+    }
     if let Some(term) = input.q.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
         let literal = term
             .to_lowercase()

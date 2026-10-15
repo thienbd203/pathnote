@@ -20,6 +20,8 @@ pub struct Filters {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session_id: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub course_id: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub topic: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub q: Option<String>,
@@ -30,6 +32,8 @@ pub struct Create {
     pub mode: Mode,
     pub limit: Option<usize>,
     pub session_id: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub course_id: Option<i64>,
     pub topic: Option<String>,
     pub q: Option<String>,
 }

@@ -4,6 +4,7 @@ mod log;
 pub(crate) mod optimization;
 mod personal;
 mod queue;
+mod runs;
 mod scheduler;
 use crate::{
     access_token::CurrentUser,
@@ -35,6 +36,9 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/flashcards", get(overview).put(configure))
         .route("/flashcards/next", post(next))
+        .route("/flashcards/runs", post(runs::create))
+        .route("/flashcards/runs/{id}", get(runs::show))
+        .route("/flashcards/runs/{id}/finish", post(runs::end))
         .route("/flashcards/history", get(log::list))
         .route("/flashcards/optimization", get(optimization::status))
         .route("/flashcards/{id}/reveal", post(reveal))
@@ -62,8 +66,10 @@ async fn configure(
         input.map_err(|_| AppError::validation("settings", "Cấu hình không hợp lệ."))?;
     let mut f = dto::Filters {
         session_id: input.session_id,
+        course_id: input.course_id,
         topic: input.topic,
         q: input.q,
+        ..Default::default()
     };
     f.validate()?;
     if !input.retention.is_finite() || !(0.7..=0.97).contains(&input.retention) {
@@ -98,10 +104,38 @@ async fn next(
     let Json(mut f) = input.map_err(|_| AppError::validation("filters", "Bộ lọc không hợp lệ."))?;
     f.validate()?;
     queue::authorize(s.db.as_ref(), user.id, &f).await?;
-    let (direction, retention) = queue::configuration(s.db.as_ref(), user.id, &f).await?;
+    let run_id = f.run_id;
+    let saved_run = if let Some(id) = run_id {
+        Some(runs::load(s.db.as_ref(), user.id, id).await?)
+    } else {
+        None
+    };
+    if let Some(run) = &saved_run {
+        f = serde_json::from_value(run.filters.clone())
+            .map_err(|_| AppError::Internal("Invalid saved flashcard filters".into()))?;
+        queue::authorize(s.db.as_ref(), user.id, &f).await?;
+        if run.finished_at.is_some() {
+            return Ok(ApiResponse::ok(
+                json!({"card":null,"overview":queue::overview(s.db.as_ref(),user.id,&f).await?}),
+            ));
+        }
+    }
+    let (direction, retention) = if let Some(run) = &saved_run {
+        (
+            serde_json::from_value::<dto::Direction>(run.settings["direction"].clone())
+                .unwrap_or_default(),
+            run.settings["retention"].as_f64().unwrap_or(0.9) as f32,
+        )
+    } else {
+        queue::configuration(s.db.as_ref(), user.id, &f).await?
+    };
+    let configured_direction = direction;
     let Some((card, direction)) = queue::next(s.db.as_ref(), user.id, &f, direction).await? else {
+        if let Some(id) = run_id {
+            runs::finish(s.db.as_ref(), user.id, id, true).await?;
+        }
         return Ok(ApiResponse::ok(
-            json!({"card":null,"overview":queue::overview(s.db.as_ref(),user.id,&f).await?}),
+            json!({"card":null,"overview":queue::overview_with_settings(s.db.as_ref(),user.id,&f,(direction,retention)).await?}),
         ));
     };
     let memory = queue::memory(s.db.as_ref(), user.id, &card, direction).await?;
@@ -111,6 +145,7 @@ async fn next(
         id: Set(id),
         user_id: Set(user.id),
         card_id: Set(card.id),
+        run_id: Set(run_id),
         direction: Set(direction.into()),
         study_key: Set(queue::key(&card)),
         version: Set(memory.as_ref().map_or(0, |m| m.reviews)),
@@ -127,8 +162,11 @@ async fn next(
     }
     .insert(s.db.as_ref())
     .await?;
+    let (source_session, source_place) =
+        notes::access(s.db.as_ref(), user.id, card.session_id, false).await?;
+    let source = json!({"id":source_session.id,"title":source_session.title,"shared":source_place.user_id!=user.id});
     Ok(ApiResponse::ok(
-        json!({"card":{"id":id,"direction":direction,"front":if direction=="vi_en" {&card.meaning}else{&card.word},"part_of_speech":card.part_of_speech,"new":memory.is_none(),"audio":if direction=="en_vi" {Some(json!({"text":card.word,"locale":card.locale}))}else{None}},"overview":queue::overview(s.db.as_ref(),user.id,&f).await?}),
+        json!({"card":{"id":id,"card_id":card.id,"direction":direction,"front":if direction=="vi_en" {&card.meaning}else{&card.word},"source":source,"topics":card.topics,"part_of_speech":card.part_of_speech,"new":memory.is_none(),"audio":if direction=="en_vi" {Some(json!({"text":card.word,"locale":card.locale}))}else{None}},"overview":queue::overview_with_settings(s.db.as_ref(),user.id,&f,(configured_direction,retention)).await?}),
     ))
 }
 async fn ticket<C: ConnectionTrait>(
@@ -234,6 +272,17 @@ async fn grade(
             return Err(AppError::Conflict("Thẻ đã được đánh giá.".into()));
         }
         return Ok(ApiResponse::ok(json!({"rating":rating,"due_at":t.due_at})));
+    }
+    if let Some(run_id) = t.run_id {
+        let run = crate::entities::flashcard_runs::Entity::find_by_id(run_id)
+            .filter(crate::entities::flashcard_runs::Column::UserId.eq(user.id))
+            .lock(LockType::Update)
+            .one(&txn)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Không tìm thấy lượt ôn.".into()))?;
+        if run.finished_at.is_some() {
+            return Err(AppError::Conflict("Lượt ôn đã kết thúc.".into()));
+        }
     }
     if !t.revealed {
         return Err(AppError::Conflict(

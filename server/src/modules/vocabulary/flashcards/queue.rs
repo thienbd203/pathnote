@@ -26,6 +26,9 @@ pub async fn authorize<C: ConnectionTrait>(
     user: i64,
     filters: &Filters,
 ) -> Result<(), AppError> {
+    if let Some(id) = filters.course_id {
+        crate::modules::courses::service::model(db, user, id).await?;
+    }
     if let Some(id) = filters.session_id {
         notes::access(db, user, id, false).await?;
     }
@@ -65,7 +68,10 @@ pub async fn memory<C: ConnectionTrait>(
 }
 fn base(user: i64, f: &Filters, direction: &str) -> sea_orm::Select<cards::Entity> {
     let mut query = super::super::library::filtered(
-        super::super::library::scope(user, f.session_id),
+        super::super::library::within_course(
+            super::super::library::scope(user, f.session_id),
+            f.course_id,
+        ),
         f.topic.clone(),
         f.q.clone(),
     )
@@ -88,7 +94,14 @@ pub async fn overview<C: ConnectionTrait>(
     user: i64,
     f: &Filters,
 ) -> Result<Value, AppError> {
-    let (direction, retention) = configuration(db, user, f).await?;
+    overview_with_settings(db, user, f, configuration(db, user, f).await?).await
+}
+pub async fn overview_with_settings<C: ConnectionTrait>(
+    db: &C,
+    user: i64,
+    f: &Filters,
+    (direction, retention): (Direction, f32),
+) -> Result<Value, AppError> {
     let now = chrono::Utc::now().fixed_offset();
     let (mut new, mut due, mut learning) = (0, 0, 0);
     let mut next_due: Option<chrono::DateTime<chrono::FixedOffset>> = None;
@@ -113,8 +126,12 @@ pub async fn overview<C: ConnectionTrait>(
             next_due = Some(next_due.map_or(next, |old| old.min(next)));
         }
     }
+    let average = db.query_one(sea_orm::Statement::from_sql_and_values(sea_orm::DbBackend::Postgres,
+        "SELECT AVG(seconds)::double precision AS average FROM (SELECT EXTRACT(EPOCH FROM (reviewed_at-created_at)) AS seconds FROM flashcard_attempts WHERE user_id=$1 AND reviewed_at IS NOT NULL ORDER BY reviewed_at DESC LIMIT 100) recent WHERE seconds BETWEEN 1 AND 120 HAVING COUNT(*) >= 10",[user.into()])).await?.and_then(|row|row.try_get::<Option<f64>>("","average").ok().flatten());
+    let estimate = average
+        .map(|seconds| (seconds * (new + if f.new_only { 0 } else { due }) as f64).round() as u64);
     Ok(
-        json!({"settings":{"direction":direction,"retention":retention},"new":new,"due":due,"learning":learning,"next_due_at":next_due,"algorithm":"FSRS-6"}),
+        json!({"estimated_seconds":estimate,"settings":{"direction":direction,"retention":retention},"new":new,"due":due,"learning":learning,"next_due_at":next_due,"algorithm":"FSRS-6"}),
     )
 }
 pub async fn next<C: ConnectionTrait>(
@@ -126,11 +143,14 @@ pub async fn next<C: ConnectionTrait>(
     let now = chrono::Utc::now().fixed_offset();
     let mut candidates = Vec::new();
     for d in direction.directions() {
-        let mut query = base(user, f, d).filter(
+        let eligible = if f.new_only {
+            Condition::any().add(new_condition())
+        } else {
             Condition::any()
                 .add(new_condition())
-                .add(due_condition(now)),
-        );
+                .add(due_condition(now))
+        };
+        let mut query = base(user, f, d).filter(eligible);
         QuerySelect::query(&mut query)
             .order_by_expr(
                 Expr::cust("flashcard_memory.due_at IS NULL"),

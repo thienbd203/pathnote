@@ -21,6 +21,7 @@ use std::collections::{HashMap, HashSet};
 pub async fn create(db: &DatabaseConnection, user: i64, input: Create) -> Result<Review, AppError> {
     let limit = input.limit.unwrap_or(20);
     if !(1..=50).contains(&limit)
+        || input.course_id.is_some_and(|id| id <= 0)
         || input.session_id.is_some_and(|id| id <= 0)
         || input.topic.as_ref().is_some_and(|t| t.chars().count() > 60)
         || input.q.as_ref().is_some_and(|q| q.chars().count() > 200)
@@ -30,11 +31,15 @@ pub async fn create(db: &DatabaseConnection, user: i64, input: Create) -> Result
             "Bộ lọc không hợp lệ; mỗi lượt từ 1 đến 50 câu.",
         ));
     }
+    if let Some(id) = input.course_id {
+        crate::modules::courses::service::model(db, user, id).await?;
+    }
     if let Some(id) = input.session_id {
         notes::access(db, user, id, false).await?;
     }
     let filters = Filters {
         session_id: input.session_id,
+        course_id: input.course_id,
         topic: input.topic,
         q: input.q,
     };
@@ -45,7 +50,10 @@ pub async fn create(db: &DatabaseConnection, user: i64, input: Create) -> Result
         .all(db)
         .await?;
     let mut candidates = super::super::library::filtered(
-        super::super::library::scope(user, filters.session_id),
+        super::super::library::within_course(
+            super::super::library::scope(user, filters.session_id),
+            filters.course_id,
+        ),
         filters.topic.clone(),
         filters.q.clone(),
     )

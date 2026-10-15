@@ -117,3 +117,76 @@ async fn settings_require_bearer_and_reject_invalid_or_injected_preferences() {
         .is_empty());
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn navigation_chips_are_personal_persistent_and_do_not_change_learning_defaults() {
+    let app = LearningApp::spawn().await;
+    let owner = format!("Bearer {}", app.owner_token);
+    let other = format!("Bearer {}", app.other_token);
+    app.api
+        .get("/api/v1/settings/navigation")
+        .await
+        .assert_status_unauthorized();
+    let empty = json!({"hidden_chips":[],"pinned_places":[]});
+    let r = app
+        .api
+        .get("/api/v1/settings/navigation")
+        .add_header("authorization", owner.clone())
+        .await;
+    r.assert_status_ok();
+    assert_eq!(r.json::<Value>()["data"], empty);
+    let input = json!({"hidden_chips":[{"kind":"course","id":2},{"kind":"place","id":3}],"pinned_places":[3,4]});
+    app.api
+        .put("/api/v1/settings/navigation")
+        .add_header("authorization", owner.clone())
+        .json(&input)
+        .await
+        .assert_status_ok();
+    let r = app
+        .api
+        .get("/api/v1/settings/navigation")
+        .add_header("authorization", owner.clone())
+        .await;
+    assert_eq!(r.json::<Value>()["data"], input);
+    let r = app
+        .api
+        .get("/api/v1/settings/navigation")
+        .add_header("authorization", other)
+        .await;
+    assert_eq!(r.json::<Value>()["data"], empty);
+    let r = app
+        .api
+        .get("/api/v1/settings")
+        .add_header("authorization", owner.clone())
+        .await;
+    assert_eq!(
+        r.json::<Value>()["data"]["learning"]["session_start_time"],
+        "19:30"
+    );
+    for invalid in [
+        json!({"hidden_chips":[{"kind":"course","id":0}],"pinned_places":[]}),
+        json!({"hidden_chips":[{"kind":"course","id":2},{"kind":"course","id":2}],"pinned_places":[]}),
+        json!({"hidden_chips":[],"pinned_places":[1,1]}),
+        json!({"hidden_chips":[{"kind":"unknown","id":1}],"pinned_places":[]}),
+    ] {
+        app.api
+            .put("/api/v1/settings/navigation")
+            .add_header("authorization", owner.clone())
+            .json(&invalid)
+            .await
+            .assert_status_unprocessable_entity();
+    }
+    app.api
+        .put("/api/v1/settings/navigation")
+        .add_header("authorization", owner.clone())
+        .json(&empty)
+        .await
+        .assert_status_ok();
+    let r = app
+        .api
+        .get("/api/v1/settings/navigation")
+        .add_header("authorization", owner)
+        .await;
+    assert_eq!(r.json::<Value>()["data"], empty);
+    app.cleanup().await;
+}

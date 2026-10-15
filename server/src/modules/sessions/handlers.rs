@@ -77,6 +77,15 @@ pub async fn show(
         service::get(state.db.as_ref(), user.id, id).await?,
     ))
 }
+pub async fn neighbors(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<i64>,
+) -> Result<ApiResponse<service::Neighbors>, AppError> {
+    Ok(ApiResponse::ok(
+        service::neighbors(state.db.as_ref(), user.id, id).await?,
+    ))
+}
 pub async fn update(
     State(state): State<AppState>,
     user: CurrentUser,

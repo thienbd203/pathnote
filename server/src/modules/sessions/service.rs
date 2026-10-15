@@ -1,7 +1,7 @@
 use super::dto::{self, CreateSession, SessionPage, SessionResource, UpdateSession};
 use crate::{
     entities::{
-        courses, places,
+        courses, notes, places,
         sessions::{self, SessionStatus},
     },
     modules::{courses::service as course_service, places::service as place_service},
@@ -51,7 +51,7 @@ async fn parent<C: ConnectionTrait>(
         }
     }
 }
-async fn model<C: ConnectionTrait>(
+pub(super) async fn model<C: ConnectionTrait>(
     db: &C,
     user: i64,
     id: i64,
@@ -114,10 +114,23 @@ pub(super) async fn page(
     query: Select<sessions::Entity>,
     input: ListQuery,
 ) -> Result<SessionPage, AppError> {
+    ordered_page(db, query, input, false).await
+}
+pub(super) async fn ordered_page(
+    db: &DatabaseConnection,
+    query: Select<sessions::Entity>,
+    input: ListQuery,
+    descending: bool,
+) -> Result<SessionPage, AppError> {
     let size = input.page_size()?;
+    let order = if descending {
+        sea_orm::Order::Desc
+    } else {
+        sea_orm::Order::Asc
+    };
     let paginator = query
-        .order_by_asc(sessions::Column::StartsAt)
-        .order_by_asc(sessions::Column::Id)
+        .order_by(sessions::Column::StartsAt, order.clone())
+        .order_by(sessions::Column::Id, order)
         .select_also(places::Entity)
         .select_also(courses::Entity)
         .paginate(db, size);
@@ -144,22 +157,86 @@ pub(super) async fn page(
         },
     })
 }
+
+#[derive(serde::Serialize)]
+pub struct Neighbors {
+    previous: Option<SessionResource>,
+    next: Option<SessionResource>,
+}
+pub async fn neighbors(db: &DatabaseConnection, user: i64, id: i64) -> Result<Neighbors, AppError> {
+    let current = model(db, user, id).await?;
+    let scope = owned(user).filter(sessions::Column::PlaceId.eq(current.place_id));
+    let scope = match current.course_id {
+        Some(id) => scope.filter(sessions::Column::CourseId.eq(id)),
+        None => scope.filter(sessions::Column::CourseId.is_null()),
+    };
+    let previous = scope
+        .clone()
+        .filter(
+            Condition::any()
+                .add(sessions::Column::StartsAt.lt(current.starts_at))
+                .add(
+                    Condition::all()
+                        .add(sessions::Column::StartsAt.eq(current.starts_at))
+                        .add(sessions::Column::Id.lt(id)),
+                ),
+        )
+        .order_by_desc(sessions::Column::StartsAt)
+        .order_by_desc(sessions::Column::Id)
+        .one(db)
+        .await?;
+    let next = scope
+        .filter(
+            Condition::any()
+                .add(sessions::Column::StartsAt.gt(current.starts_at))
+                .add(
+                    Condition::all()
+                        .add(sessions::Column::StartsAt.eq(current.starts_at))
+                        .add(sessions::Column::Id.gt(id)),
+                ),
+        )
+        .order_by_asc(sessions::Column::StartsAt)
+        .order_by_asc(sessions::Column::Id)
+        .one(db)
+        .await?;
+    Ok(Neighbors {
+        previous: match previous {
+            Some(s) => Some(get(db, user, s.id).await?),
+            None => None,
+        },
+        next: match next {
+            Some(s) => Some(get(db, user, s.id).await?),
+            None => None,
+        },
+    })
+}
 pub async fn create(
     db: &DatabaseConnection,
     user: i64,
     scope: Parent,
     input: CreateSession,
 ) -> Result<SessionResource, AppError> {
-    let (place_id, _) = parent(db, user, scope).await?;
+    let (place_id, initial_course) = parent(db, user, scope).await?;
     dto::time(
         input.starts_at,
         input.duration_minutes,
         dto::timezone(&input.timezone)?,
     )?;
     let title = dto::title(input.title)?;
+    let initial_content =
+        super::initial_note::prepare(db, user, initial_course, &input.initial_note).await?;
     let txn = db.begin().await?;
     place_service::lock_for_write(&txn, user, place_id).await?;
     let (_, course_id) = parent(&txn, user, scope).await?;
+    if let dto::InitialNote::Structure { session_id } = &input.initial_note {
+        let source = model(&txn, user, *session_id).await?;
+        if course_id.is_none() || source.course_id != course_id {
+            return Err(AppError::validation(
+                "initial_note",
+                "Buổi học nguồn không còn thuộc khóa đã chọn.",
+            ));
+        }
+    }
     let now = chrono::Utc::now().fixed_offset();
     let session = sessions::ActiveModel {
         place_id: Set(place_id),
@@ -174,6 +251,18 @@ pub async fn create(
     }
     .insert(&txn)
     .await?;
+    if let Some(content) = initial_content {
+        notes::ActiveModel {
+            session_id: Set(session.id),
+            content: Set(content),
+            yjs_state: Set(None),
+            schema_version: Set(3),
+            revision: Set(1),
+            saved_at: Set(now),
+        }
+        .insert(&txn)
+        .await?;
+    }
     let result = get(&txn, user, session.id).await?;
     txn.commit().await?;
     Ok(result)

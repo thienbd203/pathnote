@@ -25,6 +25,17 @@ pub async fn list(
         service::list(&state.db, user.id, place_id, input).await?,
     ))
 }
+pub async fn search(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    query: Result<Query<ListQuery>, QueryRejection>,
+) -> Result<Json<CoursePage>, AppError> {
+    let Query(input) =
+        query.map_err(|_| AppError::validation("query", "Tham số tìm khóa học không hợp lệ."))?;
+    Ok(Json(
+        service::search(state.db.as_ref(), user.id, None, input).await?,
+    ))
+}
 pub async fn create(
     State(state): State<AppState>,
     user: CurrentUser,

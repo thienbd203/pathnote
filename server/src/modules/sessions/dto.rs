@@ -17,6 +17,18 @@ pub struct CreateSession {
     pub duration_minutes: i32,
     pub timezone: String,
     pub status: Option<SessionStatus>,
+    #[serde(default)]
+    pub initial_note: InitialNote,
+}
+#[derive(Default, Deserialize)]
+#[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
+pub enum InitialNote {
+    #[default]
+    Blank,
+    LessonTemplate,
+    Structure {
+        session_id: i64,
+    },
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

@@ -1,5 +1,6 @@
 mod dto;
 mod handlers;
+mod initial_note;
 mod search;
 pub(super) mod service;
 use crate::state::AppState;
@@ -8,6 +9,7 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/sessions", axum::routing::delete(super::bulk::sessions))
         .route("/sessions/search", get(search::search))
+        .route("/sessions/{id}/neighbors", get(handlers::neighbors))
         .route(
             "/courses/{id}/sessions",
             get(handlers::course_list).post(handlers::course_create),
