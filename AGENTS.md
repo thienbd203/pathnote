@@ -9,3 +9,7 @@ When custom code is needed, explain the concrete gap in available solutions and 
 # Architecture standard
 
 Follow `plans/10-architecture.md` (Part A) for every new or modified module. When working on the standardization effort, take tasks from Part B in order, one commit per task, and record any API contract change in table B.6 so the frontend (`../pathnote-web/docs/architecture.md`) can follow.
+
+# Review fixes
+
+Open task list: `plans/11-review-fixes.md` (covers this repo, pathnote-web, pathnote-collaboration and pathnote-pronunciation). Work in priority order; P0 must be done before the next production deploy.

@@ -21,6 +21,7 @@ Rà soát mới nhất và thứ tự hoàn thiện:
 Đã nối [IPA, block phát âm và bulk UI](08-ipa-and-bulk-ui.md).
 Đã nối [ôn flashcard FSRS](09-anki-fsrs.md) với hai chiều có lịch riêng.
 Chuẩn kiến trúc và kế hoạch chuẩn hóa BE/FE: [giai đoạn 10](10-architecture.md).
+Sửa lỗi sau review toàn project (P0 phải xong trước deploy): [11-review-fixes](11-review-fixes.md).
 Bước tiếp theo: smoke qua browser, staging và chuẩn bị CI/CD Rust.
 Các tài liệu 02a/02b/02c giữ nội dung bước học tại thời điểm triển khai;
 trạng thái hiện tại của hierarchy nằm trong [giai đoạn 2](02-learning-hierarchy.md).
