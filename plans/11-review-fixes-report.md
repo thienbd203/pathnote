@@ -14,10 +14,17 @@
 | P1.2 | Rust: 1ee8c53; Web: d43b896 | Rust fmt/clippy/workspace, test JSON 504; web 190 tests/build/format |
 
 | P1.3 | Web: 0c6fa54 | 193 tests/build/format; xóa session/course/place dọn detail và recent persisted |
-| P1.4 | Web: 0ea1c0e | 194 tests/build/format; rename refetch catalog đúng một lần |
+| P1.4 | Web: 10868e7 | 194 tests/build/format; rename refetch catalog đúng một lần |
 | P1.5 | Collaboration: 12189c1 | 10 tests; default startup Rust 3000/api/v1 |
 | P1.6 | Collaboration: 5e992a1; Pronunciation: 2c9d1d2 | npm test; Python tests; actionlint cả hai workflow |
-| P1.7 | Rust: commit `Gate frontend activation on pinned collaboration version`; collaboration: commit `Document collaboration version gate for coordinated frontend releases` | Manifest/health/topology tests; actionlint; Rust fmt/clippy/workspace; collaboration 10 tests |
+| P1.7 | Rust: 42f9bc5; collaboration: f3a2f13 | Manifest/health/topology tests; actionlint; Rust fmt/clippy/workspace; collaboration 10 tests |
+
+| P2.1 | Web: 0e6feee | 195 tests/build/format; số đếm có ngay khi tạo lại view từ cache |
+| P2.2 | Web: f1408ec | 195 tests/build/format; không giữ placeholder của khóa trước |
+| P2.3 | Web: c8c19aa | 196 tests/build/format; kiểm tra invalidation notes và AI import |
+| P2.4 | Web: 0bda4ee | 196 tests/build/format; reset generation/error khi đổi lesson |
+| P2.5 | Web: b7fdc2e | 196 tests/build/format; bỏ polling chết |
+| P2.6 | Rust: commit `Apply browser headers to JSON fallback errors` | fmt/clippy/workspace; 404 và 405 đều có no-store/no-referrer và JSON |
 
 ## Giới hạn và việc người vận hành cần làm
 

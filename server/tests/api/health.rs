@@ -34,3 +34,18 @@ async fn request_ids_are_generated_and_propagated() {
         .await;
     assert_eq!(response.header("x-request-id"), "test-request");
 }
+
+#[tokio::test]
+async fn fallback_errors_keep_json_and_browser_security_headers() {
+    let app = TestApp::spawn().await;
+    let missing = app.api.get("/api/v1/does-not-exist").await;
+    missing.assert_status_not_found();
+    assert_eq!(missing.header("cache-control"), "no-store");
+    assert_eq!(missing.header("referrer-policy"), "no-referrer");
+    assert!(missing.json::<serde_json::Value>()["message"].is_string());
+    let method = app.api.post("/health").await;
+    method.assert_status(axum::http::StatusCode::METHOD_NOT_ALLOWED);
+    assert_eq!(method.header("cache-control"), "no-store");
+    assert_eq!(method.header("referrer-policy"), "no-referrer");
+    assert!(method.json::<serde_json::Value>()["message"].is_string());
+}
