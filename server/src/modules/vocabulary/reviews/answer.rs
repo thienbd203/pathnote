@@ -9,7 +9,7 @@ use crate::{
 };
 use sea_orm::{
     sea_query::OnConflict, ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait,
-    QueryFilter, QuerySelect, Set, TransactionTrait,
+    QueryFilter, QueryOrder, QuerySelect, Set, TransactionTrait,
 };
 
 use std::collections::BTreeSet;
@@ -50,12 +50,16 @@ pub async fn answer(
         .into_iter()
         .map(|s| s.place_id)
         .collect();
-    for parent in parents {
-        let place = places::Entity::find_by_id(parent)
-            .one(&txn)
-            .await?
-            .ok_or_else(|| AppError::NotFound("Không tìm thấy bài học.".into()))?;
-        place_service::lock_for_write(&txn, place.user_id, parent).await?;
+    let places = places::Entity::find()
+        .filter(places::Column::Id.is_in(parents.iter().copied()))
+        .order_by_asc(places::Column::Id)
+        .all(&txn)
+        .await?;
+    if places.len() != parents.len() {
+        return Err(AppError::NotFound("Không tìm thấy bài học.".into()));
+    }
+    for place in places {
+        place_service::lock_for_write(&txn, place.user_id, place.id).await?;
     }
     review.authorize(&txn).await?;
     if let Some(previous) = review.answers.get(input.position) {
