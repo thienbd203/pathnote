@@ -63,9 +63,11 @@ pub async fn metadata(db: &DatabaseConnection, user: i64, id: i64) -> Result<Sha
         id: s.id,
         title: s.title,
         note_saved_at: notes::Entity::find_by_id(id)
+            .select_only()
+            .column(notes::Column::SavedAt)
+            .into_tuple::<chrono::DateTime<chrono::FixedOffset>>()
             .one(db)
-            .await?
-            .map(|n| n.saved_at),
+            .await?,
     })
 }
 pub(in crate::modules::notes) async fn note<C: ConnectionTrait>(
@@ -265,10 +267,12 @@ pub async fn shared(
     let rows = pages.fetch_page(input.page - 1).await?;
     let saved = notes::Entity::find()
         .filter(notes::Column::SessionId.is_in(rows.iter().map(|s| s.id)))
+        .select_only()
+        .columns([notes::Column::SessionId, notes::Column::SavedAt])
+        .into_tuple::<(i64, chrono::DateTime<chrono::FixedOffset>)>()
         .all(db)
         .await?
         .into_iter()
-        .map(|n| (n.session_id, n.saved_at))
         .collect::<std::collections::HashMap<_, _>>();
     Ok(Page {
         data: rows

@@ -8,7 +8,7 @@ use crate::{
 use base64::{engine::general_purpose::STANDARD, Engine};
 use sea_orm::{
     sea_query::Expr, ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection,
-    EntityTrait, QueryFilter, Set,
+    EntityTrait, QueryFilter, QuerySelect, Set,
 };
 pub async fn config(
     db: &DatabaseConnection,
@@ -20,9 +20,12 @@ pub async fn config(
     service::access(db, user, id, false).await?;
     if config.collaboration_url.is_none()
         && notes::Entity::find_by_id(id)
+            .select_only()
+            .expr(notes::Column::YjsState.is_not_null())
+            .into_tuple::<bool>()
             .one(db)
             .await?
-            .is_some_and(|n| n.yjs_state.is_some())
+            .unwrap_or(false)
     {
         return Err(AppError::BadRequest(
             "Realtime chưa được cấu hình cho ghi chép này.".into(),
