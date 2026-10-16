@@ -142,3 +142,25 @@ lệnh test nào kết nối VPS hay chạy deployment production.
 Tham khảo: [job dependencies](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-jobs),
 [workflow artifacts](https://docs.github.com/en/actions/tutorials/store-and-share-data),
 [Actions cache](https://github.com/actions/cache).
+
+## Khôi phục database từ backup trước migration
+
+Mỗi lần deploy tạo custom dump trước migration. Bản hoàn tất có tên
+`/opt/pathnote-rust/backups/<RELEASE>.dump` (owner root, mode 600, giữ 5 bản).
+Backup lỗi hoặc rỗng thì không chạy migration. Cài helper/client theo
+[README VPS](README.md#backup-bắt-buộc-trước-migration) trước khi phát hành.
+
+Khi cần phục hồi, người vận hành dừng service và mọi writer (gồm collaboration),
+chọn đúng dump của release, xác minh DB đích rồi mới chạy, ví dụ DB local
+`pathnote_rust` và role `pathnote` theo mẫu:
+
+```sh
+sudo systemctl stop pathnote-rust.service
+# Thay RELEASE bằng release lỗi; giữ service dừng nếu restore thất bại.
+sudo cat /opt/pathnote-rust/backups/RELEASE.dump | sudo -u postgres pg_restore --exit-on-error --single-transaction --clean --if-exists --dbname=pathnote_rust
+```
+
+Sau restore thành công, trỏ `current` về release cũ khớp schema rồi khởi động
+service và kiểm tra health. Nếu DB ngoài máy hoặc khác tên/role, sửa kết nối đích;
+không dùng nguyên ví dụ. Restore quay dữ liệu về thời điểm backup, cần cân nhắc
+các lượt ghi mới sau đó. Dump này không chứa roles và không thay backup định kỳ.

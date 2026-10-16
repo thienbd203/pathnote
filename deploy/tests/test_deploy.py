@@ -37,8 +37,9 @@ class DeployTests(unittest.TestCase):
         self.mock('chgrp', 'exit 0')
         self.mock('uname', 'echo x86_64')
         self.mock('sleep', 'exit 0')
+        self.mock('pg_dump', 'exit 0')
         self.mock('systemctl', 'echo "$* $(readlink "$FIXTURE_ROOT/current")" >> "$FIXTURE_ROOT/calls"; exit 0')
-        self.mock('sudo', 'while [[ "$1" == -* ]]; do if [[ "$1" == -u ]]; then shift 2; else shift; fi; done; exec "$@"')
+        self.mock('sudo', 'while [[ "$1" == -* ]]; do if [[ "$1" == -u ]]; then shift 2; else shift; fi; done; if [[ "$1" == /usr/local/sbin/pathnote-db-backup ]]; then echo backup >> "$FIXTURE_ROOT/calls"; exit "${BACKUP_STATUS:-0}"; fi; exec "$@"')
         self.release(OLD)
         self.release(NEW)
         (self.root / 'current').symlink_to(self.root / 'releases' / OLD)
@@ -76,6 +77,13 @@ class DeployTests(unittest.TestCase):
         self.assertEqual((self.root / 'shared/.env').read_text(), 'DATABASE_URL=test-only\n')
         self.assertTrue((self.root / 'releases' / NEW / '.env').is_symlink())
         self.assertIn('restart pathnote-rust.service', self.log.read_text())
+        self.assertLess(self.log.read_text().index('backup'), self.log.read_text().index('migration'))
+
+    def test_backup_failure_never_runs_migration(self):
+        self.env['BACKUP_STATUS'] = '1'
+        self.assertNotEqual(self.run_deploy().returncode, 0)
+        self.assert_current(OLD)
+        self.assertNotIn('migration', self.log.read_text())
 
     def test_migration_failure_never_switches_release(self):
         self.release(NEW, migration_fail=True)

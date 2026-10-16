@@ -83,7 +83,7 @@ sudo chmod 640 /opt/pathnote-rust/shared/keys/access-token.pem
 Từ máy Mac, trong repo Rust (thay VPS_HOST và SSH port nếu khác 22):
 
 ```sh
-scp deploy/production.env.example deploy/pathnote-rust.service deploy/nginx.conf.example root@VPS_HOST:/tmp/
+scp deploy/production.env.example deploy/pathnote-rust.service deploy/database-backup.py deploy/nginx.conf.example root@VPS_HOST:/tmp/
 ```
 
 Trên VPS:
@@ -92,6 +92,9 @@ Trên VPS:
 sudo install -o root -g pathnote -m 640 /tmp/production.env.example /opt/pathnote-rust/shared/.env
 sudo nano /opt/pathnote-rust/shared/.env
 sudo install -m 644 /tmp/pathnote-rust.service /etc/systemd/system/pathnote-rust.service
+sudo install -d -o root -g root -m 700 /var/backups/pathnote-rust
+sudo install -o root -g root -m 755 /tmp/database-backup.py /usr/local/sbin/pathnote-db-backup
+sudo ln -s /var/backups/pathnote-rust /opt/pathnote-rust/backups
 sudo systemctl daemon-reload
 sudo systemctl enable pathnote-rust.service
 ```
@@ -113,7 +116,7 @@ bộ sang Rust. Không tự đổi cấu hình Laravel đang hoạt động.
 Cho deploy quyền cần thiết, mở bằng `sudo visudo -f /etc/sudoers.d/pathnote-rust`:
 
 ```sudoers
-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart pathnote-rust.service, /usr/bin/systemctl stop pathnote-rust.service
+deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart pathnote-rust.service, /usr/bin/systemctl stop pathnote-rust.service, /usr/local/sbin/pathnote-db-backup *
 deploy ALL=(pathnote) NOPASSWD: /usr/bin/test -r /opt/pathnote-rust/shared/.env, /usr/bin/test -r /opt/pathnote-rust/shared/keys/access-token.pem, /usr/bin/test -w /opt/pathnote-rust/shared/media, /opt/pathnote-rust/releases/*/migration up
 ```
 
@@ -121,6 +124,32 @@ deploy ALL=(pathnote) NOPASSWD: /usr/bin/test -r /opt/pathnote-rust/shared/.env,
 sudo chmod 440 /etc/sudoers.d/pathnote-rust
 sudo visudo -cf /etc/sudoers.d/pathnote-rust
 ```
+
+### Backup bắt buộc trước migration
+
+Cài client PostgreSQL cùng major version với DB, ví dụ DB 17:
+
+```sh
+sudo apt install postgresql-client-17
+/usr/bin/pg_dump --version
+sudo -u postgres psql -Atc 'SHOW server_version;'
+```
+
+Helper dùng `/usr/bin/pg_dump` (trên Debian là wrapper chọn client theo cluster).
+Nếu DB không phải local cluster, cấu hình client mặc định đúng major version;
+kiểm tra backup thử trước khi phát hành. `pg_dump` cũ hơn server sẽ từ chối chạy.
+Xem [tài liệu pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html).
+
+Cài helper và sudoers trên VPS hiện có **trước lần deploy tiếp theo**, bằng các
+lệnh ở mục 3. Helper được root cài cố định; CI không upload hoặc thay helper đó.
+Root giữ file dump quyền 600 trong `/var/backups/pathnote-rust`, được trỏ tới qua
+`/opt/pathnote-rust/backups`. User ứng dụng chạy pg_dump, không chạy bằng root;
+chỉ nhận URL qua biến môi trường con, không qua tham số lệnh hoặc log.
+Giữ 5 dump hoàn tất mới nhất; dump lỗi/rỗng làm deploy dừng trước migration.
+DATABASE_URL phải là URL literal một dòng, có hoặc không có dấu nháy, không có
+interpolation; percent-encode ký tự đặc biệt. Các biến env khác không được chạy.
+Nếu đổi DEPLOY_PATH/user, root chỉnh các hằng số helper cùng sudoers tương ứng.
+Không cấp sudo chạy helper từ thư mục releases do user deploy có quyền ghi.
 
 ## 4. Domain và Nginx HTTPS
 

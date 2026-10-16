@@ -21,6 +21,7 @@ test -d "$SHARED/media"
 test ! -e "$DEPLOY_PATH/current" || test -L "$DEPLOY_PATH/current"
 command -v python3 >/dev/null
 command -v flock >/dev/null
+command -v pg_dump >/dev/null
 getent passwd "$APP_USER" >/dev/null
 systemctl cat "$SERVICE" >/dev/null
 
@@ -75,6 +76,7 @@ ln -s "$SHARED/.env" .env
 sudo -n -u "$APP_USER" test -r "$SHARED/.env"
 sudo -n -u "$APP_USER" test -r "$SHARED/keys/access-token.pem"
 sudo -n -u "$APP_USER" test -w "$SHARED/media"
+sudo -n /usr/local/sbin/pathnote-db-backup "$RELEASE"
 sudo -n -u "$APP_USER" "$RELEASE_PATH/migration" up
 
 SWITCHED=true
