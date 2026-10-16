@@ -1,0 +1,146 @@
+use super::{self as service};
+use crate::{
+    config::Config,
+    entities::{notes, sessions, users},
+    modules::{notes::dto::*, places::service as places},
+    AppError,
+};
+use base64::{engine::general_purpose::STANDARD, Engine};
+use sea_orm::{
+    sea_query::Expr, ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection,
+    EntityTrait, QueryFilter, Set,
+};
+pub async fn config(
+    db: &DatabaseConnection,
+    user: i64,
+    id: i64,
+    config: &Config,
+    enrichment_enabled: bool,
+) -> Result<CollaborationConfigResource, AppError> {
+    service::access(db, user, id, false).await?;
+    if config.collaboration_url.is_none()
+        && notes::Entity::find_by_id(id)
+            .one(db)
+            .await?
+            .is_some_and(|n| n.yjs_state.is_some())
+    {
+        return Err(AppError::BadRequest(
+            "Realtime chưa được cấu hình cho ghi chép này.".into(),
+        ));
+    }
+    Ok(CollaborationConfigResource {
+        enrichment_enabled,
+        enabled: config.collaboration_url.is_some(),
+        url: config.collaboration_url.clone(),
+        document_name: format!("session-{id}"),
+    })
+}
+pub async fn authorize(
+    db: &DatabaseConnection,
+    user: i64,
+    id: i64,
+) -> Result<CollaborationUserResource, AppError> {
+    service::access(db, user, id, false).await?;
+    let user = users::Entity::find_by_id(user)
+        .one(db)
+        .await?
+        .ok_or(AppError::Unauthenticated)?;
+    Ok(CollaborationUserResource {
+        id: user.id,
+        name: user.name,
+    })
+}
+async fn active_session<C: ConnectionTrait>(db: &C, id: i64) -> Result<sessions::Model, AppError> {
+    service::active()
+        .filter(sessions::Column::Id.eq(id))
+        .one(db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Không tìm thấy ghi chép.".into()))
+}
+pub async fn fetch(db: &DatabaseConnection, id: i64) -> Result<StateResource, AppError> {
+    active_session(db, id).await?;
+    let state = notes::Entity::find_by_id(id)
+        .one(db)
+        .await?
+        .and_then(|n| n.yjs_state)
+        .map(|bytes| STANDARD.encode(bytes));
+    Ok(StateResource {
+        note: service::note(db, id).await?,
+        state,
+    })
+}
+pub async fn store(
+    db: &DatabaseConnection,
+    id: i64,
+    input: SaveState,
+) -> Result<NoteResource, AppError> {
+    let session = active_session(db, id).await?;
+    if !(0..i32::MAX).contains(&input.base_revision) || input.state.len() > 2_800_000 {
+        return Err(AppError::validation(
+            "state",
+            "Trạng thái đồng bộ không hợp lệ.",
+        ));
+    }
+    let bytes = STANDARD
+        .decode(&input.state)
+        .map_err(|_| AppError::validation("state", "Trạng thái đồng bộ không hợp lệ."))?;
+    if bytes.is_empty() || bytes.len() > 2_100_000 {
+        return Err(AppError::validation(
+            "state",
+            "Trạng thái đồng bộ quá lớn hoặc rỗng.",
+        ));
+    }
+    let version = service::note(db, id).await?.schema_version.max(3);
+    let references = crate::modules::notes::document::validate(&input.content, version)?;
+    let vocabulary = crate::modules::vocabulary::sync::prepare(&input.content)?;
+    let place = crate::entities::places::Entity::find_by_id(session.place_id)
+        .one(db)
+        .await?
+        .ok_or(AppError::Forbidden)?;
+    let txn = places::write_tx(db, place.user_id, place.id).await?;
+    active_session(&txn, id).await?;
+    let current = service::note(&txn, id).await?;
+    if version != current.schema_version.max(3) {
+        return Err(AppError::Conflict(
+            "Phiên bản ghi chép đã thay đổi. Hãy thử lại.".into(),
+        ));
+    }
+    service::validate_references(&txn, id, &references).await?;
+    let old = notes::Entity::find_by_id(id).one(&txn).await?;
+    if old
+        .as_ref()
+        .is_some_and(|n| n.yjs_state.as_ref() == Some(&bytes) && n.content == input.content)
+    {
+        return Ok(current);
+    }
+    if current.revision != input.base_revision {
+        return Err(AppError::ConflictWith {
+            message: "Ghi chép đã thay đổi.".into(),
+            data: serde_json::to_value(current).map_err(|e| AppError::Internal(e.to_string()))?,
+        });
+    }
+    let now = chrono::Utc::now().fixed_offset();
+    let next = notes::ActiveModel {
+        session_id: Set(id),
+        content: Set(input.content),
+        yjs_state: Set(Some(bytes)),
+        schema_version: Set(version),
+        revision: Set(current.revision + 1),
+        saved_at: Set(now),
+    };
+    if old.is_some() {
+        next.update(&txn).await?;
+    } else {
+        next.insert(&txn).await?;
+    }
+    sessions::Entity::update_many()
+        .col_expr(sessions::Column::UpdatedAt, Expr::value(now))
+        .filter(sessions::Column::Id.eq(id))
+        .exec(&txn)
+        .await?;
+    let note: NoteResource = service::note(&txn, id).await?;
+    crate::modules::ai_study::service::attach(&txn, id, &references).await?;
+    crate::modules::vocabulary::sync::sync(&txn, id, vocabulary).await?;
+    txn.commit().await?;
+    Ok(note)
+}

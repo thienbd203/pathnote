@@ -1,4 +1,5 @@
-use super::dto::*;
+pub(in crate::modules::notes) mod collaboration;
+use crate::modules::notes::dto::*;
 use crate::{
     entities::{courses, note_collaborators, notes, places, sessions, users},
     modules::places::service as place_service,
@@ -15,7 +16,7 @@ use serde_json::json;
 fn missing() -> AppError {
     AppError::NotFound("Không tìm thấy ghi chép.".into())
 }
-pub(super) fn active() -> Select<sessions::Entity> {
+pub(in crate::modules::notes) fn active() -> Select<sessions::Entity> {
     sessions::Entity::find()
         .join(JoinType::InnerJoin, sessions::Relation::Place.def())
         .join(JoinType::LeftJoin, sessions::Relation::Course.def())
@@ -67,7 +68,10 @@ pub async fn metadata(db: &DatabaseConnection, user: i64, id: i64) -> Result<Sha
             .map(|n| n.saved_at),
     })
 }
-pub(super) async fn note<C: ConnectionTrait>(db: &C, id: i64) -> Result<NoteResource, AppError> {
+pub(in crate::modules::notes) async fn note<C: ConnectionTrait>(
+    db: &C,
+    id: i64,
+) -> Result<NoteResource, AppError> {
     Ok(match notes::Entity::find_by_id(id).one(db).await? {
         Some(n) => NoteResource {
             session_id: id,
@@ -96,7 +100,8 @@ pub async fn save(
     input: SaveNote,
 ) -> Result<SaveOutcome, AppError> {
     let (_, place) = access(db, user, id, false).await?;
-    let references = super::document::validate(&input.content, input.schema_version)?;
+    let references =
+        crate::modules::notes::document::validate(&input.content, input.schema_version)?;
     let vocabulary = crate::modules::vocabulary::sync::prepare(&input.content)?;
     if !(0..i32::MAX).contains(&input.base_revision) {
         return Err(AppError::validation(
@@ -281,9 +286,9 @@ pub async fn shared(
 pub(super) async fn validate_references<C: ConnectionTrait>(
     db: &C,
     id: i64,
-    references: &[super::document::Reference],
+    references: &[crate::modules::notes::document::Reference],
 ) -> Result<(), AppError> {
-    use super::document::Reference;
+    use crate::modules::notes::document::Reference;
     let media_refs: Vec<_> = references
         .iter()
         .filter_map(|r| match r {
@@ -316,4 +321,27 @@ pub(super) async fn validate_references<C: ConnectionTrait>(
         .collect();
     crate::modules::ai_study::service::references(db, id, references).await?;
     crate::modules::exercises::service::references(db, id, &exercises).await
+}
+
+pub async fn save_rest(
+    db: &DatabaseConnection,
+    user: i64,
+    id: i64,
+    input: Result<SaveNote, AppError>,
+    realtime: bool,
+) -> Result<NoteResource, AppError> {
+    access(db, user, id, false).await?;
+    if realtime {
+        return Err(AppError::BadRequest(
+            "Ghi chép đang dùng realtime. Hãy tải lại trang.".into(),
+        ));
+    }
+    match save(db, user, id, input?).await? {
+        SaveOutcome::Saved(note) => Ok(note),
+        SaveOutcome::Conflict(note) => Err(AppError::ConflictWith {
+            message: "Ghi chép đã thay đổi ở một tab khác. Bản đang viết của bạn vẫn được giữ."
+                .into(),
+            data: serde_json::to_value(note).map_err(|e| AppError::Internal(e.to_string()))?,
+        }),
+    }
 }

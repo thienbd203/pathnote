@@ -36,3 +36,29 @@ pub enum SaveOutcome {
     Saved(NoteResource),
     Conflict(NoteResource),
 }
+
+#[derive(Serialize)]
+pub struct CollaborationConfigResource {
+    pub enrichment_enabled: bool,
+    pub enabled: bool,
+    pub url: Option<String>,
+    pub document_name: String,
+}
+#[derive(Serialize)]
+pub struct CollaborationUserResource {
+    pub id: i64,
+    pub name: String,
+}
+#[derive(Serialize)]
+pub struct StateResource {
+    #[serde(flatten)]
+    pub note: NoteResource,
+    pub state: Option<String>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SaveState {
+    pub state: String,
+    pub content: Value,
+    pub base_revision: i32,
+}

@@ -1,7 +1,7 @@
-mod collaboration;
 pub(in crate::modules) mod document;
 mod dto;
 mod handlers;
+mod internal;
 pub(super) mod service;
 use crate::state::AppState;
 use axum::{
@@ -10,7 +10,8 @@ use axum::{
 };
 pub fn routes(state: AppState) -> Router<AppState> {
     Router::new()
-        .merge(collaboration::routes(state))
+        .merge(internal::routes(state))
+        .route("/sessions/{id}/collaboration", get(handlers::collaboration))
         .route(
             "/sessions/{id}/note",
             get(handlers::show).put(handlers::save),
