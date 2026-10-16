@@ -22,7 +22,7 @@ class ReleaseManifestTests(unittest.TestCase):
         self.addCleanup(directory.cleanup)
         self.root = Path(directory.name)
         self.manifest = self.root / 'release.json'
-        self.write({'frontend_repository': release.FRONTEND_REPOSITORY, 'frontend_sha': FRONTEND_SHA, 'breaking_migration': True})
+        self.write({'frontend_repository': release.FRONTEND_REPOSITORY, 'frontend_sha': FRONTEND_SHA, 'breaking_migration': True, 'collaboration_sha': SHA})
 
     def write(self, data):
         self.manifest.write_text(json.dumps(data))
@@ -32,6 +32,7 @@ class ReleaseManifestTests(unittest.TestCase):
         self.assertEqual(result['frontend_sha'], FRONTEND_SHA)
         self.assertEqual(result['backend_sha'], SHA)
         self.assertEqual(result['breaking_migration'], 'true')
+        self.assertEqual(result['collaboration_sha'], SHA)
         self.assertRegex(result['release_id'], r'^\d{14}-42-1$')
 
     def test_moving_refs_wrong_repositories_and_unexpected_fields_are_rejected(self):
@@ -50,11 +51,16 @@ class ReleaseManifestTests(unittest.TestCase):
 
     def test_breaking_flag_requires_an_explicit_json_boolean(self):
         for flag in ('true', 'false', 0, 1, None):
-            self.write({'frontend_repository': release.FRONTEND_REPOSITORY, 'frontend_sha': FRONTEND_SHA, 'breaking_migration': flag})
+            self.write({'frontend_repository': release.FRONTEND_REPOSITORY, 'frontend_sha': FRONTEND_SHA, 'breaking_migration': flag, 'collaboration_sha': SHA})
             with self.assertRaises(ValueError):
                 release.resolve(self.manifest, SHA, '42', '1')
-        self.write({'frontend_repository': release.FRONTEND_REPOSITORY, 'frontend_sha': FRONTEND_SHA, 'breaking_migration': False})
+        self.write({'frontend_repository': release.FRONTEND_REPOSITORY, 'frontend_sha': FRONTEND_SHA, 'breaking_migration': False, 'collaboration_sha': SHA})
         self.assertEqual(release.resolve(self.manifest, SHA, '42', '1')['breaking_migration'], 'false')
+
+    def test_collaboration_revision_cannot_be_a_moving_ref(self):
+        self.write({'frontend_repository': release.FRONTEND_REPOSITORY, 'frontend_sha': FRONTEND_SHA, 'breaking_migration': True, 'collaboration_sha': 'master'})
+        with self.assertRaises(ValueError):
+            release.resolve(self.manifest, SHA, '42', '1')
 
     def test_invalid_backend_revision_or_run_id_cannot_enter_action_outputs(self):
         for sha, run_id, attempt in [('master', '42', '1'), (SHA, '42\nbad', '1'), (SHA, '42', '-1')]:
@@ -127,6 +133,8 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertEqual(deploy['env']['BACKEND_SHA'], '${{ needs.release.outputs.backend_sha }}')
         activation = next(step['run'] for step in deploy['steps'] if step.get('name') == 'Upload and activate verified frontend')
         self.assertLess(activation.index('python3 deploy/healthcheck.py'), activation.index('< web-release/deploy.sh'))
+        self.assertLess(activation.index('\"$COLLABORATION_SHA\" collaboration'), activation.index('< web-release/deploy.sh'))
+        self.assertEqual(deploy['env']['COLLABORATION_SHA'], '${{ needs.release.outputs.collaboration_sha }}')
         for name in ('check', 'build-backend', 'build-frontend'):
             self.assertNotIn('SSH_PRIVATE_KEY', json.dumps(self.jobs[name]))
         guard = self.jobs['release']['if']

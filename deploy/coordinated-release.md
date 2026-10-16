@@ -213,3 +213,19 @@ chúng thay người vận hành. Hoàn thành trước khi cho phép phát hàn
 5. Sau release thành công, kiểm tra đăng nhập, mở note và ôn flashcard, rồi mới
    cho các writer hoạt động lại. Nếu có lỗi sau migration, giữ chúng dừng và
    làm quy trình restore phía trên; không chỉ khởi động binary cũ.
+
+## Phiên bản collaboration trước frontend
+
+Manifest bắt buộc có `collaboration_sha` đầy đủ 40 ký tự. Job frontend kiểm tra
+HTTPS `/up` của collaboration trả `{status: "ok", version: "SHA"}` đúng SHA đã
+chốt, trước upload và ngay trước kích hoạt frontend. Mismatch/lỗi HTTP/timeout
+đều dừng frontend; backend đã khỏe vẫn được giữ.
+Variable `COLLABORATION_HEALTHCHECK_URL` trong environment production mặc định
+`https://pathnote-collab.aphorisms.cloud/up`. Không dùng URL HTTP.
+
+Khi đổi schema Tiptap: **collaboration → backend → frontend**. Commit và push
+collaboration đã tương thích trước, chờ `/up` hiện đúng SHA, sau đó điền SHA đó
+vào manifest Rust và phát hành. Đây là gate kiểm tra phiên bản; workflow Rust
+không tự triển khai collaboration. Với migration breaking, phối hợp thời gian
+ngừng ghi/khởi động lại collaboration theo checklist; backend mới vẫn phải
+hiểu frontend cũ ở những tab đang mở.

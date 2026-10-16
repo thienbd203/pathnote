@@ -23,6 +23,7 @@ jobs:
     outputs:
       frontend_repository: ${{ steps.pair.outputs.frontend_repository }}
       frontend_sha: ${{ steps.pair.outputs.frontend_sha }}
+      collaboration_sha: ${{ steps.pair.outputs.collaboration_sha }}
       backend_sha: ${{ steps.pair.outputs.backend_sha }}
       release_id: ${{ steps.pair.outputs.release_id }}
       breaking_migration: ${{ steps.pair.outputs.breaking_migration }}
@@ -255,6 +256,8 @@ jobs:
       SITE_URL: ${{ vars.WEB_SITE_URL || 'https://pathnote.aphorisms.cloud' }}
       HEALTHCHECK_URL: ${{ vars.HEALTHCHECK_URL }}
       BACKEND_SHA: ${{ needs.release.outputs.backend_sha }}
+      COLLABORATION_SHA: ${{ needs.release.outputs.collaboration_sha }}
+      COLLABORATION_HEALTHCHECK_URL: ${{ vars.COLLABORATION_HEALTHCHECK_URL || 'https://pathnote-collab.aphorisms.cloud/up' }}
       FRONTEND_SHA: ${{ needs.release.outputs.frontend_sha }}
       RELEASE: ${{ needs.release.outputs.release_id }}
     steps:
@@ -271,6 +274,7 @@ jobs:
           (cd web-release && sha256sum --check --strict SHA256SUMS)
           test "$(cat web-release/site/deploy-version.txt)" = "$FRONTEND_SHA"
           python3 deploy/healthcheck.py "$HEALTHCHECK_URL" "$BACKEND_SHA"
+          python3 deploy/healthcheck.py "$COLLABORATION_HEALTHCHECK_URL" "$COLLABORATION_SHA" collaboration
       - name: Configure pinned frontend SSH connection
         env:
           SSH_PRIVATE_KEY: ${{ secrets.WEB_SSH_PRIVATE_KEY || secrets.SSH_PRIVATE_KEY }}
@@ -305,6 +309,7 @@ jobs:
             web-release/site/ "$SSH_USER@$SSH_HOST:$RELEASE_PATH/"
           # Check the exact backend again immediately before frontend activation.
           python3 deploy/healthcheck.py "$HEALTHCHECK_URL" "$BACKEND_SHA"
+          python3 deploy/healthcheck.py "$COLLABORATION_HEALTHCHECK_URL" "$COLLABORATION_SHA" collaboration
           printf -v DEPLOY_COMMAND 'bash -s -- %q %q %q %q' "$DEPLOY_PATH" "$RELEASE" "$SITE_URL" "$FRONTEND_SHA"
           "${SSH[@]}" "$SSH_USER@$SSH_HOST" "$DEPLOY_COMMAND" < web-release/deploy.sh
       - name: Remove SSH credentials

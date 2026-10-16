@@ -11,8 +11,12 @@ SPEC.loader.exec_module(healthcheck)
 
 
 class HealthcheckTests(unittest.TestCase):
-    def response(self, data):
-        return patch.object(healthcheck.urllib.request, 'urlopen', return_value=io.BytesIO(json.dumps(data).encode()))
+    def response(self, data, final_url=None):
+        def opened(request, **_kwargs):
+            response = io.BytesIO(json.dumps(data).encode())
+            response.geturl = lambda: final_url or request.full_url
+            return response
+        return patch.object(healthcheck.urllib.request, 'urlopen', side_effect=opened)
 
     def test_matching_running_process_and_database(self):
         with self.response({'data': {'status': 'ok', 'database': 'ok', 'version': 'new'}}):
@@ -40,3 +44,18 @@ class HealthcheckTests(unittest.TestCase):
     def test_oversized_response_is_rejected(self):
         with patch.object(healthcheck.urllib.request, 'urlopen', return_value=io.BytesIO(b' ' * 4097)), self.assertRaises(ValueError):
             healthcheck.check('https://example.com/health', 'new')
+
+    def test_collaboration_checks_top_level_status_and_exact_version(self):
+        with self.response({'status': 'ok', 'version': 'new'}):
+            healthcheck.check('https://example.com/up', 'new', 'collaboration')
+        for body in ({'status': 'ok', 'version': 'old'}, {'status': 'error', 'version': 'new'}, {'data': {'status': 'ok', 'version': 'new'}}):
+            with self.response(body), self.assertRaises(ValueError):
+                healthcheck.check('https://example.com/up', 'new', 'collaboration')
+        with patch.object(healthcheck.urllib.request, 'urlopen') as request, self.assertRaises(ValueError):
+            healthcheck.check('http://127.0.0.1/up', 'new', 'collaboration')
+        request.assert_not_called()
+
+    def test_collaboration_gate_rejects_redirects_and_https_downgrades(self):
+        for target in ('http://example.com/up', 'https://other.example/up'):
+            with self.response({'status': 'ok', 'version': 'new'}, target), self.assertRaisesRegex(ValueError, 'redirect'):
+                healthcheck.check('https://example.com/up', 'new', 'collaboration')
