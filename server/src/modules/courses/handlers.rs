@@ -68,3 +68,13 @@ pub async fn delete(
     service::delete(&state.db, user.id, id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
+
+pub async fn library_stats(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    AppPath(id): AppPath<i64>,
+) -> Result<ApiResponse<super::dto::CourseStats>, AppError> {
+    Ok(ApiResponse::ok(
+        service::library_stats(&state.db, user.id, id).await?,
+    ))
+}
