@@ -131,6 +131,13 @@ async fn vocabulary_filters_paginate_large_tables_and_hide_other_owners_and_revo
     assert_eq!(p1["data"].as_array().unwrap().len(), 50);
     assert_eq!(p1["meta"]["total"], 131);
     assert_eq!(p1["meta"]["last_page"], 3);
+    assert_eq!(p1["meta"]["current_page"], 1);
+    assert_eq!(p1["meta"]["per_page"], 50);
+    assert!(p1["meta"].get("page").is_none());
+    let small = library(&app, &app.owner_token, "?per_page=10&page=2").await;
+    assert_eq!(small["data"].as_array().unwrap().len(), 10);
+    assert_eq!(small["meta"]["per_page"], 10);
+    assert_eq!(small["meta"]["current_page"], 2);
     assert_eq!(p1["meta"]["topics"], json!(["Jobs", "Travel"]));
     let p3 = library(&app, &app.owner_token, "?page=3").await;
     assert_eq!(p3["data"].as_array().unwrap().len(), 31);

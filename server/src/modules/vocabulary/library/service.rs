@@ -1,35 +1,19 @@
+use super::dto::*;
 use crate::{
-    access_token::CurrentUser,
     entities::{places, sessions, vocabulary_cards as cards, vocabulary_progress as progress},
     modules::notes::service as notes,
-    state::AppState,
     AppError,
-};
-use axum::{
-    extract::{rejection::QueryRejection, Query, State},
-    Json,
 };
 use sea_orm::{
     sea_query::{extension::postgres::PgExpr, Alias, Expr, Func},
     ColumnTrait, Condition, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QueryOrder,
     QuerySelect, QueryTrait, RelationTrait,
 };
-use serde::Deserialize;
-use serde_json::{json, Value};
-fn first() -> u64 {
-    1
-}
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Filters {
-    session_id: Option<i64>,
-    course_id: Option<i64>,
-    topic: Option<String>,
-    q: Option<String>,
-    #[serde(default = "first")]
-    page: u64,
-}
-pub(super) fn scope(user: i64, session: Option<i64>) -> sea_orm::Select<cards::Entity> {
+use serde_json::json;
+pub(in crate::modules::vocabulary) fn scope(
+    user: i64,
+    session: Option<i64>,
+) -> sea_orm::Select<cards::Entity> {
     let ids = notes::accessible(user, false)
         .select_only()
         .column(sessions::Column::Id)
@@ -42,7 +26,7 @@ pub(super) fn scope(user: i64, session: Option<i64>) -> sea_orm::Select<cards::E
     }
     query
 }
-pub(super) fn within_course(
+pub(in crate::modules::vocabulary) fn within_course(
     query: sea_orm::Select<cards::Entity>,
     course: Option<i64>,
 ) -> sea_orm::Select<cards::Entity> {
@@ -61,15 +45,16 @@ pub(super) fn within_course(
     }
 }
 pub async fn list(
-    State(s): State<AppState>,
-    user: CurrentUser,
-    input: Result<Query<Filters>, QueryRejection>,
-) -> Result<Json<Value>, AppError> {
-    let Query(input) =
-        input.map_err(|_| AppError::validation("filters", "Bộ lọc không hợp lệ."))?;
-    if input.page == 0 || input.page > i32::MAX as u64 {
-        return Err(AppError::validation("page", "Trang không hợp lệ."));
+    db: &sea_orm::DatabaseConnection,
+    user: i64,
+    input: Filters,
+) -> Result<Resource, AppError> {
+    let per_page = crate::pagination::ListQuery {
+        page: input.page,
+        per_page: Some(input.per_page.unwrap_or(50)),
+        q: None,
     }
+    .page_size()?;
     if input.q.as_ref().is_some_and(|q| q.chars().count() > 200)
         || input.topic.as_ref().is_some_and(|t| t.chars().count() > 60)
     {
@@ -79,18 +64,22 @@ pub async fn list(
         if id <= 0 {
             return Err(AppError::validation("course_id", "Khóa học không hợp lệ."));
         }
-        crate::modules::courses::service::model(s.db.as_ref(), user.id, id).await?;
+        crate::modules::courses::service::model(db, user, id).await?;
     }
     let source = if let Some(id) = input.session_id {
         if id <= 0 {
             return Err(AppError::validation("session_id", "Buổi học không hợp lệ."));
         }
-        let (session, place) = notes::access(s.db.as_ref(), user.id, id, false).await?;
-        Some(json!({"id":id,"title":session.title,"shared":place.user_id != user.id}))
+        let (session, place) = notes::access(db, user, id, false).await?;
+        Some(Source {
+            id,
+            title: session.title,
+            shared: place.user_id != user,
+        })
     } else {
         None
     };
-    let base = within_course(scope(user.id, input.session_id), input.course_id);
+    let base = within_course(scope(user, input.session_id), input.course_id);
     let topics: Vec<String> = base
         .clone()
         .select_only()
@@ -101,16 +90,16 @@ pub async fn list(
         )
         .distinct()
         .into_tuple()
-        .all(s.db.as_ref())
+        .all(db)
         .await?;
     let mut topics = topics;
     topics.sort();
     let query = filtered(base, input.topic, input.q);
-    let total = query.clone().count(s.db.as_ref()).await?;
+    let total = query.clone().count(db).await?;
     let reviewable = query
         .clone()
         .filter(cards::Column::Meaning.ne(""))
-        .count(s.db.as_ref())
+        .count(db)
         .await?;
     let word_count: i64 = query
         .clone()
@@ -120,7 +109,7 @@ pub async fn list(
             "count",
         )
         .into_tuple()
-        .one(s.db.as_ref())
+        .one(db)
         .await?
         .unwrap_or(0);
     let rows = query
@@ -128,7 +117,7 @@ pub async fn list(
         .select_also(sessions::Entity)
         .order_by_asc(cards::Column::Word)
         .order_by_asc(cards::Column::Id)
-        .paginate(s.db.as_ref(), 50)
+        .paginate(db, per_page)
         .fetch_page(input.page - 1)
         .await?;
     let owners: std::collections::HashMap<_, _> = places::Entity::find()
@@ -138,29 +127,67 @@ pub async fn list(
                     .filter_map(|(_, s)| s.as_ref().map(|s| s.place_id)),
             ),
         )
-        .all(s.db.as_ref())
+        .all(db)
         .await?
         .into_iter()
         .map(|p| (p.id, p.user_id))
         .collect();
     let progress: std::collections::HashMap<_, _> = progress::Entity::find()
-        .filter(progress::Column::UserId.eq(user.id))
+        .filter(progress::Column::UserId.eq(user))
         .filter(progress::Column::CardId.is_in(rows.iter().map(|(c, _)| c.id)))
-        .all(s.db.as_ref())
+        .all(db)
         .await?
         .into_iter()
         .map(|p| (p.card_id, p))
         .collect();
-    let data: Vec<_> = rows.into_iter().filter_map(|(card,session)| session.map(|session| {
-        let stats = progress.get(&card.id).filter(|p|p.study_key==super::reviews::state::key(&card)).map(|p|json!({"correct":p.correct,"incorrect":p.incorrect,"streak":p.streak,"due_at":p.due_at})).unwrap_or_else(||json!({"correct":0,"incorrect":0,"streak":0,"due_at":null}));
-        json!({"id":card.id,"word":card.word,"word_key":card.word_key,"ipa":card.ipa,"locale":card.locale,"part_of_speech":card.part_of_speech,"meaning":card.meaning,"topics":card.topics,"examples":card.examples,"source":{"id":session.id,"title":session.title,"shared":owners.get(&session.place_id) != Some(&user.id)},"progress":stats})
-    })).collect();
-    Ok(Json(
-        json!({"data":data,"meta":{"page":input.page,"last_page":total.div_ceil(50).max(1),"total":total,"word_count":word_count,"reviewable":reviewable,"topics":topics,"syncing":false,"source":source}}),
-    ))
+    let data = rows
+        .into_iter()
+        .filter_map(|(card, session)| {
+            session.map(|session| {
+                let stats = progress
+                    .get(&card.id)
+                    .filter(|p| p.study_key == super::super::reviews::state::key(&card))
+                    .map(|p| Progress {
+                        correct: p.correct,
+                        incorrect: p.incorrect,
+                        streak: p.streak,
+                        due_at: Some(p.due_at),
+                    })
+                    .unwrap_or_default();
+                Card {
+                    id: card.id,
+                    word: card.word,
+                    word_key: card.word_key,
+                    ipa: card.ipa,
+                    locale: card.locale,
+                    part_of_speech: card.part_of_speech,
+                    meaning: card.meaning,
+                    topics: card.topics,
+                    examples: card.examples,
+                    source: Source {
+                        id: session.id,
+                        title: session.title,
+                        shared: owners.get(&session.place_id) != Some(&user),
+                    },
+                    progress: stats,
+                }
+            })
+        })
+        .collect();
+    Ok(Resource {
+        data,
+        meta: Meta {
+            page: crate::pagination::PageMeta::new(input.page, per_page, total),
+            word_count,
+            reviewable,
+            topics,
+            syncing: false,
+            source,
+        },
+    })
 }
 
-pub(super) fn filtered(
+pub(in crate::modules::vocabulary) fn filtered(
     mut query: sea_orm::Select<cards::Entity>,
     topic: Option<String>,
     text: Option<String>,
