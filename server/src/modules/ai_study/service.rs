@@ -1,7 +1,7 @@
+use super::dto::{ImportResource, Input};
 use crate::{
     entities::{ai_imports as imports, exercises},
     modules::{
-        exercises::dto::Definition,
         notes::{
             document::{validate, Reference},
             service as notes,
@@ -12,30 +12,22 @@ use crate::{
 };
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter,
-    QuerySelect, Set, TransactionTrait,
+    QuerySelect, Set,
 };
-use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct Input {
-    pub key: uuid::Uuid,
-    pub content: Value,
-    pub exercises: Vec<Definition>,
-}
 fn invalid() -> AppError {
     AppError::validation("content", "Section Học cùng AI không hợp lệ.")
 }
-fn receipt(model: imports::Model) -> Value {
-    json!({"key":model.id,"content":model.content["content"],"expires_at":if model.attached{None}else{Some(model.created_at+chrono::Duration::hours(24))}})
+fn receipt(model: imports::Model) -> ImportResource {
+    model.into()
 }
 pub async fn prepare(
     db: &DatabaseConnection,
     user: i64,
     session: i64,
     mut input: Input,
-) -> Result<Value, AppError> {
+) -> Result<ImportResource, AppError> {
     let (_, place) = notes::access(db, user, session, false).await?;
     if input.key.is_nil() || input.exercises.len() > 100 {
         return Err(invalid());
@@ -90,8 +82,7 @@ pub async fn prepare(
         "{:x}",
         Sha256::digest(serde_json::to_vec(&input).map_err(|e| AppError::Internal(e.to_string()))?)
     );
-    let txn = db.begin().await?;
-    places::lock_for_write(&txn, place.user_id, place.id).await?;
+    let txn = places::write_tx(db, place.user_id, place.id).await?;
     notes::access(&txn, user, session, false).await?;
     if let Some(mut model) = imports::Entity::find_by_id(input.key).one(&txn).await? {
         if model.user_id != user || model.session_id != session {
@@ -126,21 +117,24 @@ pub async fn prepare(
         ids.push(model.id);
     }
     for (path, index) in replacements {
-        *input.content.pointer_mut(&path).expect("validated path") = json!(ids[index]);
+        *input.content.pointer_mut(&path).expect("validated path") = Value::from(ids[index]);
     }
-    input.content["content"][1]["attrs"]["aiImportId"] = json!(input.key);
-    let model = imports::ActiveModel {
-        id: Set(input.key),
-        session_id: Set(session),
-        user_id: Set(user),
-        fingerprint: Set(fingerprint),
-        content: Set(input.content),
-        exercise_ids: Set(json!(ids)),
-        attached: Set(false),
-        created_at: Set(chrono::Utc::now().fixed_offset()),
-    }
-    .insert(&txn)
-    .await?;
+    input.content["content"][1]["attrs"]["aiImportId"] = Value::String(input.key.to_string());
+    let model =
+        imports::ActiveModel {
+            id: Set(input.key),
+            session_id: Set(session),
+            user_id: Set(user),
+            fingerprint: Set(fingerprint),
+            content: Set(input.content),
+            exercise_ids: Set(
+                serde_json::to_value(ids).map_err(|e| AppError::Internal(e.to_string()))?
+            ),
+            attached: Set(false),
+            created_at: Set(chrono::Utc::now().fixed_offset()),
+        }
+        .insert(&txn)
+        .await?;
     let value = receipt(model);
     txn.commit().await?;
     Ok(value)

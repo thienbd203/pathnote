@@ -8,7 +8,7 @@ use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DatabaseTransaction,
     EntityTrait, QueryFilter, QueryOrder, Set,
 };
-use serde_json::{json, Value};
+
 fn missing() -> AppError {
     AppError::NotFound("Không tìm thấy câu hỏi.".into())
 }
@@ -67,22 +67,25 @@ fn result(model: &attempts::Model) -> Result<Option<ResultData>, AppError> {
         .transpose()
         .map_err(|e| AppError::Internal(e.to_string()))
 }
-fn attempt(model: &attempts::Model, q: &Question) -> Result<Value, AppError> {
+fn attempt(model: &attempts::Model, q: &Question) -> Result<AttemptResource, AppError> {
     let result = result(model)?;
     let completed = result.as_ref().is_some_and(|r| r.r#final);
-    let results = if let Some(r) = result {
-        let mut v = json!(r);
-        if completed {
-            v["answers"] = json!(q.answers());
-            v["explanation"] = json!(q.explanation());
-        }
-        vec![v]
-    } else {
-        vec![]
-    };
-    Ok(
-        json!({"id":model.id,"revision":model.revision,"position":usize::from(completed),"completed":completed,"questions":[q.public()],"results":results}),
-    )
+    let results = result
+        .into_iter()
+        .map(|result| AttemptResultResource {
+            result,
+            answers: completed.then(|| q.answers().to_vec()),
+            explanation: completed.then(|| q.explanation().to_owned()),
+        })
+        .collect();
+    Ok(AttemptResource {
+        id: model.id,
+        revision: model.revision,
+        position: usize::from(completed),
+        completed,
+        questions: vec![q.public()],
+        results,
+    })
 }
 pub async fn create(
     db: &DatabaseConnection,
@@ -90,7 +93,7 @@ pub async fn create(
     session: i64,
     mut input: Definition,
     bulk: bool,
-) -> Result<Value, AppError> {
+) -> Result<CreateResource, AppError> {
     notes::access(db, user, session, false).await?;
     input.validate(bulk)?;
     if input.revision.is_some() {
@@ -122,9 +125,9 @@ pub async fn create(
     }
     txn.commit().await?;
     Ok(if bulk {
-        json!({"ids":ids})
+        CreateResource::Many { ids }
     } else {
-        json!({"id":ids[0]})
+        CreateResource::One { id: ids[0] }
     })
 }
 pub async fn show(
@@ -133,18 +136,27 @@ pub async fn show(
     session: i64,
     id: i64,
     definition: bool,
-) -> Result<Value, AppError> {
+) -> Result<ShowResource, AppError> {
     let (_, place) = notes::access(db, user, session, false).await?;
     let model = get(db, session, id).await?;
     let q = question(&model)?;
     if definition {
         manage(&model, user, place.user_id)?;
-        Ok(json!({"title":model.title,"questions":[q],"revision":model.revision}))
+        Ok(ShowResource::Definition(DefinitionResource {
+            title: model.title,
+            questions: vec![q],
+            revision: model.revision,
+        }))
     } else {
         let a = latest(db, user, &model).await?;
-        Ok(
-            json!({"id":id,"title":model.title,"revision":model.revision,"can_manage":user==place.user_id||user==model.user_id,"questions":[q.public()],"attempt":a.as_ref().map(|a|attempt(a,&q)).transpose()?}),
-        )
+        Ok(ShowResource::Exercise(ExerciseResource {
+            id,
+            title: model.title,
+            revision: model.revision,
+            can_manage: user == place.user_id || user == model.user_id,
+            questions: vec![q.public()],
+            attempt: a.as_ref().map(|a| attempt(a, &q)).transpose()?,
+        }))
     }
 }
 pub async fn update(
@@ -153,7 +165,7 @@ pub async fn update(
     session: i64,
     id: i64,
     mut input: Definition,
-) -> Result<Value, AppError> {
+) -> Result<IdResource, AppError> {
     notes::access(db, user, session, false).await?;
     input.validate(false)?;
     let q =
@@ -171,7 +183,7 @@ pub async fn update(
     model.revision = Set(revision);
     model.update(&txn).await?;
     txn.commit().await?;
-    Ok(json!({"id":id}))
+    Ok(IdResource { id })
 }
 pub async fn start(
     db: &DatabaseConnection,
@@ -179,7 +191,7 @@ pub async fn start(
     session: i64,
     id: i64,
     input: Start,
-) -> Result<Value, AppError> {
+) -> Result<AttemptResource, AppError> {
     let (txn, _) = lock(db, user, session).await?;
     let model = get(&txn, session, id).await?;
     let old = latest(&txn, user, &model).await?;
@@ -208,7 +220,7 @@ pub async fn answer(
     id: i64,
     aid: i64,
     input: Answer,
-) -> Result<Value, AppError> {
+) -> Result<AttemptResource, AppError> {
     if input.position != 0
         || input.attempt > 1
         || input.answer.trim().is_empty()
@@ -258,7 +270,9 @@ pub async fn answer(
         r#final: correct || input.attempt == 1,
     };
     let mut a: attempts::ActiveModel = a.into();
-    a.result = Set(Some(json!(r)));
+    a.result = Set(Some(
+        serde_json::to_value(r).map_err(|e| AppError::Internal(e.to_string()))?,
+    ));
     let a = a.update(&txn).await?;
     let value = attempt(&a, &q)?;
     txn.commit().await?;

@@ -1,7 +1,7 @@
 use super::dto::invalid;
 use crate::AppError;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+
 use std::collections::HashSet;
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
@@ -179,7 +179,7 @@ impl Question {
             Err(invalid())
         }
     }
-    pub fn public(&self) -> Value {
+    pub fn public(&self) -> super::dto::PublicQuestionResource {
         let (kind, prompt, options) = match self {
             Self::Choice {
                 prompt, options, ..
@@ -203,12 +203,18 @@ impl Question {
                 prompt, options, ..
             } => ("correction", prompt, options),
         };
-        let mut value = json!({"type":kind,"prompt":prompt,"options":options});
-        if let Self::Matching { items, .. } = self {
-            value["items"] = json!(items);
+        super::dto::PublicQuestionResource {
+            kind,
+            prompt: prompt.clone(),
+            options: options.clone(),
+            items: if let Self::Matching { items, .. } = self {
+                Some(items.clone())
+            } else {
+                None
+            },
         }
-        value
     }
+
     pub fn answers(&self) -> &[String] {
         match self {
             Self::Choice { answers, .. }
