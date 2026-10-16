@@ -1,43 +1,13 @@
-use super::{
-    dto::{self, SessionPage},
-    service::{self},
-};
-use crate::{access_token::CurrentUser, pagination::ListQuery, state::AppState, AppError};
-use axum::{
-    extract::{rejection::QueryRejection, Query, State},
-    Json,
+use crate::{
+    modules::sessions::dto::{self, SearchOrder, SearchPeriod, SearchQuery, SessionPage},
+    pagination::ListQuery,
+    AppError,
 };
 use chrono::{Datelike, NaiveDate, TimeZone, Utc};
 use sea_orm::{
     sea_query::{Expr, Func, LikeExpr},
-    ColumnTrait, Condition, QueryFilter,
+    ColumnTrait, Condition, DatabaseConnection, QueryFilter,
 };
-use serde::Deserialize;
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct SearchQuery {
-    q: Option<String>,
-    place_id: Option<i64>,
-    course_id: Option<i64>,
-    independent: Option<bool>,
-    order: Option<SearchOrder>,
-    period: Option<SearchPeriod>,
-    timezone: String,
-    page: Option<u64>,
-    per_page: Option<u64>,
-}
-#[derive(Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum SearchOrder {
-    Asc,
-    Desc,
-}
-#[derive(Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum SearchPeriod {
-    Past,
-    Upcoming,
-}
 fn calendar_day(term: &str, year: i32) -> Option<NaiveDate> {
     let parts = term.split('/').collect::<Vec<_>>();
     if ![2, 3].contains(&parts.len())
@@ -63,12 +33,10 @@ fn calendar_day(term: &str, year: i32) -> Option<NaiveDate> {
     NaiveDate::from_ymd_opt(year, parts[1].parse().ok()?, parts[0].parse().ok()?)
 }
 pub async fn search(
-    State(s): State<AppState>,
-    u: CurrentUser,
-    query: Result<Query<SearchQuery>, QueryRejection>,
-) -> Result<Json<SessionPage>, AppError> {
-    let Query(input) =
-        query.map_err(|_| AppError::validation("query", "Tham số tìm kiếm không hợp lệ."))?;
+    db: &DatabaseConnection,
+    user_id: i64,
+    input: SearchQuery,
+) -> Result<SessionPage, AppError> {
     let tz = dto::timezone(&input.timezone)?;
     let paging = ListQuery {
         q: input.q.clone(),
@@ -76,12 +44,12 @@ pub async fn search(
         per_page: input.per_page,
     };
     paging.page_size()?;
-    let mut query = service::owned(u.id);
+    let mut query = super::owned(user_id);
     if let Some(id) = input.place_id {
         if id <= 0 {
             return Err(AppError::validation("place_id", "Nơi học không hợp lệ."));
         }
-        super::super::places::service::get(s.db.as_ref(), u.id, id).await?;
+        crate::modules::places::service::get(db, user_id, id).await?;
         query = query.filter(crate::entities::sessions::Column::PlaceId.eq(id));
     }
     if input.independent == Some(true) {
@@ -104,7 +72,7 @@ pub async fn search(
         if id <= 0 {
             return Err(AppError::validation("course_id", "Khóa học không hợp lệ."));
         }
-        let course = super::super::courses::service::model(s.db.as_ref(), u.id, id).await?;
+        let course = crate::modules::courses::service::model(db, user_id, id).await?;
         if input.place_id.is_some_and(|p| p != course.place_id) {
             return Err(AppError::NotFound("Không tìm thấy khóa học.".into()));
         }
@@ -155,13 +123,11 @@ pub async fn search(
         }
         query = query.filter(matching);
     }
-    Ok(Json(
-        service::ordered_page(
-            s.db.as_ref(),
-            query,
-            paging,
-            matches!(input.order, Some(SearchOrder::Desc)),
-        )
-        .await?,
-    ))
+    super::ordered_page(
+        db,
+        query,
+        paging,
+        matches!(input.order, Some(SearchOrder::Desc)),
+    )
+    .await
 }

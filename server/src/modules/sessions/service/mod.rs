@@ -1,4 +1,7 @@
-use super::dto::{self, CreateSession, SessionPage, SessionResource, UpdateSession};
+mod search;
+use crate::modules::sessions::dto::{
+    self, CreateSession, SessionPage, SessionResource, UpdateSession,
+};
 use crate::{
     entities::{
         courses, notes, places,
@@ -13,6 +16,7 @@ use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, EntityTrait,
     JoinType, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, RelationTrait, Select, Set,
 };
+pub use search::search;
 #[derive(Clone, Copy)]
 pub enum Parent {
     Place(i64),
@@ -50,7 +54,7 @@ async fn parent<C: ConnectionTrait>(
         }
     }
 }
-pub(super) async fn model<C: ConnectionTrait>(
+pub(in crate::modules::sessions) async fn model<C: ConnectionTrait>(
     db: &C,
     user: i64,
     id: i64,
@@ -104,14 +108,14 @@ pub async fn list(
     }
     page(db, query, input).await
 }
-pub(super) async fn page(
+pub(in crate::modules::sessions) async fn page(
     db: &DatabaseConnection,
     query: Select<sessions::Entity>,
     input: ListQuery,
 ) -> Result<SessionPage, AppError> {
     ordered_page(db, query, input, false).await
 }
-pub(super) async fn ordered_page(
+pub(in crate::modules::sessions) async fn ordered_page(
     db: &DatabaseConnection,
     query: Select<sessions::Entity>,
     input: ListQuery,
@@ -213,8 +217,13 @@ pub async fn create(
         dto::timezone(&input.timezone)?,
     )?;
     let title = dto::title(input.title)?;
-    let initial_content =
-        super::initial_note::prepare(db, user, initial_course, &input.initial_note).await?;
+    let initial_content = crate::modules::sessions::initial_note::prepare(
+        db,
+        user,
+        initial_course,
+        &input.initial_note,
+    )
+    .await?;
     let txn = place_service::write_tx(db, user, place_id).await?;
     let (_, course_id) = parent(&txn, user, scope).await?;
     if let dto::InitialNote::Structure { session_id } = &input.initial_note {

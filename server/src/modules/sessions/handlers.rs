@@ -97,3 +97,14 @@ pub async fn delete(
     service::delete(&state.db, user.id, id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
+
+pub async fn search(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    // Preserve the search endpoint's existing validation message.
+    input: Result<AppQuery<super::dto::SearchQuery>, AppError>,
+) -> Result<Json<SessionPage>, AppError> {
+    let AppQuery(input) =
+        input.map_err(|_| AppError::validation("query", "Tham số tìm kiếm không hợp lệ."))?;
+    Ok(Json(service::search(&state.db, user.id, input).await?))
+}

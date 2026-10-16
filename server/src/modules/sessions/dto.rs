@@ -128,3 +128,29 @@ impl SessionResource {
     }
 }
 pub type SessionPage = Page<SessionResource>;
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SearchQuery {
+    pub q: Option<String>,
+    pub place_id: Option<i64>,
+    pub course_id: Option<i64>,
+    pub independent: Option<bool>,
+    pub order: Option<SearchOrder>,
+    pub period: Option<SearchPeriod>,
+    pub timezone: String,
+    pub page: Option<u64>,
+    pub per_page: Option<u64>,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SearchOrder {
+    Asc,
+    Desc,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SearchPeriod {
+    Past,
+    Upcoming,
+}
