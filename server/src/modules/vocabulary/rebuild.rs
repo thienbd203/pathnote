@@ -3,10 +3,7 @@ use crate::{
     modules::{notes::service as note_service, places::service as place_service},
     AppError,
 };
-use sea_orm::{
-    ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
-    TransactionTrait,
-};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
 /// Backfill existing notes in small pages. Saving new notes already synchronizes atomically.
 pub async fn rebuild(db: &DatabaseConnection) -> Result<u64, AppError> {
     let mut cursor = 0;
@@ -41,8 +38,7 @@ pub async fn rebuild(db: &DatabaseConnection) -> Result<u64, AppError> {
                 continue;
             };
             let prepared = super::sync::prepare(&snapshot.content)?;
-            let txn = db.begin().await?;
-            place_service::lock_for_write(&txn, place.user_id, place.id).await?;
+            let txn = place_service::write_tx(db, place.user_id, place.id).await?;
             note_service::access(&txn, place.user_id, id, true).await?;
             if let Some(note) = notes::Entity::find_by_id(id).one(&txn).await? {
                 if note.revision != snapshot.revision {
