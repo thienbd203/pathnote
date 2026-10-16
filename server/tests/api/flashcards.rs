@@ -467,3 +467,39 @@ async fn next_query_profile() {
     eprintln!("PROFILE_RUN_END");
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn overview_exposes_counts_without_returning_the_vocabulary_library() {
+    let app = LearningApp::spawn().await;
+    let (id, _) = seed(&app).await;
+    let response = app
+        .api
+        .get("/api/v1/flashcards")
+        .add_header("authorization", auth(&app.owner_token))
+        .await;
+    response.assert_status_ok();
+    let data = response.json::<Value>()["data"].clone();
+    assert_eq!(data["word_count"], 1);
+    assert_eq!(data["reviewable"], 1);
+    assert_eq!(data["new"], 1);
+    assert!(data.get("cards").is_none());
+    assert!(data.get("entries").is_none());
+    settings(&app, json!({}), "both", 0.9).await;
+    let response = app
+        .api
+        .get("/api/v1/flashcards")
+        .add_header("authorization", auth(&app.owner_token))
+        .await;
+    let data = response.json::<Value>()["data"].clone();
+    assert_eq!(data["new"], 2);
+    assert_eq!(data["word_count"], 1);
+    assert_eq!(data["reviewable"], 1);
+    let other = app
+        .api
+        .get("/api/v1/flashcards")
+        .add_header("authorization", auth(&app.other_token))
+        .await;
+    assert_eq!(other.json::<Value>()["data"]["reviewable"], 0);
+    assert!(id > 0);
+    app.cleanup().await;
+}
