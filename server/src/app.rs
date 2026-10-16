@@ -80,7 +80,7 @@ pub fn build_app<S: SessionStore + Clone>(state: AppState, config: &Config, stor
         .layer(cors(&config.frontend_url))
         .layer(CompressionLayer::new())
         .layer(PropagateRequestIdLayer::x_request_id())
-        .layer(TraceLayer::new_for_http().make_span_with(|request: &Request| tracing::info_span!("http_request", method = %request.method(), path = request.uri().path())))
+        .layer(TraceLayer::new_for_http().make_span_with(|request: &Request| tracing::info_span!("http_request", method = %request.method(), path = request.uri().path(), request_id = request.headers().get("x-request-id").and_then(|value| value.to_str().ok()).unwrap_or(""))))
         .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
         .with_state(state)
 }
@@ -96,6 +96,7 @@ fn cors(frontend_url: &str) -> CorsLayer {
             Method::DELETE,
         ])
         .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE, header::ACCEPT])
+        .expose_headers([header::HeaderName::from_static("x-request-id")])
         .allow_credentials(true)
 }
 

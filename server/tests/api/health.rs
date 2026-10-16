@@ -33,6 +33,10 @@ async fn request_ids_are_generated_and_propagated() {
         .add_header("x-request-id", "test-request")
         .await;
     assert_eq!(response.header("x-request-id"), "test-request");
+    assert_eq!(
+        response.header("access-control-expose-headers"),
+        "x-request-id"
+    );
 }
 
 #[tokio::test]
