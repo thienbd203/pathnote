@@ -58,7 +58,7 @@ pub fn prepare(rows: Vec<attempts::Model>) -> Dataset {
         if !(1..=4).contains(&rating) {
             continue;
         }
-        let identity = (row.card_id, row.direction, row.study_key);
+        let identity = (row.memory_card_id, row.direction, row.study_key);
         let chain = chains.entry(identity.clone()).or_default();
         if row.version == 0 && !chain.0.is_empty() {
             histories.push(History {
@@ -121,14 +121,14 @@ pub async fn load<C: ConnectionTrait>(db: &C, user: i64) -> Result<Dataset, AppE
 pub async fn current<C: ConnectionTrait>(
     db: &C,
     user: i64,
-    card: i64,
+    memory_card: i64,
     direction: &str,
     key: &str,
     reviews: i32,
 ) -> Result<FSRSItem, AppError> {
     let rows = attempts::Entity::find()
         .filter(attempts::Column::UserId.eq(user))
-        .filter(attempts::Column::CardId.eq(card))
+        .filter(attempts::Column::MemoryCardId.eq(memory_card))
         .filter(attempts::Column::Direction.eq(direction))
         .filter(attempts::Column::StudyKey.eq(key))
         .filter(attempts::Column::Rating.is_not_null())

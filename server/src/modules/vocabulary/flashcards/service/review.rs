@@ -38,7 +38,7 @@ async fn card<C: ConnectionTrait>(
         .one(db)
         .await?
         .ok_or_else(|| AppError::NotFound("Không tìm thấy từ vựng.".into()))?;
-    if queue::key(&card) != t.study_key {
+    if queue::content_key(&card) != t.content_key {
         return Err(AppError::Conflict(
             "Từ hoặc nghĩa đã thay đổi. Hãy lấy thẻ mới.".into(),
         ));
@@ -48,6 +48,7 @@ async fn card<C: ConnectionTrait>(
 fn fresh(t: &attempts::Model, m: Option<&memory::Model>) -> Result<(), AppError> {
     if chrono::Utc::now().fixed_offset() - t.created_at > chrono::Duration::hours(24)
         || t.version != m.map_or(0, |m| m.reviews)
+        || m.is_some_and(|m| m.card_id != t.memory_card_id)
     {
         return Err(AppError::Conflict(
             "Thẻ này đã được ôn hoặc hết hạn. Hãy lấy thẻ mới.".into(),
@@ -76,14 +77,27 @@ pub async fn reveal(
         t.retention,
         chrono::Utc::now().fixed_offset(),
     )?;
+    let meaning = queue::meanings(&txn, user, &c).await?;
     let mut model: attempts::ActiveModel = t.into();
     model.revealed = Set(true);
+    model.snapshot = Set(Some(
+        serde_json::to_value(dto::Snapshot {
+            word: c.word.clone(),
+            meaning: meaning.clone(),
+            ipa: c.ipa.clone(),
+            locale: c.locale.clone(),
+            part_of_speech: c.part_of_speech.clone(),
+            topics: c.topics.clone(),
+            examples: c.examples.clone(),
+        })
+        .map_err(|e| AppError::Internal(e.to_string()))?,
+    ));
     model.update(&txn).await?;
     txn.commit().await?;
     Ok(dto::Reveal {
         back: dto::Back {
             word: c.word,
-            meaning: c.meaning,
+            meaning,
             ipa: c.ipa,
             locale: c.locale,
             part_of_speech: c.part_of_speech,
@@ -149,7 +163,7 @@ pub async fn grade(
         .remove(input.rating as usize - 1);
     memory::Entity::insert(memory::ActiveModel {
         user_id: Set(user),
-        card_id: Set(c.id),
+        card_id: Set(m.as_ref().map_or(c.id, |m| m.card_id)),
         direction: Set(t.direction.clone()),
         identity: Set(queue::identity(&c)),
         study_key: Set(t.study_key.clone()),
@@ -165,10 +179,11 @@ pub async fn grade(
     .on_conflict(
         OnConflict::columns([
             memory::Column::UserId,
-            memory::Column::CardId,
+            memory::Column::StudyKey,
             memory::Column::Direction,
         ])
         .update_columns([
+            memory::Column::CardId,
             memory::Column::Identity,
             memory::Column::StudyKey,
             memory::Column::ParameterVersion,
@@ -184,13 +199,15 @@ pub async fn grade(
     )
     .exec(&txn)
     .await?;
+    let snapshot = t.snapshot.clone();
     let mut saved: attempts::ActiveModel = t.into();
     saved.delta_days =
         Set(Some(m.as_ref().map_or(0, |m| {
             (now - m.reviewed_at).num_days().max(0) as i32
         })));
-    saved.snapshot = Set(Some(
-        serde_json::to_value(dto::Snapshot {
+    saved.snapshot = Set(Some(match snapshot {
+        Some(value) => value,
+        None => serde_json::to_value(dto::Snapshot {
             word: c.word,
             meaning: c.meaning,
             ipa: c.ipa,
@@ -200,7 +217,7 @@ pub async fn grade(
             examples: c.examples,
         })
         .map_err(|e| AppError::Internal(e.to_string()))?,
-    ));
+    }));
     saved.reviewed_at = Set(Some(now));
     saved.rating = Set(Some(i32::from(input.rating)));
     saved.due_at = Set(Some(result.due_at));

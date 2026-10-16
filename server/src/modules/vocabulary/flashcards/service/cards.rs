@@ -93,9 +93,11 @@ pub async fn next(
         id: Set(id),
         user_id: Set(user),
         card_id: Set(card.id),
+        memory_card_id: Set(memory.as_ref().map_or(card.id, |m| m.card_id)),
         run_id: Set(run_id),
         direction: Set(direction.into()),
         study_key: Set(queue::key(&card)),
+        content_key: Set(queue::content_key(&card)),
         version: Set(memory.as_ref().map_or(0, |m| m.reviews)),
         parameter_version: Set(profile.version()),
         parameters: Set(Some(
@@ -119,13 +121,14 @@ pub async fn next(
         title: source_session.title,
         shared: source_place.user_id != user,
     };
+    let meaning = queue::meanings(db, user, &card).await?;
     Ok(dto::Next {
         card: Some(dto::Front {
             id,
             card_id: card.id,
             direction: direction.into(),
             front: if direction == "vi_en" {
-                card.meaning
+                meaning
             } else {
                 card.word.clone()
             },

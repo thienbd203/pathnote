@@ -139,7 +139,7 @@ pub async fn history(
             let snapshot = attempt.snapshot.is_some();
             let content = match attempt.snapshot {
                 Some(value) => Some(value),
-                None if queue::key(&card) == attempt.study_key => Some(
+                None if queue::content_key(&card) == attempt.content_key => Some(
                     serde_json::to_value(dto::Snapshot {
                         word: card.word,
                         meaning: card.meaning,

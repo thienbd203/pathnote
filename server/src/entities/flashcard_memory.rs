@@ -4,12 +4,12 @@ use sea_orm::entity::prelude::*;
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub user_id: i64,
-    #[sea_orm(primary_key, auto_increment = false)]
     pub card_id: i64,
+    #[sea_orm(primary_key, auto_increment = false)]
+    pub study_key: String,
     #[sea_orm(primary_key, auto_increment = false)]
     pub direction: String,
     pub identity: Json,
-    pub study_key: String,
     pub parameter_version: i32,
     pub stability: f32,
     pub difficulty: f32,

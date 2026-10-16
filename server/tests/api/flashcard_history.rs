@@ -67,6 +67,16 @@ async fn history_preserves_graded_snapshot_after_edits_removal_and_never_changes
     content["content"][0]["content"][0]["content"][0]["attrs"]["ipa"] = json!("/new/");
     content["content"][0]["content"][0]["content"][0]["attrs"]["topics"] = json!(["School"]);
     save(&app, session, &content, 1).await;
+    // A wording change no longer resets the word schedule. Advance its due
+    // time explicitly before testing the next graded history snapshot.
+    let row = memory::Entity::find()
+        .one(app.db.as_ref())
+        .await
+        .unwrap()
+        .unwrap();
+    let mut row: memory::ActiveModel = row.into();
+    row.due_at = Set(chrono::Utc::now().fixed_offset() - chrono::Duration::minutes(1));
+    row.update(app.db.as_ref()).await.unwrap();
     let second = start(&app, &app.owner_token, "teacher").await;
     finish(&app, &app.owner_token, &second, 4).await;
     let before = memory::Entity::find().all(app.db.as_ref()).await.unwrap();

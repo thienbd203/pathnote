@@ -8,7 +8,8 @@ use crate::{
 };
 use sea_orm::{
     sea_query::{Alias, Expr, JoinType},
-    ColumnTrait, Condition, ConnectionTrait, EntityTrait, QueryFilter, QuerySelect, QueryTrait,
+    ColumnTrait, Condition, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
+    QueryTrait,
 };
 use serde_json::Value;
 pub fn key(card: &cards::Model) -> String {
@@ -19,13 +20,47 @@ pub fn key(card: &cards::Model) -> String {
     )
 }
 pub fn identity(card: &cards::Model) -> Value {
-    serde_json::to_value((
+    serde_json::to_value((&card.word_key, &card.locale, &card.part_of_speech))
+        .expect("String tuple serialization")
+}
+// A shared schedule is identified by the word and its part of speech. Tickets
+// separately retain the source content hash so edits still invalidate them.
+pub fn content_key(card: &cards::Model) -> String {
+    use sha2::{Digest, Sha256};
+    let content = (
         &card.word,
         &card.meaning,
         &card.locale,
         &card.part_of_speech,
-    ))
-    .expect("String tuple serialization")
+    );
+    format!(
+        "{:x}",
+        Sha256::digest(serde_json::to_vec(&content).expect("String tuple serialization"))
+    )
+}
+pub async fn meanings<C: ConnectionTrait>(
+    db: &C,
+    user: i64,
+    card: &cards::Model,
+) -> Result<String, AppError> {
+    let rows = super::super::library::scope(user, None)
+        .filter(cards::Column::WordKey.eq(&card.word_key))
+        .filter(cards::Column::Locale.eq(&card.locale))
+        .filter(cards::Column::PartOfSpeech.eq(&card.part_of_speech))
+        .filter(cards::Column::Meaning.ne(""))
+        .order_by_asc(cards::Column::Id)
+        .select_only()
+        .column(cards::Column::Meaning)
+        .into_tuple::<String>()
+        .all(db)
+        .await?;
+    let mut meanings = std::collections::BTreeMap::new();
+    for meaning in rows {
+        meanings
+            .entry(super::super::sync::normalize(&meaning))
+            .or_insert(meaning);
+    }
+    Ok(meanings.into_values().collect::<Vec<_>>().join("; "))
 }
 pub async fn authorize<C: ConnectionTrait>(
     db: &C,
@@ -66,7 +101,7 @@ pub async fn memory<C: ConnectionTrait>(
     direction: &str,
 ) -> Result<Option<memory::Model>, AppError> {
     Ok(
-        memory::Entity::find_by_id((user, card.id, direction.to_owned()))
+        memory::Entity::find_by_id((user, key(card), direction.to_owned()))
             .one(db)
             .await?
             .filter(|m| m.study_key == key(card)),
@@ -85,8 +120,7 @@ fn base(user: i64, f: &Filters, direction: &str) -> sea_orm::Select<cards::Entit
     QuerySelect::query(&mut query).join(JoinType::LeftJoin, Alias::new("flashcard_memory"), Condition::all()
         .add(Expr::col((Alias::new("flashcard_memory"), memory::Column::UserId)).eq(user))
         .add(Expr::col((Alias::new("flashcard_memory"), memory::Column::Direction)).eq(direction))
-        .add(Expr::col((Alias::new("flashcard_memory"), memory::Column::CardId)).equals((cards::Entity,cards::Column::Id)))
-        .add(Expr::cust("flashcard_memory.identity = jsonb_build_array(vocabulary_cards.word, vocabulary_cards.meaning, vocabulary_cards.locale, vocabulary_cards.part_of_speech)")));
+        .add(Expr::cust("flashcard_memory.identity = jsonb_build_array(vocabulary_cards.word_key, vocabulary_cards.locale, vocabulary_cards.part_of_speech)")));
     query
 }
 fn new_condition() -> sea_orm::sea_query::SimpleExpr {
@@ -133,8 +167,6 @@ pub async fn counts<C: ConnectionTrait>(
     )
     .select_only()
     .columns([
-        cards::Column::Id,
-        cards::Column::Word,
         cards::Column::WordKey,
         cards::Column::Meaning,
         cards::Column::Locale,
@@ -155,15 +187,15 @@ pub async fn counts<C: ConnectionTrait>(
         .join(",");
     let sql = format!(
         r#"SELECT d.direction,
-        COUNT(*) FILTER (WHERE c.meaning <> '' AND m.card_id IS NULL) AS new_count,
-        COUNT(*) FILTER (WHERE c.meaning <> '' AND m.due_at <= ${now_param}) AS due_count,
-        COUNT(*) FILTER (WHERE c.meaning <> '' AND m.step > 0) AS learning_count,
-        MIN(m.due_at) FILTER (WHERE c.meaning <> '' AND m.due_at > ${now_param}) AS next_due,
-        COUNT(*) FILTER (WHERE c.meaning <> '') AS reviewable,
+        COUNT(*) FILTER (WHERE c.reviewable AND m.card_id IS NULL) AS new_count,
+        COUNT(*) FILTER (WHERE c.reviewable AND m.due_at <= ${now_param}) AS due_count,
+        COUNT(*) FILTER (WHERE c.reviewable AND m.step > 0) AS learning_count,
+        MIN(m.due_at) FILTER (WHERE c.reviewable AND m.due_at > ${now_param}) AS next_due,
+        COUNT(*) FILTER (WHERE c.reviewable) AS reviewable,
         COUNT(DISTINCT c.word_key) AS word_count
-        FROM ({source_sql}) c CROSS JOIN (VALUES {directions}) d(direction)
-        LEFT JOIN flashcard_memory m ON m.user_id = ${user_param} AND m.card_id = c.id AND m.direction = d.direction
-          AND m.identity = jsonb_build_array(c.word, c.meaning, c.locale, c.part_of_speech)
+        FROM (SELECT word_key, locale, part_of_speech, BOOL_OR(meaning <> '') AS reviewable FROM ({source_sql}) source GROUP BY word_key, locale, part_of_speech) c CROSS JOIN (VALUES {directions}) d(direction)
+        LEFT JOIN flashcard_memory m ON m.user_id = ${user_param} AND m.direction = d.direction
+          AND m.identity = jsonb_build_array(c.word_key, c.locale, c.part_of_speech)
         GROUP BY d.direction"#,
         source_sql = source.sql
     );

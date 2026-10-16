@@ -37,6 +37,23 @@ impl LearningApp {
         Self::spawn_config(false, false, Some((ipa, translation))).await
     }
     async fn spawn_config(enabled: bool, network: bool, service_url: Option<(&str, &str)>) -> Self {
+        Self::spawn_migrations(enabled, network, service_url, None).await
+    }
+    pub async fn spawn_before_flashcard_grouping() -> Self {
+        Self::spawn_migrations(
+            false,
+            false,
+            None,
+            Some(Migrator::migrations().len() as u32 - 2),
+        )
+        .await
+    }
+    async fn spawn_migrations(
+        enabled: bool,
+        network: bool,
+        service_url: Option<(&str, &str)>,
+        steps: Option<u32>,
+    ) -> Self {
         dotenvy::dotenv().ok();
         let explicit = std::env::var("TEST_DATABASE_URL").ok();
         let url = explicit.clone().unwrap_or_else(|| {
@@ -61,7 +78,7 @@ impl LearningApp {
             .set_schema_search_path(&schema)
             .sqlx_logging(std::env::var_os("PATHNOTE_SQL_PROFILE").is_some());
         let db = Arc::new(Database::connect(options).await.unwrap());
-        Migrator::up(db.as_ref(), None).await.unwrap();
+        Migrator::up(db.as_ref(), steps).await.unwrap();
         let store = PostgresStore::new(db.get_postgres_connection_pool().clone())
             .with_schema_name(&schema)
             .unwrap()

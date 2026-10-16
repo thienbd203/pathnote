@@ -69,7 +69,14 @@ async fn seed_history(app: &LearningApp) -> Vec<cards::Model> {
         .unwrap();
     let first = Utc::now().fixed_offset() - Duration::days(30);
     for (i, c) in rows.iter().enumerate() {
-        let identity = json!([c.word, c.meaning, c.locale, c.part_of_speech]);
+        let identity = json!([c.word_key, c.locale, c.part_of_speech]);
+        let content_key = format!(
+            "{:x}",
+            Sha256::digest(
+                serde_json::to_vec(&json!([c.word, c.meaning, c.locale, c.part_of_speech]))
+                    .unwrap()
+            )
+        );
         let key = format!(
             "{:x}",
             Sha256::digest(serde_json::to_vec(&identity).unwrap())
@@ -94,6 +101,8 @@ async fn seed_history(app: &LearningApp) -> Vec<cards::Model> {
                 id: Set(uuid::Uuid::new_v4()),
                 user_id: Set(app.owner_id),
                 card_id: Set(c.id),
+                memory_card_id: Set(c.id),
+                content_key: Set(content_key.clone()),
                 direction: Set("vi_en".into()),
                 study_key: Set(key.clone()),
                 version: Set(n as i32),
@@ -207,7 +216,10 @@ async fn automatic_optimizer_fits_real_library_keeps_due_dates_and_snapshots_and
         ],
     };
     let state = fsrs.memory_state(item, None).unwrap();
-    let row = memory::Entity::find_by_id((app.owner_id, cards[1].id, "vi_en".to_string()))
+    let row = memory::Entity::find()
+        .filter(memory::Column::UserId.eq(app.owner_id))
+        .filter(memory::Column::CardId.eq(cards[1].id))
+        .filter(memory::Column::Direction.eq("vi_en"))
         .one(app.db.as_ref())
         .await
         .unwrap()
@@ -219,7 +231,10 @@ async fn automatic_optimizer_fits_real_library_keeps_due_dates_and_snapshots_and
         expected.memory.stability
     );
     grade(&app, id, 3).await;
-    let row = memory::Entity::find_by_id((app.owner_id, cards[1].id, "vi_en".to_string()))
+    let row = memory::Entity::find()
+        .filter(memory::Column::UserId.eq(app.owner_id))
+        .filter(memory::Column::CardId.eq(cards[1].id))
+        .filter(memory::Column::Direction.eq("vi_en"))
         .one(app.db.as_ref())
         .await
         .unwrap()

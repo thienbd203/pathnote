@@ -10,6 +10,283 @@ use server::entities::flashcard_memory as memory;
 fn auth(token: &str) -> String {
     format!("Bearer {token}")
 }
+fn typed_entry(word: &str, meaning: &str, pos: &str) -> Value {
+    let mut value = entry(word, meaning, &[]);
+    value["content"][0]["attrs"]["partOfSpeech"] = json!(pos);
+    value
+}
+
+#[tokio::test]
+async fn grouping_migration_preserves_latest_schedule_and_reconstructs_its_original_chain() {
+    use migration::{Migrator, MigratorTrait};
+    use sea_orm::{ConnectionTrait, DbBackend, QueryOrder, Statement};
+    use server::entities::vocabulary_cards as vocabulary;
+    use sha2::{Digest, Sha256};
+    let app = LearningApp::spawn_before_flashcard_grouping().await;
+    let a = lesson(&app, &app.owner_token).await;
+    let b = lesson(&app, &app.owner_token).await;
+    save(
+        &app,
+        a,
+        &doc(vec![typed_entry("look\u{a0}up", "tra cứu", "verb")]),
+        0,
+    )
+    .await;
+    save(
+        &app,
+        b,
+        &doc(vec![typed_entry("Look   up", "tìm kiếm", "verb")]),
+        0,
+    )
+    .await;
+    let cards = vocabulary::Entity::find()
+        .order_by_asc(vocabulary::Column::Id)
+        .all(app.db.as_ref())
+        .await
+        .unwrap();
+    let now = Utc::now().fixed_offset();
+    let due = now + Duration::days(5);
+    for (index, card) in cards.iter().enumerate() {
+        let identity = json!([card.word, card.meaning, card.locale, card.part_of_speech]);
+        let key = format!(
+            "{:x}",
+            Sha256::digest(serde_json::to_vec(&identity).unwrap())
+        );
+        memory::ActiveModel {
+            user_id: Set(app.owner_id),
+            card_id: Set(card.id),
+            direction: Set("vi_en".into()),
+            identity: Set(identity),
+            study_key: Set(key.clone()),
+            parameter_version: Set(0),
+            stability: Set(2.0),
+            difficulty: Set(5.0),
+            step: Set(0),
+            reviews: Set(2),
+            lapses: Set(0),
+            due_at: Set(due + Duration::days(index as i64)),
+            reviewed_at: Set(now - Duration::days(2 - index as i64)),
+        }
+        .insert(app.db.as_ref())
+        .await
+        .unwrap();
+        for version in 0..2 {
+            let at = now - Duration::days(6 - index as i64 - version as i64 * 4);
+            app.db.execute(Statement::from_sql_and_values(DbBackend::Postgres,
+                "INSERT INTO flashcard_attempts (id,user_id,card_id,direction,study_key,version,retention,revealed,rating,due_at,reviewed_at,created_at,parameter_version,delta_days) VALUES ($1,$2,$3,'vi_en',$4,$5,0.9,true,3,$6,$7,$7,0,$8)",
+                [uuid::Uuid::new_v4().into(), app.owner_id.into(), card.id.into(), key.clone().into(), version.into(), due.into(), at.into(), (version * 4).into()]
+            )).await.unwrap();
+        }
+    }
+    // An old source may have changed after the last review, while its memory
+    // must still apply to the unchanged duplicate in the first lesson.
+    save(
+        &app,
+        b,
+        &doc(vec![typed_entry("recall", "gợi nhớ", "verb")]),
+        1,
+    )
+    .await;
+    let old = memory::Entity::find()
+        .filter(memory::Column::CardId.eq(cards[1].id))
+        .one(app.db.as_ref())
+        .await
+        .unwrap()
+        .unwrap();
+    Migrator::up(app.db.as_ref(), None).await.unwrap();
+    let rows = memory::Entity::find().all(app.db.as_ref()).await.unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].due_at, old.due_at);
+    assert_eq!(rows[0].reviews, old.reviews);
+    assert_eq!(rows[0].stability, old.stability);
+    let result = next(&app, &app.owner_token, json!({"session_id":a})).await;
+    assert!(result["card"].is_null());
+    assert_eq!(result["overview"]["new"], 0);
+    let mut row: memory::ActiveModel = rows[0].clone().into();
+    row.parameter_version = Set(-1); // Force reconstruction using the retained history chain.
+    row.due_at = Set(now - Duration::minutes(1));
+    row.update(app.db.as_ref()).await.unwrap();
+    let result = next(&app, &app.owner_token, json!({"session_id":a})).await;
+    assert_eq!(result["card"]["new"], false);
+    let ticket = result["card"]["id"].as_str().unwrap();
+    reveal(&app, &app.owner_token, ticket).await;
+    grade(&app, ticket, 4).await;
+    let updated = memory::Entity::find()
+        .one(app.db.as_ref())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(updated.reviews, 3);
+    assert_eq!(updated.card_id, old.card_id);
+    app.cleanup().await;
+}
+
+#[tokio::test]
+async fn repeated_words_share_memory_and_combine_meanings_across_lessons() {
+    let app = LearningApp::spawn().await;
+    let first = lesson(&app, &app.owner_token).await;
+    let second = lesson(&app, &app.owner_token).await;
+    let private = lesson(&app, &app.other_token).await;
+    app.api.put(&format!("/api/v1/sessions/{private}/note"))
+        .add_header("authorization", auth(&app.other_token))
+        .json(&json!({"content":doc(vec![typed_entry("remember", "nghĩa riêng tư", "verb")]),"schema_version":3,"base_revision":0}))
+        .await.assert_status_ok();
+    save(
+        &app,
+        first,
+        &doc(vec![typed_entry("remember", "nhớ", "verb")]),
+        0,
+    )
+    .await;
+    save(
+        &app,
+        second,
+        &doc(vec![typed_entry("Remember", "ghi nhớ", "verb")]),
+        0,
+    )
+    .await;
+    let a = next(&app, &app.owner_token, json!({"session_id":first})).await;
+    assert_eq!(a["overview"]["new"], 1);
+    assert_eq!(a["card"]["front"], "ghi nhớ; nhớ");
+    let ticket = a["card"]["id"].as_str().unwrap();
+    assert_eq!(
+        reveal(&app, &app.owner_token, ticket).await["back"]["meaning"],
+        "ghi nhớ; nhớ"
+    );
+    let result = grade(&app, ticket, 4).await;
+    let history = app
+        .api
+        .get("/api/v1/flashcards/history")
+        .add_header("authorization", auth(&app.owner_token))
+        .await;
+    history.assert_status_ok();
+    assert_eq!(
+        history.json::<Value>()["data"][0]["card"]["meaning"],
+        "ghi nhớ; nhớ"
+    );
+    let private = next(&app, &app.other_token, json!({})).await;
+    assert_eq!(private["overview"]["new"], 1);
+    assert_eq!(private["card"]["front"], "nghĩa riêng tư");
+    let next_other_lesson = next(&app, &app.owner_token, json!({"session_id":second})).await;
+    assert!(next_other_lesson["card"].is_null());
+    assert_eq!(next_other_lesson["overview"]["new"], 0);
+    let all = next(&app, &app.owner_token, json!({})).await;
+    assert_eq!(all["overview"]["reviewable"], 1);
+    assert_eq!(all["overview"]["word_count"], 1);
+    assert_eq!(all["overview"]["next_due_at"], result["due_at"]);
+    // Importing another wording does not reset the common schedule.
+    let third = lesson(&app, &app.owner_token).await;
+    save(
+        &app,
+        third,
+        &doc(vec![typed_entry("remember", "nhớ lại", "verb")]),
+        0,
+    )
+    .await;
+    assert!(next(&app, &app.owner_token, json!({"session_id":third})).await["card"].is_null());
+    // A removed source must not delete memory still used by another lesson.
+    app.api
+        .delete(&format!("/api/v1/sessions/{first}"))
+        .add_header("authorization", auth(&app.owner_token))
+        .await
+        .assert_status(StatusCode::NO_CONTENT);
+    let row = memory::Entity::find()
+        .one(app.db.as_ref())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(json!(row.due_at), result["due_at"]);
+    let mut row: memory::ActiveModel = row.into();
+    row.due_at = Set(Utc::now().fixed_offset() - Duration::minutes(1));
+    row.update(app.db.as_ref()).await.unwrap();
+    let due = next(&app, &app.owner_token, json!({"session_id":second})).await;
+    assert_eq!(due["card"]["new"], false);
+    let ticket = due["card"]["id"].as_str().unwrap();
+    reveal(&app, &app.owner_token, ticket).await;
+    grade(&app, ticket, 4).await;
+    let rows = memory::Entity::find().all(app.db.as_ref()).await.unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].reviews, 2);
+    app.cleanup().await;
+}
+
+#[tokio::test]
+async fn same_spelling_with_different_parts_of_speech_or_languages_stays_separate() {
+    let app = LearningApp::spawn().await;
+    let first = lesson(&app, &app.owner_token).await;
+    let second = lesson(&app, &app.owner_token).await;
+    save(
+        &app,
+        first,
+        &doc(vec![
+            typed_entry("light", "ánh sáng", "noun"),
+            typed_entry("light", "nhẹ", "adjective"),
+        ]),
+        0,
+    )
+    .await;
+    save(
+        &app,
+        second,
+        &doc(vec![typed_entry("Light", "nguồn sáng", "noun")]),
+        0,
+    )
+    .await;
+    let all = next(&app, &app.owner_token, json!({})).await;
+    assert_eq!(all["overview"]["new"], 2);
+    assert_eq!(all["overview"]["reviewable"], 2);
+    assert_eq!(all["overview"]["word_count"], 1);
+    let mut other_language = doc(vec![typed_entry("light", "ánh sáng", "noun")]);
+    other_language["content"][0]["content"][0]["attrs"]["locale"] = json!("en-GB");
+    let third = lesson(&app, &app.owner_token).await;
+    save(&app, third, &other_language, 0).await;
+    assert_eq!(
+        next(&app, &app.owner_token, json!({})).await["overview"]["new"],
+        3
+    );
+    app.cleanup().await;
+}
+
+#[tokio::test]
+async fn duplicate_tickets_from_different_lessons_cannot_double_grade_the_common_memory() {
+    let app = LearningApp::spawn().await;
+    let a = lesson(&app, &app.owner_token).await;
+    let b = lesson(&app, &app.owner_token).await;
+    for id in [a, b] {
+        save(
+            &app,
+            id,
+            &doc(vec![typed_entry("remember", "nhớ", "verb")]),
+            0,
+        )
+        .await;
+    }
+    let a = next(&app, &app.owner_token, json!({"session_id":a})).await;
+    let b = next(&app, &app.owner_token, json!({"session_id":b})).await;
+    let a = a["card"]["id"].as_str().unwrap();
+    let b = b["card"]["id"].as_str().unwrap();
+    reveal(&app, &app.owner_token, a).await;
+    reveal(&app, &app.owner_token, b).await;
+    let submit = |id: &str| {
+        app.api
+            .post(&format!("/api/v1/flashcards/{id}/grade"))
+            .add_header("authorization", auth(&app.owner_token))
+            .json(&json!({"rating":4}))
+    };
+    let (first, second) = tokio::join!(submit(a), submit(b));
+    assert!([first.status_code(), second.status_code()].contains(&StatusCode::OK));
+    assert!([first.status_code(), second.status_code()].contains(&StatusCode::CONFLICT));
+    assert_eq!(
+        memory::Entity::find()
+            .one(app.db.as_ref())
+            .await
+            .unwrap()
+            .unwrap()
+            .reviews,
+        1
+    );
+    app.cleanup().await;
+}
 async fn next(app: &LearningApp, token: &str, filters: Value) -> Value {
     let r = app
         .api
@@ -215,8 +492,10 @@ async fn edits_and_revoked_access_cannot_reveal_or_grade_old_cards() {
         .await
         .assert_status(StatusCode::CONFLICT);
     let new = next(&app, &app.owner_token, json!({})).await;
-    assert_eq!(new["card"]["new"], true);
-    assert_eq!(new["card"]["front"], "người giảng dạy");
+    // Rewording a meaning keeps the shared word schedule, while the old
+    // content ticket above is still rejected.
+    assert!(new["card"].is_null());
+    assert_eq!(new["overview"]["new"], 0);
     let r = app
         .api
         .post(&format!("/api/v1/sessions/{id}/collaborators"))
