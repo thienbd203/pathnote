@@ -59,7 +59,7 @@ impl LearningApp {
         options
             .max_connections(3)
             .set_schema_search_path(&schema)
-            .sqlx_logging(false);
+            .sqlx_logging(std::env::var_os("PATHNOTE_SQL_PROFILE").is_some());
         let db = Arc::new(Database::connect(options).await.unwrap());
         Migrator::up(db.as_ref(), None).await.unwrap();
         let store = PostgresStore::new(db.get_postgres_connection_pool().clone())

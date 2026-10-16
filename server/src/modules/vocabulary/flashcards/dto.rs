@@ -121,6 +121,8 @@ pub struct Configuration {
 }
 #[derive(Serialize)]
 pub struct Overview {
+    pub word_count: u64,
+    pub reviewable: u64,
     pub estimated_seconds: Option<u64>,
     pub settings: Configuration,
     pub new: u64,

@@ -48,7 +48,6 @@ pub async fn next(
     mut f: dto::Filters,
 ) -> Result<dto::Next, AppError> {
     f.validate()?;
-    queue::authorize(db, user, &f).await?;
     let run_id = f.run_id;
     let saved_run = if let Some(id) = run_id {
         Some(runs::load(db, user, id).await?)
@@ -58,14 +57,8 @@ pub async fn next(
     if let Some(run) = &saved_run {
         f = serde_json::from_value(run.filters.clone())
             .map_err(|_| AppError::Internal("Invalid saved flashcard filters".into()))?;
-        queue::authorize(db, user, &f).await?;
-        if run.finished_at.is_some() {
-            return Ok(dto::Next {
-                card: None,
-                overview: queue::overview(db, user, &f).await?,
-            });
-        }
     }
+    queue::authorize(db, user, &f).await?;
     let (direction, retention) = if let Some(run) = &saved_run {
         (
             serde_json::from_value::<dto::Direction>(run.settings["direction"].clone())
@@ -75,17 +68,25 @@ pub async fn next(
     } else {
         queue::configuration(db, user, &f).await?
     };
+    if saved_run
+        .as_ref()
+        .is_some_and(|run| run.finished_at.is_some())
+    {
+        return Ok(dto::Next {
+            card: None,
+            overview: queue::counts(db, user, &f, (direction, retention)).await?,
+        });
+    }
     let configured_direction = direction;
-    let Some((card, direction)) = queue::next(db, user, &f, direction).await? else {
+    let Some((card, direction, memory)) = queue::next(db, user, &f, direction).await? else {
         if let Some(id) = run_id {
             runs::finish(db, user, id, true).await?;
         }
         return Ok(dto::Next {
             card: None,
-            overview: queue::overview_with_settings(db, user, &f, (direction, retention)).await?,
+            overview: queue::counts(db, user, &f, (direction, retention)).await?,
         });
     };
-    let memory = queue::memory(db, user, &card, direction).await?;
     let profile = personal::load(db, user).await?;
     let id = Uuid::new_v4();
     attempts::ActiveModel {
@@ -137,7 +138,6 @@ pub async fn next(
                 locale: card.locale,
             }),
         }),
-        overview: queue::overview_with_settings(db, user, &f, (configured_direction, retention))
-            .await?,
+        overview: queue::counts(db, user, &f, (configured_direction, retention)).await?,
     })
 }

@@ -430,3 +430,40 @@ async fn new_only_excludes_due_cards_and_closed_runs_reject_ungraded_tickets() {
         .assert_status(StatusCode::CONFLICT);
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn next_query_profile() {
+    if std::env::var_os("PATHNOTE_SQL_PROFILE").is_some() {
+        let _ = tracing_subscriber::fmt()
+            .with_ansi(false)
+            .with_env_filter("sqlx::query=info")
+            .try_init();
+    }
+    let app = LearningApp::spawn().await;
+    let (id, _) = seed(&app).await;
+    let f = json!({"session_id": id});
+    eprintln!("PROFILE_SINGLE_BEGIN");
+    let first = next(&app, &app.owner_token, f.clone()).await;
+    eprintln!("PROFILE_SINGLE_END");
+    assert!(!first["card"].is_null());
+    settings(&app, f.clone(), "both", 0.9).await;
+    eprintln!("PROFILE_BOTH_BEGIN");
+    next(&app, &app.owner_token, f.clone()).await;
+    eprintln!("PROFILE_BOTH_END");
+    let run = app
+        .api
+        .post("/api/v1/flashcards/runs")
+        .add_header("authorization", auth(&app.owner_token))
+        .json(&f)
+        .await;
+    run.assert_status(StatusCode::CREATED);
+    eprintln!("PROFILE_RUN_BEGIN");
+    next(
+        &app,
+        &app.owner_token,
+        json!({"run_id": run.json::<Value>()["data"]["id"]}),
+    )
+    .await;
+    eprintln!("PROFILE_RUN_END");
+    app.cleanup().await;
+}
