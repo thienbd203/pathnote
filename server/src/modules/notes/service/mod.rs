@@ -74,7 +74,10 @@ pub(in crate::modules::notes) async fn note<C: ConnectionTrait>(
     db: &C,
     id: i64,
 ) -> Result<NoteResource, AppError> {
-    Ok(match notes::Entity::find_by_id(id).one(db).await? {
+    Ok(resource(id, notes::Entity::find_by_id(id).one(db).await?))
+}
+fn resource(id: i64, model: Option<notes::Model>) -> NoteResource {
+    match model {
         Some(n) => NoteResource {
             session_id: id,
             content: n.content,
@@ -89,19 +92,19 @@ pub(in crate::modules::notes) async fn note<C: ConnectionTrait>(
             revision: 0,
             saved_at: None,
         },
-    })
+    }
 }
 pub async fn get(db: &DatabaseConnection, user: i64, id: i64) -> Result<NoteResource, AppError> {
     access(db, user, id, false).await?;
     note(db, id).await
 }
-pub async fn save(
+async fn save(
     db: &DatabaseConnection,
     user: i64,
     id: i64,
     input: SaveNote,
+    place: places::Model,
 ) -> Result<SaveOutcome, AppError> {
-    let (_, place) = access(db, user, id, false).await?;
     let references =
         crate::modules::notes::document::validate(&input.content, input.schema_version)?;
     let vocabulary = crate::modules::vocabulary::sync::prepare(&input.content)?;
@@ -114,7 +117,9 @@ pub async fn save(
     let txn = place_service::write_tx(db, place.user_id, place.id).await?;
     access(&txn, user, id, false).await?;
     validate_references(&txn, id, &references).await?;
-    let current = note(&txn, id).await?;
+    let loaded = notes::Entity::find_by_id(id).one(&txn).await?;
+    let has_realtime = loaded.as_ref().is_some_and(|n| n.yjs_state.is_some());
+    let current = resource(id, loaded);
     if input.schema_version < current.schema_version {
         return Err(AppError::validation(
             "schema_version",
@@ -124,11 +129,7 @@ pub async fn save(
     if current.revision != input.base_revision {
         return Ok(SaveOutcome::Conflict(current));
     }
-    if notes::Entity::find_by_id(id)
-        .one(&txn)
-        .await?
-        .is_some_and(|n| n.yjs_state.is_some())
-    {
+    if has_realtime {
         return Err(AppError::BadRequest(
             "Ghi chép này dùng realtime. Hãy tải lại trang để tiếp tục.".into(),
         ));
@@ -141,11 +142,11 @@ pub async fn save(
         revision: Set(current.revision + 1),
         saved_at: Set(chrono::Utc::now().fixed_offset()),
     };
-    if current.revision == 0 && current.saved_at.is_none() {
-        next.insert(&txn).await?;
+    let saved = if current.revision == 0 && current.saved_at.is_none() {
+        next.insert(&txn).await?
     } else {
-        next.update(&txn).await?;
-    }
+        next.update(&txn).await?
+    };
     sessions::Entity::update_many()
         .col_expr(
             sessions::Column::UpdatedAt,
@@ -154,7 +155,7 @@ pub async fn save(
         .filter(sessions::Column::Id.eq(id))
         .exec(&txn)
         .await?;
-    let result = note(&txn, id).await?;
+    let result = resource(id, Some(saved));
     crate::modules::ai_study::service::attach(&txn, id, &references).await?;
     crate::modules::vocabulary::sync::sync(&txn, id, vocabulary).await?;
     txn.commit().await?;
@@ -334,13 +335,13 @@ pub async fn save_rest(
     input: Result<SaveNote, AppError>,
     realtime: bool,
 ) -> Result<NoteResource, AppError> {
-    access(db, user, id, false).await?;
+    let (_, place) = access(db, user, id, false).await?;
     if realtime {
         return Err(AppError::BadRequest(
             "Ghi chép đang dùng realtime. Hãy tải lại trang.".into(),
         ));
     }
-    match save(db, user, id, input?).await? {
+    match save(db, user, id, input?, place).await? {
         SaveOutcome::Saved(note) => Ok(note),
         SaveOutcome::Conflict(note) => Err(AppError::ConflictWith {
             message: "Ghi chép đã thay đổi ở một tab khác. Bản đang viết của bạn vẫn được giữ."
