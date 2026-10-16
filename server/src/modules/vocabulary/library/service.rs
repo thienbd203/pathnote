@@ -9,7 +9,7 @@ use sea_orm::{
     ColumnTrait, Condition, ConnectionTrait, EntityTrait, FromQueryResult, QueryFilter,
     QuerySelect, QueryTrait,
 };
-use serde_json::json;
+
 pub(in crate::modules::vocabulary) fn scope(
     user: i64,
     session: Option<i64>,
@@ -151,10 +151,9 @@ pub(in crate::modules::vocabulary) fn filtered(
     text: Option<String>,
 ) -> sea_orm::Select<cards::Entity> {
     if let Some(topic) = topic.filter(|t| !t.trim().is_empty()) {
-        query = query.filter(
-            Expr::col((cards::Entity, cards::Column::Topics))
-                .contains(Expr::value(json!([topic.trim()]))),
-        );
+        query = query.filter(Expr::col((cards::Entity, cards::Column::Topics)).contains(
+            Expr::value(serde_json::Value::Array(vec![topic.trim().into()])),
+        ));
     }
     if let Some(text) = text.filter(|t| !t.trim().is_empty()) {
         let pattern = crate::pagination::like_contains(text.trim());

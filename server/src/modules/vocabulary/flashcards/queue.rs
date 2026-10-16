@@ -10,7 +10,7 @@ use sea_orm::{
     sea_query::{Alias, Expr, JoinType},
     ColumnTrait, Condition, ConnectionTrait, EntityTrait, QueryFilter, QuerySelect, QueryTrait,
 };
-use serde_json::{json, Value};
+use serde_json::Value;
 pub fn key(card: &cards::Model) -> String {
     use sha2::{Digest, Sha256};
     format!(
@@ -19,7 +19,13 @@ pub fn key(card: &cards::Model) -> String {
     )
 }
 pub fn identity(card: &cards::Model) -> Value {
-    json!([card.word, card.meaning, card.locale, card.part_of_speech])
+    serde_json::to_value((
+        &card.word,
+        &card.meaning,
+        &card.locale,
+        &card.part_of_speech,
+    ))
+    .expect("String tuple serialization")
 }
 pub async fn authorize<C: ConnectionTrait>(
     db: &C,

@@ -1,3 +1,4 @@
+use super::dto::Optimization;
 use super::{history, personal};
 use crate::{
     entities::{flashcard_attempts as attempts, flashcard_models as models, users},
@@ -9,9 +10,8 @@ use sea_orm::{
     ColumnTrait, Condition, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect, Set,
     TransactionTrait,
 };
-use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
-fn metadata(profile: &personal::Profile, data: &history::Dataset) -> Value {
+fn metadata(profile: &personal::Profile, data: &history::Dataset) -> Optimization {
     let samples = data.sample_count();
     let state = if samples < history::MIN_SAMPLES {
         "collecting"
@@ -26,9 +26,20 @@ fn metadata(profile: &personal::Profile, data: &history::Dataset) -> Value {
     } else {
         "pending"
     };
-    json!({"automatic":true,"state":state,"personalized":profile.version()>0,"version":profile.version(),"reviews":data.review_count(),"samples":samples,"minimum_samples":history::MIN_SAMPLES,"eligible":samples>=history::MIN_SAMPLES,"trained_reviews":profile.model.as_ref().map_or(0,|m|m.trained_reviews),"optimized_at":profile.model.as_ref().and_then(|m|m.optimized_at)})
+    Optimization {
+        automatic: true,
+        state,
+        personalized: profile.version() > 0,
+        version: profile.version(),
+        reviews: data.review_count(),
+        samples,
+        minimum_samples: history::MIN_SAMPLES,
+        eligible: samples >= history::MIN_SAMPLES,
+        trained_reviews: profile.model.as_ref().map_or(0, |m| m.trained_reviews),
+        optimized_at: profile.model.as_ref().and_then(|m| m.optimized_at),
+    }
 }
-pub async fn status(db: &DatabaseConnection, user: i64) -> Result<Value, AppError> {
+pub async fn status(db: &DatabaseConnection, user: i64) -> Result<Optimization, AppError> {
     let profile = personal::load(db, user).await?;
     let data = history::load(db, user).await?;
     Ok(metadata(&profile, &data))
@@ -117,7 +128,8 @@ async fn optimize(db: &DatabaseConnection, user: i64) -> Result<bool, AppError> 
         .await?;
     models::Entity::insert(models::ActiveModel {
         user_id: Set(user),
-        parameters: Set(json!(profile.parameters)),
+        parameters: Set(serde_json::to_value(&profile.parameters)
+            .map_err(|e| AppError::Internal(e.to_string()))?),
         version: Set(profile.version()),
         trained_reviews: Set(profile.model.as_ref().map_or(0, |m| m.trained_reviews)),
         training_samples: Set(profile.model.as_ref().map_or(0, |m| m.training_samples)),
@@ -148,11 +160,12 @@ async fn optimize(db: &DatabaseConnection, user: i64) -> Result<bool, AppError> 
     let finished = chrono::Utc::now().fixed_offset();
     models::Entity::insert(models::ActiveModel {
         user_id: Set(user),
-        parameters: Set(json!(if changed {
+        parameters: Set(serde_json::to_value(if changed {
             &fitted.parameters
         } else {
             &profile.parameters
-        })),
+        })
+        .map_err(|e| AppError::Internal(e.to_string()))?),
         version: Set(profile.version() + i32::from(changed)),
         trained_reviews: Set(data.review_count() as i32),
         training_samples: Set(samples as i32),

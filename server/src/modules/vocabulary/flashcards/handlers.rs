@@ -8,7 +8,6 @@ use crate::{
     AppError,
 };
 use axum::{extract::State, Json};
-use serde_json::Value;
 use uuid::Uuid;
 pub async fn overview(
     State(s): State<AppState>,
@@ -101,6 +100,6 @@ pub async fn history(
 pub async fn optimization(
     State(s): State<AppState>,
     user: CurrentUser,
-) -> Result<ApiResponse<Value>, AppError> {
+) -> Result<ApiResponse<dto::Optimization>, AppError> {
     Ok(ApiResponse::ok(optimizer::status(&s.db, user.id).await?))
 }

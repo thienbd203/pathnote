@@ -3,7 +3,7 @@ use crate::{
     AppError,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Entry {
@@ -45,10 +45,8 @@ impl Entry {
         if self.word.is_empty() {
             return Err(invalid());
         }
-        let mut senses = Vec::new();
         for sense in &mut self.senses {
             sense.meaning = sense.meaning.trim().into();
-            let mut examples = Vec::new();
             for e in &mut sense.examples {
                 e.text = e.text.trim().into();
                 e.ipa = e.ipa.trim().into();
@@ -65,13 +63,10 @@ impl Entry {
                 {
                     return Err(invalid());
                 }
-                examples.push(json!({"type":"vocabularyExample","attrs":{"id":uuid::Uuid::new_v4(),"text":e.text,"ipa":e.ipa,"meaning":e.meaning,"highlights":e.highlights,"meaningHighlights":e.meaning_highlights}}));
             }
-            senses.push(json!({"type":"vocabularySense","attrs":{"id":uuid::Uuid::new_v4(),"partOfSpeech":sense.part_of_speech,"meaning":sense.meaning},"content":examples}));
         }
-        let entry = json!({"type":"vocabularyEntry","attrs":{"id":uuid::Uuid::new_v4(),"word":self.word,"ipa":self.ipa,"topics":self.topics},"content":senses});
         document::validate(
-            &json!({"type":"doc","content":[{"type":"vocabulary","attrs":{"locale":locale},"content":[entry]}]}),
+            &document::builders::vocabulary_import(locale, value(self)?),
             3,
         )?;
         Ok(())
@@ -161,4 +156,11 @@ pub struct ListResource {
 pub struct ImportResource {
     pub added: usize,
     pub skipped: Vec<String>,
+}
+
+#[derive(Serialize)]
+pub struct StoredPair<'a> {
+    pub sounds: &'a [String; 2],
+    pub left: &'a Entry,
+    pub right: &'a Entry,
 }

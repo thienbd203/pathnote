@@ -215,3 +215,17 @@ pub struct HistoryEntry {
     pub card: Option<Value>,
     pub source: Source,
 }
+
+#[derive(Serialize)]
+pub struct Optimization {
+    pub automatic: bool,
+    pub state: &'static str,
+    pub personalized: bool,
+    pub version: i32,
+    pub reviews: usize,
+    pub samples: usize,
+    pub minimum_samples: usize,
+    pub eligible: bool,
+    pub trained_reviews: i32,
+    pub optimized_at: Option<DateTime<FixedOffset>>,
+}

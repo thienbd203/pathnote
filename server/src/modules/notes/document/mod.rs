@@ -1,4 +1,5 @@
-//! Serde defines the wire types; traversal handles document-wide invariants.
+pub(in crate::modules) mod builders;
+// Serde defines the wire types; traversal handles document-wide invariants.
 mod attributes;
 mod marks;
 mod node;

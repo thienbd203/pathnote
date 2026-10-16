@@ -154,3 +154,9 @@ pub enum SearchPeriod {
     Past,
     Upcoming,
 }
+
+#[derive(serde::Serialize)]
+pub struct Neighbors {
+    pub(in crate::modules::sessions) previous: Option<SessionResource>,
+    pub(in crate::modules::sessions) next: Option<SessionResource>,
+}

@@ -1,36 +1,17 @@
-//! Atomic soft deletion. All writers acquire place locks first, ordered by ID.
-use super::{
-    courses::service as course_service, places::service as place_service,
-    sessions::service as session_service,
-};
+use super::dto::{Input, Kind};
 use crate::{
-    access_token::CurrentUser,
     entities::{courses, places, sessions},
-    state::AppState,
+    modules::{
+        courses::service as course_service, places::service as place_service,
+        sessions::service as session_service,
+    },
     AppError,
-};
-use axum::{
-    extract::{rejection::JsonRejection, State},
-    http::StatusCode,
-    Json,
 };
 use sea_orm::{
     sea_query::Expr, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter,
     TransactionTrait,
 };
-use serde::Deserialize;
 use std::collections::BTreeSet;
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Input {
-    ids: Vec<i64>,
-}
-#[derive(Clone, Copy)]
-enum Kind {
-    Place,
-    Course,
-    Session,
-}
 async fn parents<C: ConnectionTrait>(
     db: &C,
     user: i64,
@@ -67,7 +48,7 @@ async fn parents<C: ConnectionTrait>(
     }
     Ok(parents)
 }
-async fn remove(
+pub(super) async fn remove(
     db: &DatabaseConnection,
     user: i64,
     kind: Kind,
@@ -127,36 +108,4 @@ async fn remove(
     }
     txn.commit().await?;
     Ok(())
-}
-async fn handler(
-    s: AppState,
-    u: CurrentUser,
-    kind: Kind,
-    body: Result<Json<Input>, JsonRejection>,
-) -> Result<StatusCode, AppError> {
-    let Json(input) =
-        body.map_err(|_| AppError::validation("ids", "Danh sách ID không hợp lệ."))?;
-    remove(&s.db, u.id, kind, input).await?;
-    Ok(StatusCode::NO_CONTENT)
-}
-pub async fn places(
-    State(s): State<AppState>,
-    u: CurrentUser,
-    b: Result<Json<Input>, JsonRejection>,
-) -> Result<StatusCode, AppError> {
-    handler(s, u, Kind::Place, b).await
-}
-pub async fn courses(
-    State(s): State<AppState>,
-    u: CurrentUser,
-    b: Result<Json<Input>, JsonRejection>,
-) -> Result<StatusCode, AppError> {
-    handler(s, u, Kind::Course, b).await
-}
-pub async fn sessions(
-    State(s): State<AppState>,
-    u: CurrentUser,
-    b: Result<Json<Input>, JsonRejection>,
-) -> Result<StatusCode, AppError> {
-    handler(s, u, Kind::Session, b).await
 }

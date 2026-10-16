@@ -7,7 +7,7 @@ use sea_orm::{
     sea_query::OnConflict, ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder,
     QuerySelect, Set, TransactionTrait,
 };
-use serde_json::{json, Value};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashSet};
 struct Prepared {
@@ -151,7 +151,7 @@ pub async fn import_words(
     for e in &mut input.entries {
         e.validate(&input.locale)?;
         entries.push(Prepared {
-            key: hash(&json!(key(&e.word))),
+            key: hash(&value(&key(&e.word))?),
             label: e.word.clone(),
             content: value(e)?,
         });
@@ -192,9 +192,13 @@ pub async fn import_pairs(
             (&pair.right, &pair.left)
         };
         entries.push(Prepared {
-            key: hash(&json!([sounds, names])),
+            key: hash(&value(&(&sounds, &names))?),
             label,
-            content: json!({"sounds":sounds,"left":left,"right":right}),
+            content: value(&StoredPair {
+                sounds: &sounds,
+                left,
+                right,
+            })?,
         });
     }
     persist(db, user, locale(&input.locale), "pair", entries).await

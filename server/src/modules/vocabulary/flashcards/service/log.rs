@@ -11,7 +11,7 @@ use sea_orm::{
     ColumnTrait, Condition, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QueryOrder,
     QuerySelect, QueryTrait, RelationTrait,
 };
-use serde_json::json;
+
 pub async fn history(
     db: &sea_orm::DatabaseConnection,
     user: i64,
@@ -68,7 +68,7 @@ pub async fn history(
     if let Some(topic) = filters.topic {
         query = query.filter(
             Expr::cust("COALESCE(flashcard_attempts.snapshot->'topics',vocabulary_cards.topics)")
-                .contains(Expr::value(json!([topic]))),
+                .contains(Expr::value(serde_json::Value::Array(vec![topic.into()]))),
         );
     }
     if let Some(q) = filters.q {
