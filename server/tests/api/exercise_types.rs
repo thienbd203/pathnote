@@ -93,6 +93,59 @@ async fn all_additional_exercise_types_grade_through_http_and_preserve_trim_case
     app.cleanup().await;
 }
 #[tokio::test]
+async fn translation_accepts_optional_final_period_without_ignoring_content_or_case_rules() {
+    let app = LearningApp::spawn().await;
+    let translation = question(
+        "translation",
+        json!([]),
+        json!(["This is Anna's phone number.", "It is Anna's phone number."]),
+    );
+    for answer in [
+        "This is Anna's phone number",
+        "  IT   IS Anna's phone number.  ",
+    ] {
+        solve(&app, translation.clone(), json!(answer), true).await;
+    }
+    for answer in [
+        "This is Annas phone number",
+        "This is Anna's phone",
+        "This is Anna's phone number?",
+    ] {
+        solve(&app, translation.clone(), json!(answer), false).await;
+    }
+    let mut sensitive = translation;
+    sensitive["caseSensitive"] = json!(true);
+    solve(
+        &app,
+        sensitive.clone(),
+        json!("This is Anna's phone number"),
+        true,
+    )
+    .await;
+    solve(&app, sensitive, json!("this is Anna's phone number"), false).await;
+    solve(
+        &app,
+        question(
+            "translation",
+            json!([]),
+            json!(["This is Anna's phone number"]),
+        ),
+        json!("This is Anna's phone number."),
+        true,
+    )
+    .await;
+    for kind in ["correction", "fill"] {
+        solve(
+            &app,
+            question(kind, json!([]), json!(["This is Anna's phone number."])),
+            json!("This is Anna's phone number"),
+            false,
+        )
+        .await;
+    }
+    app.cleanup().await;
+}
+#[tokio::test]
 async fn rejects_invalid_type_definitions_and_malformed_matching_or_invented_word_answers() {
     let app = LearningApp::spawn().await;
     let s = lesson(&app).await;

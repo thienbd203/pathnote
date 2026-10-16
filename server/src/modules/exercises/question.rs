@@ -298,8 +298,15 @@ impl Question {
         };
         let normalize = |s: &str| {
             let s = s.split_whitespace().collect::<Vec<_>>().join(" ");
+            // A translation may omit its final full stop; correction exercises
+            // still compare punctuation because it can be the mistake to fix.
+            let s = if matches!(self, Self::Translation { .. }) {
+                s.strip_suffix('.').unwrap_or(&s).trim_end()
+            } else {
+                &s
+            };
             if sensitive {
-                s
+                s.to_owned()
             } else {
                 s.to_lowercase()
             }
