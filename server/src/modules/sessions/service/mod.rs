@@ -12,9 +12,10 @@ use crate::{
     AppError,
 };
 use sea_orm::{
-    sea_query::{Expr, Func, LikeExpr},
+    sea_query::{Alias, Expr, Func, LikeExpr, Query, UnionType},
     ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, EntityTrait,
-    JoinType, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, RelationTrait, Select, Set,
+    JoinType, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, QueryTrait, RelationTrait,
+    Select, Set,
 };
 pub use search::search;
 #[derive(Clone, Copy)]
@@ -177,8 +178,10 @@ pub async fn neighbors(db: &DatabaseConnection, user: i64, id: i64) -> Result<Ne
         )
         .order_by_desc(sessions::Column::StartsAt)
         .order_by_desc(sessions::Column::Id)
-        .one(db)
-        .await?;
+        .select_only()
+        .column(sessions::Column::Id)
+        .limit(1)
+        .into_query();
     let next = scope
         .filter(
             Condition::any()
@@ -191,18 +194,40 @@ pub async fn neighbors(db: &DatabaseConnection, user: i64, id: i64) -> Result<Ne
         )
         .order_by_asc(sessions::Column::StartsAt)
         .order_by_asc(sessions::Column::Id)
-        .one(db)
+        .select_only()
+        .column(sessions::Column::Id)
+        .limit(1)
+        .into_query();
+    let previous_ids = Query::select()
+        .column((Alias::new("previous"), Alias::new("id")))
+        .from_subquery(previous, Alias::new("previous"))
+        .to_owned();
+    let next_ids = Query::select()
+        .column((Alias::new("next"), Alias::new("id")))
+        .from_subquery(next, Alias::new("next"))
+        .to_owned();
+    let mut ids = previous_ids;
+    ids.union(UnionType::All, next_ids);
+    let rows = owned(user)
+        .filter(sessions::Column::Id.in_subquery(ids))
+        .select_also(places::Entity)
+        .select_also(courses::Entity)
+        .all(db)
         .await?;
-    Ok(Neighbors {
-        previous: match previous {
-            Some(s) => Some(get(db, user, s.id).await?),
-            None => None,
-        },
-        next: match next {
-            Some(s) => Some(get(db, user, s.id).await?),
-            None => None,
-        },
-    })
+    let mut neighbors = Neighbors {
+        previous: None,
+        next: None,
+    };
+    for (session, place, course) in rows {
+        let before = (session.starts_at, session.id) < (current.starts_at, id);
+        let resource = SessionResource::new(session, place.ok_or_else(missing)?, course);
+        if before {
+            neighbors.previous = Some(resource);
+        } else {
+            neighbors.next = Some(resource);
+        }
+    }
+    Ok(neighbors)
 }
 pub async fn create(
     db: &DatabaseConnection,
