@@ -6,7 +6,7 @@ use crate::{
     AppError,
 };
 use sea_orm::{
-    sea_query::{Expr, Func, Query},
+    sea_query::{Expr, Func, LikeExpr, Query},
     ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, EntityTrait,
     JoinType, ModelTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, RelationTrait,
     Select, Set, TransactionTrait,
@@ -244,8 +244,22 @@ pub async fn shared(
     input: ListQuery,
 ) -> Result<Page<SharedNote>, AppError> {
     let size = input.page_size()?;
-    let pages = active()
-        .filter(sessions::Column::Id.in_subquery(memberships(user)))
+    let mut query = active().filter(sessions::Column::Id.in_subquery(memberships(user)));
+    if let Some(term) = input.q.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
+        let literal = term
+            .to_lowercase()
+            .replace('!', "!!")
+            .replace('%', "!%")
+            .replace('_', "!_");
+        query = query.filter(
+            Expr::expr(Func::lower(Expr::col((
+                sessions::Entity,
+                sessions::Column::Title,
+            ))))
+            .like(LikeExpr::new(format!("%{literal}%")).escape('!')),
+        );
+    }
+    let pages = query
         .order_by_desc(sessions::Column::UpdatedAt)
         .order_by_asc(sessions::Column::Id)
         .paginate(db, size);

@@ -284,3 +284,47 @@ async fn concurrent_note_saves_have_one_winner_and_deleted_parents_hide_shared_n
     assert_eq!(r.json::<Value>()["meta"]["total"], 0);
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn shared_note_search_filters_titles_and_preserves_membership_scope() {
+    let app = LearningApp::spawn().await;
+    let shared = lesson(&app).await;
+    let _private = lesson(&app).await;
+    let owner = token(&app.owner_token);
+    let other = token(&app.other_token);
+    let path = format!("/api/v1/sessions/{shared}/collaborators");
+    app.api
+        .post(&path)
+        .add_header("authorization", &owner)
+        .json(&json!({"email":"other@example.test"}))
+        .await
+        .assert_status(StatusCode::CREATED);
+    for (q, expected) in [("LESS", 1), ("missing", 0), ("%", 0), ("_", 0)] {
+        let response = app
+            .api
+            .get("/api/v1/shared-notes")
+            .add_header("authorization", &other)
+            .add_query_param("q", q)
+            .await;
+        response.assert_status_ok();
+        assert_eq!(response.json::<Value>()["meta"]["total"], expected);
+        if expected == 1 {
+            assert_eq!(response.json::<Value>()["data"][0]["id"], shared);
+        }
+    }
+    let response = app.api.get(&path).add_header("authorization", &owner).await;
+    let member = response.json::<Value>()["data"][0]["id"].as_i64().unwrap();
+    app.api
+        .delete(&format!("{path}/{member}"))
+        .add_header("authorization", &owner)
+        .await
+        .assert_status_no_content();
+    let response = app
+        .api
+        .get("/api/v1/shared-notes?q=Lesson")
+        .add_header("authorization", &other)
+        .await;
+    response.assert_status_ok();
+    assert_eq!(response.json::<Value>()["meta"]["total"], 0);
+    app.cleanup().await;
+}
