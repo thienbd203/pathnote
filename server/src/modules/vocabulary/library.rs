@@ -172,14 +172,7 @@ pub(super) fn filtered(
         );
     }
     if let Some(text) = text.filter(|t| !t.trim().is_empty()) {
-        let pattern = format!(
-            "%{}%",
-            text.trim()
-                .to_lowercase()
-                .replace('!', "!!")
-                .replace('%', "!%")
-                .replace('_', "!_")
-        );
+        let pattern = crate::pagination::like_contains(text.trim());
         query = query.filter(
             Condition::any()
                 .add(

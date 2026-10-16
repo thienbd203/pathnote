@@ -41,3 +41,36 @@ pub struct PageMeta {
     pub per_page: u64,
     pub total: u64,
 }
+
+impl PageMeta {
+    pub fn new(page: u64, per_page: u64, total: u64) -> Self {
+        Self {
+            current_page: page,
+            last_page: total.div_ceil(per_page).max(1),
+            per_page,
+            total,
+        }
+    }
+}
+
+/// Escape a literal substring for SQL LIKE with ESCAPE '!'.
+pub fn like_contains(term: &str) -> String {
+    format!(
+        "%{}%",
+        term.to_lowercase()
+            .replace('!', "!!")
+            .replace('%', "!%")
+            .replace('_', "!_")
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn literal_search_and_empty_pagination() {
+        assert_eq!(like_contains("A!_%"), "%a!!!_!%%");
+        assert_eq!(PageMeta::new(1, 25, 0).last_page, 1);
+        assert_eq!(PageMeta::new(2, 25, 26).last_page, 2);
+    }
+}

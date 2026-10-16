@@ -36,14 +36,10 @@ pub async fn list(
     let size = input.page_size()?;
     let mut query = owned(user_id);
     if let Some(term) = input.q.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
-        let literal = term
-            .to_lowercase()
-            .replace('!', "!!")
-            .replace('%', "!%")
-            .replace('_', "!_");
+        let literal = crate::pagination::like_contains(term);
         query = query.filter(
             Expr::expr(Func::lower(Expr::col(places::Column::Name)))
-                .like(LikeExpr::new(format!("%{literal}%")).escape('!')),
+                .like(LikeExpr::new(literal).escape('!')),
         );
     }
     let paginator = query.order_by_asc(places::Column::Id).paginate(db, size);
@@ -51,12 +47,7 @@ pub async fn list(
     let records = paginator.fetch_page(input.page - 1).await?;
     Ok(PlacePage {
         data: records.into_iter().map(Into::into).collect(),
-        meta: PageMeta {
-            current_page: input.page,
-            last_page: total.div_ceil(size).max(1),
-            per_page: size,
-            total,
-        },
+        meta: PageMeta::new(input.page, size, total),
     })
 }
 pub async fn create(

@@ -98,13 +98,7 @@ pub async fn list(
         );
     }
     if let Some(q) = filters.q {
-        let pattern = format!(
-            "%{}%",
-            q.to_lowercase()
-                .replace('!', "!!")
-                .replace('%', "!%")
-                .replace('_', "!_")
-        );
+        let pattern = crate::pagination::like_contains(&q);
         query=query.filter(Condition::any().add(Expr::expr(Expr::cust("LOWER(COALESCE(flashcard_attempts.snapshot->>'word',vocabulary_cards.word))")).like(LikeExpr::new(&pattern).escape('!'))).add(Expr::expr(Expr::cust("LOWER(COALESCE(flashcard_attempts.snapshot->>'meaning',vocabulary_cards.meaning))")).like(LikeExpr::new(&pattern).escape('!'))));
     }
     let timezone: chrono_tz::Tz = input

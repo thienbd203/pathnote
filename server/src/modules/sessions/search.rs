@@ -112,16 +112,12 @@ pub async fn search(
     }
     let term = input.q.as_deref().unwrap_or("").trim();
     if !term.is_empty() {
-        let pattern = term
-            .to_lowercase()
-            .replace('!', "!!")
-            .replace('%', "!%")
-            .replace('_', "!_");
+        let pattern = crate::pagination::like_contains(term);
         let title = Expr::expr(Func::lower(Expr::col((
             crate::entities::sessions::Entity,
             crate::entities::sessions::Column::Title,
         ))))
-        .like(LikeExpr::new(format!("%{pattern}%")).escape('!'));
+        .like(LikeExpr::new(pattern).escape('!'));
         let mut matching = Condition::any().add(title);
         if let Some(day) = calendar_day(term, Utc::now().with_timezone(&tz).year()) {
             let next = day

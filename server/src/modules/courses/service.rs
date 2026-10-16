@@ -67,17 +67,13 @@ pub async fn search(
         query = query.filter(courses::Column::PlaceId.eq(id));
     }
     if let Some(term) = input.q.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
-        let literal = term
-            .to_lowercase()
-            .replace('!', "!!")
-            .replace('%', "!%")
-            .replace('_', "!_");
+        let literal = crate::pagination::like_contains(term);
         query = query.filter(
             Expr::expr(Func::lower(Expr::col((
                 courses::Entity,
                 courses::Column::Name,
             ))))
-            .like(LikeExpr::new(format!("%{literal}%")).escape('!')),
+            .like(LikeExpr::new(literal).escape('!')),
         );
     }
     // The parent metadata comes from the same JOIN, not one query per course.
@@ -94,12 +90,7 @@ pub async fn search(
         .collect::<Result<Vec<_>, AppError>>()?;
     Ok(CoursePage {
         data,
-        meta: PageMeta {
-            current_page: input.page,
-            last_page: total.div_ceil(size).max(1),
-            per_page: size,
-            total,
-        },
+        meta: PageMeta::new(input.page, size, total),
     })
 }
 pub async fn create(

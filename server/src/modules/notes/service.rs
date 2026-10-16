@@ -246,17 +246,13 @@ pub async fn shared(
     let size = input.page_size()?;
     let mut query = active().filter(sessions::Column::Id.in_subquery(memberships(user)));
     if let Some(term) = input.q.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
-        let literal = term
-            .to_lowercase()
-            .replace('!', "!!")
-            .replace('%', "!%")
-            .replace('_', "!_");
+        let literal = crate::pagination::like_contains(term);
         query = query.filter(
             Expr::expr(Func::lower(Expr::col((
                 sessions::Entity,
                 sessions::Column::Title,
             ))))
-            .like(LikeExpr::new(format!("%{literal}%")).escape('!')),
+            .like(LikeExpr::new(literal).escape('!')),
         );
     }
     let pages = query
@@ -282,12 +278,7 @@ pub async fn shared(
                 note_saved_at: saved.get(&s.id).copied(),
             })
             .collect(),
-        meta: PageMeta {
-            current_page: input.page,
-            last_page: total.div_ceil(size).max(1),
-            per_page: size,
-            total,
-        },
+        meta: PageMeta::new(input.page, size, total),
     })
 }
 
