@@ -4,6 +4,7 @@ mod auth;
 pub mod config;
 pub mod entities;
 mod error;
+pub mod extract;
 mod modules;
 mod response;
 pub mod state;

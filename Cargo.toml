@@ -4,7 +4,7 @@ default-members = ["server"]
 resolver = "2"
 
 [workspace.dependencies]
-axum = "0.8"
+axum = { version = "0.8", features = ["macros"] }
 dotenvy = "0.15"
 sea-orm = { version = "1", features = [
     "sqlx-postgres",

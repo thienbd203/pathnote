@@ -11,12 +11,19 @@ struct ErrorBody {
     message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     errors: Option<std::collections::BTreeMap<String, Vec<String>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    data: Option<serde_json::Value>,
 }
 
 #[derive(Debug)]
 pub enum AppError {
     Unavailable(String),
     Conflict(String),
+    ConflictWith {
+        message: String,
+        data: serde_json::Value,
+    },
+    MethodNotAllowed,
     Unauthenticated,
     Forbidden,
     BadRequest(String),
@@ -28,6 +35,7 @@ pub enum AppError {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let mut errors = None;
+        let mut data = None;
         let (status, message) = match self {
             AppError::Validation(fields) => {
                 errors = Some(fields);
@@ -38,6 +46,17 @@ impl IntoResponse for AppError {
             }
             AppError::Unavailable(message) => (StatusCode::SERVICE_UNAVAILABLE, message),
             AppError::Conflict(message) => (StatusCode::CONFLICT, message),
+            AppError::ConflictWith {
+                message,
+                data: value,
+            } => {
+                data = Some(value);
+                (StatusCode::CONFLICT, message)
+            }
+            AppError::MethodNotAllowed => (
+                StatusCode::METHOD_NOT_ALLOWED,
+                "Phương thức không được hỗ trợ.".into(),
+            ),
             AppError::Unauthenticated => (
                 StatusCode::UNAUTHORIZED,
                 "Bạn cần đăng nhập để tiếp tục".to_string(),
@@ -54,7 +73,11 @@ impl IntoResponse for AppError {
             }
         };
 
-        let body = ErrorBody { message, errors };
+        let body = ErrorBody {
+            message,
+            errors,
+            data,
+        };
 
         (status, Json(body)).into_response()
     }

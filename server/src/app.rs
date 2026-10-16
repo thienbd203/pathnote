@@ -55,6 +55,7 @@ pub fn build_app<S: SessionStore + Clone>(state: AppState, config: &Config, stor
         .merge(modules::health::routes())
         .layer(middleware::from_fn(browser_request))
         .fallback(route_not_found)
+        .method_not_allowed_fallback(|| async { AppError::MethodNotAllowed })
         .layer(cors(&config.frontend_url))
         .layer(TraceLayer::new_for_http().make_span_with(|request: &Request| tracing::info_span!("http_request", method = %request.method(), path = request.uri().path())))
         .with_state(state)
