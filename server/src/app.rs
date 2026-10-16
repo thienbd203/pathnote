@@ -1,14 +1,17 @@
 use axum::http::StatusCode;
 use axum::{
     extract::{Request, State},
-    http::{header, HeaderValue, Method},
+    http::{header, Extensions, HeaderMap, HeaderValue, Method, Version},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     Router,
 };
 use std::time::Duration;
 use tower_http::{
-    compression::CompressionLayer,
+    compression::{
+        predicate::{DefaultPredicate, Predicate},
+        CompressionLayer,
+    },
     cors::CorsLayer,
     request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer},
     timeout::TimeoutLayer,
@@ -78,11 +81,26 @@ pub fn build_app<S: SessionStore + Clone>(state: AppState, config: &Config, stor
         .method_not_allowed_fallback(|| async { AppError::MethodNotAllowed })
         .layer(middleware::from_fn(browser_request))
         .layer(cors(&config.frontend_url))
-        .layer(CompressionLayer::new())
+        .layer(CompressionLayer::new().compress_when(DefaultPredicate::new().and(compressible_content)))
         .layer(PropagateRequestIdLayer::x_request_id())
         .layer(TraceLayer::new_for_http().make_span_with(|request: &Request| tracing::info_span!("http_request", method = %request.method(), path = request.uri().path(), request_id = request.headers().get("x-request-id").and_then(|value| value.to_str().ok()).unwrap_or(""))))
         .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
         .with_state(state)
+}
+
+fn compressible_content(_: StatusCode, _: Version, headers: &HeaderMap, _: &Extensions) -> bool {
+    let content_type = headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("")
+        .split(';')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
+    content_type == "application/json"
+        || content_type.starts_with("text/")
+        || content_type.ends_with("+json")
 }
 
 fn cors(frontend_url: &str) -> CorsLayer {
@@ -134,4 +152,38 @@ async fn cookie_origin(
         }
     }
     Ok(next.run(request).await)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compression_is_limited_to_json_and_text() {
+        for (mime, expected) in [
+            ("application/json; charset=utf-8", true),
+            ("text/plain", true),
+            ("application/problem+json", true),
+            ("application/pdf", false),
+            ("application/zip", false),
+            (
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                false,
+            ),
+            ("image/png", false),
+        ] {
+            let mut headers = HeaderMap::new();
+            headers.insert(header::CONTENT_TYPE, HeaderValue::from_static(mime));
+            assert_eq!(
+                compressible_content(
+                    StatusCode::OK,
+                    Version::HTTP_11,
+                    &headers,
+                    &Extensions::new()
+                ),
+                expected,
+                "{mime}"
+            );
+        }
+    }
 }
