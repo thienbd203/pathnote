@@ -106,7 +106,8 @@ async fn browser_request(request: Request, next: Next) -> Result<Response, AppEr
     }
     response
         .headers_mut()
-        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+        .entry(header::CACHE_CONTROL)
+        .or_insert_with(|| HeaderValue::from_static("no-store"));
     response.headers_mut().insert(
         header::REFERRER_POLICY,
         HeaderValue::from_static("no-referrer"),

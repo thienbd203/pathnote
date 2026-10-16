@@ -3,12 +3,12 @@ use super::{
     service,
 };
 use crate::{
-    access_token::CurrentUser, modules::notes::service as notes, response::ApiResponse,
-    state::AppState, AppError,
+    access_token::CurrentUser, extract::AppPath, modules::notes::service as notes,
+    response::ApiResponse, state::AppState, AppError,
 };
 use axum::{
     body::Body,
-    extract::{Multipart, Path, State},
+    extract::{Multipart, State},
     http::{header, HeaderValue},
     response::{IntoResponse, Response},
 };
@@ -66,7 +66,7 @@ async fn upload(
 pub async fn image_upload(
     State(s): State<AppState>,
     u: CurrentUser,
-    Path(id): Path<i64>,
+    AppPath(id): AppPath<i64>,
     body: Multipart,
 ) -> Result<ApiResponse<MediaResource>, AppError> {
     upload(s, u, id, Kind::Image, body).await
@@ -74,7 +74,7 @@ pub async fn image_upload(
 pub async fn file_upload(
     State(s): State<AppState>,
     u: CurrentUser,
-    Path(id): Path<i64>,
+    AppPath(id): AppPath<i64>,
     body: Multipart,
 ) -> Result<ApiResponse<MediaResource>, AppError> {
     upload(s, u, id, Kind::File, body).await
@@ -82,7 +82,7 @@ pub async fn file_upload(
 pub async fn info(
     State(s): State<AppState>,
     u: CurrentUser,
-    Path((id, m)): Path<(i64, i64)>,
+    AppPath((id, m)): AppPath<(i64, i64)>,
 ) -> Result<ApiResponse<MediaResource>, AppError> {
     Ok(ApiResponse::ok(
         service::get(&s, u.id, id, Kind::File, m).await?.into(),
@@ -96,8 +96,8 @@ async fn content(
     kind: Kind,
 ) -> Result<Response, AppError> {
     let model = service::get(&s, u.id, id, kind, m).await?;
-    let bytes = service::bytes(&s, &model).await?;
-    let mut r = Body::from(bytes).into_response();
+    let file = service::open(&s, &model).await?;
+    let mut r = Body::from_stream(tokio_util::io::ReaderStream::new(file)).into_response();
     r.headers_mut().insert(
         header::CONTENT_TYPE,
         HeaderValue::from_str(&model.mime_type)
@@ -105,7 +105,7 @@ async fn content(
     );
     r.headers_mut().insert(
         header::CACHE_CONTROL,
-        HeaderValue::from_static("private, no-store"),
+        HeaderValue::from_static("private, max-age=31536000, immutable"),
     );
     r.headers_mut()
         .insert(header::VARY, HeaderValue::from_static("Authorization"));
@@ -131,14 +131,14 @@ async fn content(
 pub async fn image(
     State(s): State<AppState>,
     u: CurrentUser,
-    Path((id, m)): Path<(i64, i64)>,
+    AppPath((id, m)): AppPath<(i64, i64)>,
 ) -> Result<Response, AppError> {
     content(s, u, id, m, Kind::Image).await
 }
 pub async fn download(
     State(s): State<AppState>,
     u: CurrentUser,
-    Path((id, m)): Path<(i64, i64)>,
+    AppPath((id, m)): AppPath<(i64, i64)>,
 ) -> Result<Response, AppError> {
     content(s, u, id, m, Kind::File).await
 }

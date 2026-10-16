@@ -116,8 +116,8 @@ pub async fn get(
         .await?
         .ok_or_else(|| AppError::NotFound("Không tìm thấy tài liệu.".into()))
 }
-pub async fn bytes(state: &AppState, model: &media::Model) -> Result<Vec<u8>, AppError> {
-    tokio::fs::read(path(state, &model.storage_key)?)
+pub async fn open(state: &AppState, model: &media::Model) -> Result<tokio::fs::File, AppError> {
+    tokio::fs::File::open(path(state, &model.storage_key)?)
         .await
         .map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {

@@ -74,6 +74,10 @@ async fn media_upload_detects_real_format_and_serves_only_after_note_access() {
     assert_eq!(r.as_bytes(), data.as_slice());
     assert_eq!(r.header("x-content-type-options"), "nosniff");
     assert_eq!(r.header("content-type"), "image/png");
+    assert_eq!(
+        r.header("cache-control"),
+        "private, max-age=31536000, immutable"
+    );
     let other_lesson = lesson(&app).await;
     app.api
         .get(&format!(
