@@ -106,23 +106,23 @@ pub async fn create(
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| AppError::Internal(e.to_string()))?;
     let (txn, _) = lock(db, user, session).await?;
-    let mut ids = vec![];
-    for (i, q) in questions.into_iter().enumerate() {
-        let model = exercises::ActiveModel {
+    let models = questions
+        .into_iter()
+        .enumerate()
+        .map(|(i, question)| exercises::ActiveModel {
             session_id: Set(session),
             user_id: Set(user),
             title: Set(input
                 .titles
                 .as_ref()
-                .map_or_else(|| input.title.clone(), |t| t[i].clone())),
-            question: Set(q),
+                .map_or_else(|| input.title.clone(), |titles| titles[i].clone())),
+            question: Set(question),
             revision: Set(1),
             ..Default::default()
-        }
-        .insert(&txn)
+        });
+    let ids = exercises::Entity::insert_many(models)
+        .exec_with_returning_keys(&txn)
         .await?;
-        ids.push(model.id);
-    }
     txn.commit().await?;
     Ok(if bulk {
         CreateResource::Many { ids }
