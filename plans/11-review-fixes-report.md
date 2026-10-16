@@ -7,7 +7,9 @@
 
 | P0.2 | 9e187dd | Rust fmt/clippy/workspace; macOS 18 pass/13 skip, Linux 26 pass/5 skip; actionlint; migration lỗi và health lỗi đều không rollback code cũ |
 
-| P0.3 | Commit `Document operator checks before flashcard migrations` | Checklist chỉ viết tài liệu; không chạy SQL/backup production |
+| P0.3 | 8d69f4c | Checklist chỉ viết tài liệu; không chạy SQL/backup production |
+
+| P1.1 | Commit `Index flashcard meaning lookups and remove redundant index` | Migration up/down test; grouping fixture chọn migration theo tên; Rust fmt/clippy/workspace (101 API pass, 2 ignored) |
 
 ## Giới hạn và việc người vận hành cần làm
 

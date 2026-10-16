@@ -27,6 +27,7 @@ mod m20261015_010001_create_flashcard_runs;
 mod m20261016_000001_add_learning_query_indexes;
 mod m20261016_010001_share_flashcard_memory;
 mod m20261016_020001_group_flashcards_by_word;
+mod m20261016_030001_flashcard_meanings_index;
 pub struct Migrator;
 
 #[async_trait::async_trait]
@@ -53,6 +54,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261016_000001_add_learning_query_indexes::Migration),
             Box::new(m20261016_010001_share_flashcard_memory::Migration),
             Box::new(m20261016_020001_group_flashcards_by_word::Migration),
+            Box::new(m20261016_030001_flashcard_meanings_index::Migration),
         ]
     }
 }

@@ -782,3 +782,26 @@ async fn overview_exposes_counts_without_returning_the_vocabulary_library() {
     assert!(id > 0);
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn meanings_index_migration_can_be_reversed_without_touching_schedules() {
+    use migration::{Migrator, MigratorTrait};
+    use sea_orm::{ConnectionTrait, DbBackend, Statement};
+    let app = LearningApp::spawn().await;
+    async fn exists(db: &sea_orm::DatabaseConnection, name: &str) -> bool {
+        let row = db.query_one(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            "SELECT EXISTS(SELECT 1 FROM pg_indexes WHERE schemaname = current_schema() AND indexname = $1) AS present",
+            [name.into()],
+        )).await.unwrap().unwrap();
+        row.try_get("", "present").unwrap()
+    }
+    assert!(exists(&app.db, "vocabulary_cards_word_locale_pos").await);
+    assert!(!exists(&app.db, "flashcard_memory_identity").await);
+    Migrator::down(app.db.as_ref(), Some(1)).await.unwrap();
+    assert!(!exists(&app.db, "vocabulary_cards_word_locale_pos").await);
+    assert!(exists(&app.db, "flashcard_memory_identity").await);
+    Migrator::up(app.db.as_ref(), None).await.unwrap();
+    assert!(exists(&app.db, "vocabulary_cards_word_locale_pos").await);
+    app.cleanup().await;
+}

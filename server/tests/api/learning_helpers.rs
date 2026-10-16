@@ -44,7 +44,14 @@ impl LearningApp {
             false,
             false,
             None,
-            Some(Migrator::migrations().len() as u32 - 2),
+            Some(
+                Migrator::migrations()
+                    .iter()
+                    .position(|migration| {
+                        migration.name() == "m20261016_010001_share_flashcard_memory"
+                    })
+                    .expect("shared-memory migration is registered") as u32,
+            ),
         )
         .await
     }
