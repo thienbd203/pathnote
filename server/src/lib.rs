@@ -6,7 +6,7 @@ pub mod entities;
 mod error;
 pub mod extract;
 mod modules;
-mod response;
+pub mod response;
 pub mod state;
 
 pub use error::AppError;

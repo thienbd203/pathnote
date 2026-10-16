@@ -16,6 +16,10 @@ pub struct ApiResponse<T> {
 }
 
 impl<T> ApiResponse<T> {
+    pub fn with_message(mut self, message: impl Into<String>) -> Self {
+        self.message = Some(message.into());
+        self
+    }
     pub fn created(data: T) -> Self {
         let mut response = Self::ok(data);
         response.status = StatusCode::CREATED;
