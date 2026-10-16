@@ -1,4 +1,4 @@
-name: Rust CI and deployment
+name: Pathnote coordinated release
 
 on:
   push:
@@ -11,10 +11,28 @@ permissions:
   contents: read
 
 concurrency:
-  group: pathnote-rust-${{ github.ref }}
+  group: pathnote-production-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  release:
+    name: Select reviewed release pair
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      frontend_repository: ${{ steps.pair.outputs.frontend_repository }}
+      frontend_sha: ${{ steps.pair.outputs.frontend_sha }}
+      backend_sha: ${{ steps.pair.outputs.backend_sha }}
+      release_id: ${{ steps.pair.outputs.release_id }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - id: pair
+        name: Validate immutable revisions
+        run: python3 deploy/release.py .github/release.json
+
   check:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -25,7 +43,7 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: test-only-password
           POSTGRES_DB: pathnote_test
-        ports: [5432:5432]
+        ports: ['5432:5432']
         options: >-
           --health-cmd "pg_isready -U postgres -d pathnote_test"
           --health-interval 10s --health-timeout 5s --health-retries 5
@@ -36,9 +54,21 @@ jobs:
         with:
           persist-credentials: false
       - name: Rust toolchain
+        id: rust
         run: |
           rustup toolchain install stable --profile minimal --component clippy,rustfmt
           rustup default stable
+          printf 'version=%s\n' "$(rustc -vV | sha256sum | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+      - name: Cache Rust checks
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/debug
+          key: ${{ runner.os }}-${{ runner.arch }}-rust-check-${{ steps.rust.outputs.version }}-${{ hashFiles('Cargo.lock') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-rust-check-${{ steps.rust.outputs.version }}-${{ hashFiles('Cargo.lock') }}-
       - name: Check format, test and lint
         run: |
           cargo fmt --all --check
@@ -47,8 +77,9 @@ jobs:
           bash -n .github/deploy.sh
           sudo -n python3 -m unittest discover -s deploy/tests -v
 
-  build:
-    needs: check
+  build-backend:
+    name: Build backend
+    needs: [release, check]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
     # Choose ubuntu-24.04-arm for an ARM64 VPS. Build natively for that architecture.
     runs-on: ${{ vars.BUILD_RUNNER || 'ubuntu-24.04' }}
@@ -60,6 +91,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Prepare Linux musl toolchain
+        id: rust
         run: |
           set -euo pipefail
           case "$(uname -m)" in
@@ -75,6 +107,19 @@ jobs:
           printf 'RUST_TARGET=%s\n' "$target" >> "$GITHUB_ENV"
           # musl-gcc is native to the selected Linux runner.
           printf 'RUSTFLAGS=-C linker=musl-gcc\n' >> "$GITHUB_ENV"
+          printf 'target=%s\n' "$target" >> "$GITHUB_OUTPUT"
+          printf 'version=%s\n' "$(rustc -vV | sha256sum | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+      - name: Cache Rust release dependencies
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/${{ steps.rust.outputs.target }}/release
+            target/release
+          key: ${{ runner.os }}-${{ runner.arch }}-rust-release-${{ steps.rust.outputs.target }}-${{ steps.rust.outputs.version }}-${{ hashFiles('Cargo.lock') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-rust-release-${{ steps.rust.outputs.target }}-${{ steps.rust.outputs.version }}-${{ hashFiles('Cargo.lock') }}-
       - name: Build release and assemble artifact
         run: |
           set -euo pipefail
@@ -94,8 +139,55 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
-  deploy:
-    needs: build
+  build-frontend:
+    name: Build pinned frontend
+    needs: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ needs.release.outputs.frontend_repository }}
+          ref: ${{ needs.release.outputs.frontend_sha }}
+          token: ${{ secrets.FRONTEND_READ_TOKEN || github.token }}
+          persist-credentials: false
+      - name: Verify checked-out frontend revision
+        env:
+          EXPECTED_SHA: ${{ needs.release.outputs.frontend_sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Check and build frontend
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          FRONTEND_SHA: ${{ needs.release.outputs.frontend_sha }}
+        run: |
+          set -euo pipefail
+          : "${VITE_API_URL:?Set the coordinator repository variable VITE_API_URL}"
+          npm ci
+          npm test
+          npm run format:check
+          bash -n .github/deploy.sh
+          npm run build
+          printf '%s\n' "$FRONTEND_SHA" > dist/deploy-version.txt
+          mkdir -p web-release/site
+          cp -a dist/. web-release/site/
+          install -m 644 .github/deploy.sh web-release/deploy.sh
+          cd web-release
+          find site -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+          sha256sum deploy.sh >> SHA256SUMS
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pathnote-web-release
+          path: web-release/
+          retention-days: 7
+          if-no-files-found: error
+
+  deploy-backend:
+    name: Deploy backend after both builds
+    needs: [release, build-backend, build-frontend]
     runs-on: ubuntu-24.04
     environment: production
     timeout-minutes: 15
@@ -128,6 +220,7 @@ jobs:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
+          RELEASE: ${{ needs.release.outputs.release_id }}
         run: |
           set -euo pipefail
           : "${SSH_HOST:?Missing SSH_HOST}" "${SSH_USER:?Missing SSH_USER}" "${SSH_PORT:?Missing SSH_PORT}"
@@ -136,7 +229,6 @@ jobs:
           [[ "$SSH_PORT" =~ ^[0-9]+$ ]] || { echo '::error::SSH_PORT must contain only the numeric SSH port, without spaces.'; exit 1; }
           [[ "$DEPLOY_PATH" =~ ^/opt/[a-zA-Z0-9_-]+$ ]] || { echo '::error::DEPLOY_PATH must be /opt followed by one directory name, without spaces or a trailing slash.'; exit 1; }
           [[ "$HEALTHCHECK_URL" =~ ^https://[a-zA-Z0-9.-]+(:[0-9]+)?/health$ ]] || { echo '::error::HEALTHCHECK_URL must be https://YOUR_HOST/health without surrounding spaces, quotes or a trailing slash.'; exit 1; }
-          RELEASE="$(date -u +%Y%m%d%H%M%S)-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           RELEASE_PATH="$DEPLOY_PATH/releases/$RELEASE"
           SSH=(ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -p "$SSH_PORT")
           printf -v CREATE_COMMAND 'mkdir -p %q' "$RELEASE_PATH"
@@ -146,6 +238,73 @@ jobs:
             artifact/ "$SSH_USER@$SSH_HOST:$RELEASE_PATH/"
           printf -v DEPLOY_COMMAND 'bash -s -- %q %q %q %q' "$DEPLOY_PATH" "$RELEASE" "$HEALTHCHECK_URL" "$GITHUB_SHA"
           "${SSH[@]}" "$SSH_USER@$SSH_HOST" "$DEPLOY_COMMAND" < .github/deploy.sh
+      - name: Remove SSH credentials
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+  deploy-frontend:
+    name: Deploy frontend after healthy backend
+    needs: [release, build-frontend, deploy-backend]
+    runs-on: ubuntu-24.04
+    environment: production
+    timeout-minutes: 15
+    env:
+      DEPLOY_PATH: ${{ vars.WEB_DEPLOY_PATH || '/var/www/pathnote-web' }}
+      SITE_URL: ${{ vars.WEB_SITE_URL || 'https://pathnote.aphorisms.cloud' }}
+      HEALTHCHECK_URL: ${{ vars.HEALTHCHECK_URL }}
+      BACKEND_SHA: ${{ needs.release.outputs.backend_sha }}
+      FRONTEND_SHA: ${{ needs.release.outputs.frontend_sha }}
+      RELEASE: ${{ needs.release.outputs.release_id }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: pathnote-web-release
+          path: web-release
+      - name: Verify stored frontend build and running backend
+        run: |
+          set -euo pipefail
+          (cd web-release && sha256sum --check --strict SHA256SUMS)
+          test "$(cat web-release/site/deploy-version.txt)" = "$FRONTEND_SHA"
+          python3 deploy/healthcheck.py "$HEALTHCHECK_URL" "$BACKEND_SHA"
+      - name: Configure pinned frontend SSH connection
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.WEB_SSH_PRIVATE_KEY || secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.WEB_SSH_KNOWN_HOSTS || secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          : "${SSH_PRIVATE_KEY:?Missing frontend SSH key}" "${SSH_KNOWN_HOSTS:?Missing verified frontend SSH host keys}"
+          install -m 700 -d ~/.ssh
+          umask 077
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh-keygen -y -P '' -f ~/.ssh/id_ed25519 > /dev/null
+      - name: Upload and activate verified frontend
+        env:
+          SSH_HOST: ${{ secrets.WEB_SSH_HOST || secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.WEB_SSH_USER || secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.WEB_SSH_PORT || secrets.SSH_PORT }}
+        run: |
+          set -euo pipefail
+          : "${SSH_HOST:?Missing frontend SSH_HOST}" "${SSH_USER:?Missing frontend SSH_USER}" "${SSH_PORT:?Missing frontend SSH_PORT}"
+          [[ "$SSH_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]
+          [[ "$SSH_USER" =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$ ]]
+          [[ "$SSH_PORT" =~ ^[0-9]+$ ]]
+          [[ "$DEPLOY_PATH" =~ ^/var/www/[a-zA-Z0-9_-]+$ ]]
+          [[ "$SITE_URL" =~ ^https://[a-zA-Z0-9.-]+(:[0-9]+)?/?$ ]]
+          RELEASE_PATH="$DEPLOY_PATH/releases/$RELEASE"
+          SSH=(ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "$SSH_PORT")
+          printf -v CREATE_COMMAND 'mkdir -p %q' "$RELEASE_PATH"
+          "${SSH[@]}" "$SSH_USER@$SSH_HOST" "$CREATE_COMMAND"
+          rsync -az --delete \
+            -e "ssh -i $HOME/.ssh/id_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p $SSH_PORT" \
+            web-release/site/ "$SSH_USER@$SSH_HOST:$RELEASE_PATH/"
+          # Check the exact backend again immediately before frontend activation.
+          python3 deploy/healthcheck.py "$HEALTHCHECK_URL" "$BACKEND_SHA"
+          printf -v DEPLOY_COMMAND 'bash -s -- %q %q %q %q' "$DEPLOY_PATH" "$RELEASE" "$SITE_URL" "$FRONTEND_SHA"
+          "${SSH[@]}" "$SSH_USER@$SSH_HOST" "$DEPLOY_COMMAND" < web-release/deploy.sh
       - name: Remove SSH credentials
         if: always()
         run: rm -f ~/.ssh/id_ed25519 ~/.ssh/known_hosts

@@ -2,7 +2,10 @@
 
 Rust dùng database mới `pathnote_rust`; không chuyển dữ liệu Laravel. GitHub Actions
 chạy test, build hai binary Linux rồi upload bằng SSH. VPS không cần Rust/Cargo.
-Push lên `master` hoặc chạy workflow thủ công sẽ deploy sau khi cấu hình bên dưới.
+Luồng phát hành chung hiện chuẩn bị cả frontend lẫn backend trước khi triển khai:
+xem [cấu hình và thứ tự chuyển sang CI/CD phối hợp](coordinated-release.md).
+Push `master` ở repo backend hoặc chạy workflow thủ công trên `master` sẽ phát hành
+cặp phiên bản trong manifest sau khi đủ cấu hình bên dưới và hướng dẫn phối hợp.
 
 ## 1. Kiểm tra VPS và cài PostgreSQL
 
