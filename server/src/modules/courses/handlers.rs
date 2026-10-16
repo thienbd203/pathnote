@@ -2,25 +2,19 @@ use super::{
     dto::{CoursePage, CourseResource, CreateCourse, UpdateCourse},
     service,
 };
+use crate::extract::{AppJson, AppPath, AppQuery};
 use crate::{
     access_token::CurrentUser, pagination::ListQuery, response::ApiResponse, state::AppState,
     AppError,
 };
-use axum::{
-    extract::{
-        rejection::{JsonRejection, QueryRejection},
-        Path, Query, State,
-    },
-    http::StatusCode,
-    Json,
-};
+use axum::{extract::State, http::StatusCode, Json};
+
 pub async fn list(
     State(state): State<AppState>,
     user: CurrentUser,
-    Path(place_id): Path<i64>,
-    query: Result<Query<ListQuery>, QueryRejection>,
+    AppPath(place_id): AppPath<i64>,
+    AppQuery(input): AppQuery<ListQuery>,
 ) -> Result<Json<CoursePage>, AppError> {
-    let Query(input) = query.map_err(|error| AppError::validation("query", &error.body_text()))?;
     Ok(Json(
         service::list(&state.db, user.id, place_id, input).await?,
     ))
@@ -28,9 +22,10 @@ pub async fn list(
 pub async fn search(
     State(state): State<AppState>,
     user: CurrentUser,
-    query: Result<Query<ListQuery>, QueryRejection>,
+    // Preserve the existing search-specific validation message.
+    query: Result<AppQuery<ListQuery>, AppError>,
 ) -> Result<Json<CoursePage>, AppError> {
-    let Query(input) =
+    let AppQuery(input) =
         query.map_err(|_| AppError::validation("query", "Tham số tìm khóa học không hợp lệ."))?;
     Ok(Json(
         service::search(state.db.as_ref(), user.id, None, input).await?,
@@ -39,10 +34,9 @@ pub async fn search(
 pub async fn create(
     State(state): State<AppState>,
     user: CurrentUser,
-    Path(place_id): Path<i64>,
-    body: Result<Json<CreateCourse>, JsonRejection>,
+    AppPath(place_id): AppPath<i64>,
+    AppJson(input): AppJson<CreateCourse>,
 ) -> Result<ApiResponse<CourseResource>, AppError> {
-    let Json(input) = body.map_err(|error| AppError::validation("body", &error.body_text()))?;
     Ok(ApiResponse::created(
         service::create(&state.db, user.id, place_id, input).await?,
     ))
@@ -50,7 +44,7 @@ pub async fn create(
 pub async fn show(
     State(state): State<AppState>,
     user: CurrentUser,
-    Path(id): Path<i64>,
+    AppPath(id): AppPath<i64>,
 ) -> Result<ApiResponse<CourseResource>, AppError> {
     Ok(ApiResponse::ok(
         service::get(state.db.as_ref(), user.id, id).await?,
@@ -59,10 +53,9 @@ pub async fn show(
 pub async fn update(
     State(state): State<AppState>,
     user: CurrentUser,
-    Path(id): Path<i64>,
-    body: Result<Json<UpdateCourse>, JsonRejection>,
+    AppPath(id): AppPath<i64>,
+    AppJson(input): AppJson<UpdateCourse>,
 ) -> Result<ApiResponse<CourseResource>, AppError> {
-    let Json(input) = body.map_err(|error| AppError::validation("body", &error.body_text()))?;
     Ok(ApiResponse::ok(
         service::update(&state.db, user.id, id, input).await?,
     ))
@@ -70,7 +63,7 @@ pub async fn update(
 pub async fn delete(
     State(state): State<AppState>,
     user: CurrentUser,
-    Path(id): Path<i64>,
+    AppPath(id): AppPath<i64>,
 ) -> Result<StatusCode, AppError> {
     service::delete(&state.db, user.id, id).await?;
     Ok(StatusCode::NO_CONTENT)

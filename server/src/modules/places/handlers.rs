@@ -2,31 +2,22 @@ use super::{
     dto::{CreatePlace, ListPlaces, PlacePage, PlaceResource, UpdatePlace},
     service,
 };
+use crate::extract::{AppJson, AppPath, AppQuery};
 use crate::{access_token::CurrentUser, response::ApiResponse, state::AppState, AppError};
-use axum::{
-    extract::{
-        rejection::{JsonRejection, QueryRejection},
-        Path, State,
-    },
-    http::StatusCode,
-    Json,
-};
+use axum::{extract::State, http::StatusCode, Json};
 
 pub async fn list(
     State(state): State<AppState>,
     user: CurrentUser,
-    query: Result<axum::extract::Query<ListPlaces>, QueryRejection>,
+    AppQuery(input): AppQuery<ListPlaces>,
 ) -> Result<Json<PlacePage>, AppError> {
-    let axum::extract::Query(input) =
-        query.map_err(|error| AppError::validation("query", &error.body_text()))?;
     Ok(Json(service::list(&state.db, user.id, input).await?))
 }
 pub async fn create(
     State(state): State<AppState>,
     user: CurrentUser,
-    body: Result<Json<CreatePlace>, JsonRejection>,
+    AppJson(input): AppJson<CreatePlace>,
 ) -> Result<ApiResponse<PlaceResource>, AppError> {
-    let Json(input) = body.map_err(|error| AppError::validation("body", &error.body_text()))?;
     Ok(ApiResponse::created(
         service::create(&state.db, user.id, input).await?.into(),
     ))
@@ -34,7 +25,7 @@ pub async fn create(
 pub async fn show(
     State(state): State<AppState>,
     user: CurrentUser,
-    Path(id): Path<i64>,
+    AppPath(id): AppPath<i64>,
 ) -> Result<ApiResponse<PlaceResource>, AppError> {
     Ok(ApiResponse::ok(
         service::get(state.db.as_ref(), user.id, id).await?.into(),
@@ -43,10 +34,9 @@ pub async fn show(
 pub async fn update(
     State(state): State<AppState>,
     user: CurrentUser,
-    Path(id): Path<i64>,
-    body: Result<Json<UpdatePlace>, JsonRejection>,
+    AppPath(id): AppPath<i64>,
+    AppJson(input): AppJson<UpdatePlace>,
 ) -> Result<ApiResponse<PlaceResource>, AppError> {
-    let Json(input) = body.map_err(|error| AppError::validation("body", &error.body_text()))?;
     Ok(ApiResponse::ok(
         service::update(&state.db, user.id, id, input).await?.into(),
     ))
@@ -54,7 +44,7 @@ pub async fn update(
 pub async fn delete(
     State(state): State<AppState>,
     user: CurrentUser,
-    Path(id): Path<i64>,
+    AppPath(id): AppPath<i64>,
 ) -> Result<StatusCode, AppError> {
     service::delete(&state.db, user.id, id).await?;
     Ok(StatusCode::NO_CONTENT)
