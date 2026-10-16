@@ -24,6 +24,7 @@ mod m20261014_060001_add_personal_fsrs;
 mod m20261014_070001_add_review_snapshot;
 mod m20261015_000001_create_user_settings;
 mod m20261015_010001_create_flashcard_runs;
+mod m20261016_000001_add_learning_query_indexes;
 pub struct Migrator;
 
 #[async_trait::async_trait]
@@ -47,6 +48,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261014_070001_add_review_snapshot::Migration),
             Box::new(m20261015_000001_create_user_settings::Migration),
             Box::new(m20261015_010001_create_flashcard_runs::Migration),
+            Box::new(m20261016_000001_add_learning_query_indexes::Migration),
         ]
     }
 }
