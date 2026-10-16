@@ -1,4 +1,4 @@
-use super::Kind;
+use super::dto::Kind;
 use crate::AppError;
 use std::io::{Cursor, Read};
 fn invalid(kind: Kind) -> AppError {

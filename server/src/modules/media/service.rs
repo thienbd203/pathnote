@@ -1,4 +1,4 @@
-use super::Kind;
+use super::dto::{Kind, MediaResource};
 use crate::{
     entities::{media, places as place_model, sessions},
     modules::{notes::service as notes, places::service as places},
@@ -6,24 +6,6 @@ use crate::{
     AppError,
 };
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
-use serde::Serialize;
-#[derive(Serialize)]
-pub struct MediaResource {
-    pub id: i64,
-    pub name: String,
-    pub mime_type: String,
-    pub size: i64,
-}
-impl From<media::Model> for MediaResource {
-    fn from(m: media::Model) -> Self {
-        Self {
-            id: m.id,
-            name: m.name,
-            mime_type: m.mime_type,
-            size: m.size,
-        }
-    }
-}
 fn io(e: std::io::Error) -> AppError {
     AppError::Internal(format!("Private media storage: {e}"))
 }

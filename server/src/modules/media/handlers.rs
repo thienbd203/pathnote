@@ -1,4 +1,7 @@
-use super::{service, Kind};
+use super::{
+    dto::{Kind, MediaResource},
+    service,
+};
 use crate::{
     access_token::CurrentUser, modules::notes::service as notes, response::ApiResponse,
     state::AppState, AppError,
@@ -15,7 +18,7 @@ async fn upload(
     id: i64,
     kind: Kind,
     mut body: Multipart,
-) -> Result<ApiResponse<service::MediaResource>, AppError> {
+) -> Result<ApiResponse<MediaResource>, AppError> {
     let access = notes::access(s.db.as_ref(), u.id, id, false).await?;
     let mut field = body
         .next_field()
@@ -65,7 +68,7 @@ pub async fn image_upload(
     u: CurrentUser,
     Path(id): Path<i64>,
     body: Multipart,
-) -> Result<ApiResponse<service::MediaResource>, AppError> {
+) -> Result<ApiResponse<MediaResource>, AppError> {
     upload(s, u, id, Kind::Image, body).await
 }
 pub async fn file_upload(
@@ -73,14 +76,14 @@ pub async fn file_upload(
     u: CurrentUser,
     Path(id): Path<i64>,
     body: Multipart,
-) -> Result<ApiResponse<service::MediaResource>, AppError> {
+) -> Result<ApiResponse<MediaResource>, AppError> {
     upload(s, u, id, Kind::File, body).await
 }
 pub async fn info(
     State(s): State<AppState>,
     u: CurrentUser,
     Path((id, m)): Path<(i64, i64)>,
-) -> Result<ApiResponse<service::MediaResource>, AppError> {
+) -> Result<ApiResponse<MediaResource>, AppError> {
     Ok(ApiResponse::ok(
         service::get(&s, u.id, id, Kind::File, m).await?.into(),
     ))

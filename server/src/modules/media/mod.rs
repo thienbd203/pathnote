@@ -1,4 +1,5 @@
 pub(crate) mod cleanup;
+mod dto;
 mod handlers;
 mod service;
 mod storage;
@@ -9,25 +10,6 @@ use axum::{
     routing::{get, post},
     Router,
 };
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Kind {
-    Image,
-    File,
-}
-impl Kind {
-    pub fn field(self) -> &'static str {
-        match self {
-            Self::Image => "image",
-            Self::File => "file",
-        }
-    }
-    pub fn limit(self) -> usize {
-        match self {
-            Self::Image => 5 * 1024 * 1024,
-            Self::File => 10 * 1024 * 1024,
-        }
-    }
-}
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route(
