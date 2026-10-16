@@ -24,6 +24,7 @@ pub enum AppError {
         data: serde_json::Value,
     },
     MethodNotAllowed,
+    RequestTimeout,
     Unauthenticated,
     Forbidden,
     BadRequest(String),
@@ -53,6 +54,10 @@ impl IntoResponse for AppError {
                 data = Some(value);
                 (StatusCode::CONFLICT, message)
             }
+            AppError::RequestTimeout => (
+                StatusCode::REQUEST_TIMEOUT,
+                "Yêu cầu quá thời gian chờ. Bạn hãy thử lại.".into(),
+            ),
             AppError::MethodNotAllowed => (
                 StatusCode::METHOD_NOT_ALLOWED,
                 "Phương thức không được hỗ trợ.".into(),

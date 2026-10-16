@@ -20,7 +20,12 @@ async fn main() {
     let config = Config::from_env();
 
     let mut options = ConnectOptions::new(config.database_url.clone());
-    options.max_connections(10).sqlx_logging(false);
+    options
+        .max_connections(config.database_max_connections)
+        .acquire_timeout(std::time::Duration::from_secs(
+            config.database_acquire_timeout_secs,
+        ))
+        .sqlx_logging(false);
 
     let db = Database::connect(options)
         .await

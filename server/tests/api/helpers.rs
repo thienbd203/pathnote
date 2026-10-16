@@ -74,6 +74,8 @@ impl TestApp {
             cookie_secure: true,
             frontend_url: "https://frontend.example.test".into(),
             bind_addr: "127.0.0.1:3000".into(),
+            database_max_connections: 10,
+            database_acquire_timeout_secs: 5,
             database_url: "sqlite::memory:".into(),
             jwt_private_key_path: "unused-test-path".into(),
             jwt_issuer: "https://api.example.test".into(),

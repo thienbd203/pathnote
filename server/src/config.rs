@@ -14,6 +14,8 @@ pub struct Config {
     pub bind_addr: String,
     pub frontend_url: String,
     pub database_url: String,
+    pub database_max_connections: u32,
+    pub database_acquire_timeout_secs: u64,
     pub jwt_private_key_path: String,
     pub jwt_issuer: String,
     pub jwt_audience: String,
@@ -91,6 +93,10 @@ impl Config {
             bind_addr: optional("APP_BIND", "127.0.0.1:3000"),
             frontend_url,
             database_url: required("DATABASE_URL"),
+            database_max_connections: positive("DATABASE_MAX_CONNECTIONS", 10)
+                .try_into()
+                .expect("DATABASE_MAX_CONNECTIONS quá lớn"),
+            database_acquire_timeout_secs: positive("DATABASE_ACQUIRE_TIMEOUT_SECS", 5),
             jwt_private_key_path: required("JWT_PRIVATE_KEY_PATH"),
             jwt_issuer,
             jwt_audience: required("JWT_AUDIENCE"),
@@ -127,4 +133,12 @@ fn service_url(name: &str) -> Option<String> {
         "Service URL không được chứa thông tin xác thực"
     );
     Some(value.trim_end_matches('/').into())
+}
+
+fn positive(name: &str, default: u64) -> u64 {
+    let value = optional(name, &default.to_string())
+        .parse::<u64>()
+        .unwrap_or_else(|_| panic!("{name} phải là số nguyên dương"));
+    assert!(value > 0, "{name} phải lớn hơn 0");
+    value
 }

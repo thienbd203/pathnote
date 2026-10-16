@@ -1,11 +1,19 @@
+use axum::http::StatusCode;
 use axum::{
     extract::{Request, State},
     http::{header, HeaderValue, Method},
     middleware::{self, Next},
-    response::Response,
+    response::{IntoResponse, Response},
     Router,
 };
-use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use std::time::Duration;
+use tower_http::{
+    compression::CompressionLayer,
+    cors::CorsLayer,
+    request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer},
+    timeout::TimeoutLayer,
+    trace::TraceLayer,
+};
 
 use crate::{
     auth::Backend,
@@ -42,13 +50,26 @@ pub fn build_app<S: SessionStore + Clone>(state: AppState, config: &Config, stor
         .merge(modules::courses::routes())
         .merge(modules::sessions::routes())
         .merge(modules::notes::routes(state.clone()))
-        .merge(modules::media::routes())
         .merge(modules::vocabulary::routes())
         .merge(modules::enrichment::routes())
         .merge(modules::exercises::routes())
         .merge(modules::ai_study::routes())
-        .merge(modules::ipa::routes())
-        .merge(modules::settings::routes());
+        .merge(modules::settings::routes())
+        .layer(TimeoutLayer::with_status_code(
+            StatusCode::REQUEST_TIMEOUT,
+            Duration::from_secs(30),
+        ))
+        // Uploads and imports need a separate budget, outside the default timeout.
+        .merge(
+            modules::media::routes().layer(TimeoutLayer::with_status_code(
+                StatusCode::REQUEST_TIMEOUT,
+                Duration::from_secs(120),
+            )),
+        )
+        .merge(modules::ipa::routes().layer(TimeoutLayer::with_status_code(
+            StatusCode::REQUEST_TIMEOUT,
+            Duration::from_secs(120),
+        )));
 
     Router::new()
         .nest("/api/v1", api)
@@ -57,7 +78,10 @@ pub fn build_app<S: SessionStore + Clone>(state: AppState, config: &Config, stor
         .fallback(route_not_found)
         .method_not_allowed_fallback(|| async { AppError::MethodNotAllowed })
         .layer(cors(&config.frontend_url))
+        .layer(CompressionLayer::new())
+        .layer(PropagateRequestIdLayer::x_request_id())
         .layer(TraceLayer::new_for_http().make_span_with(|request: &Request| tracing::info_span!("http_request", method = %request.method(), path = request.uri().path())))
+        .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
         .with_state(state)
 }
 
@@ -77,6 +101,9 @@ fn cors(frontend_url: &str) -> CorsLayer {
 
 async fn browser_request(request: Request, next: Next) -> Result<Response, AppError> {
     let mut response = next.run(request).await;
+    if response.status() == StatusCode::REQUEST_TIMEOUT {
+        response = AppError::RequestTimeout.into_response();
+    }
     response
         .headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
