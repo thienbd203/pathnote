@@ -96,13 +96,26 @@ pub type CoursePage = Page<CourseResource>;
 
 #[derive(sea_orm::FromQueryResult, Serialize)]
 pub struct SessionStats {
+    #[serde(skip_serializing)]
+    pub(super) title: String,
+    #[serde(skip_serializing)]
+    pub(super) starts_at: chrono::DateTime<chrono::FixedOffset>,
     pub(super) id: i64,
     pub(super) words: i64,
     pub(super) exercises: i64,
 }
 #[derive(Serialize)]
 pub struct CourseStats {
+    pub(super) session_count: usize,
+    pub(super) latest_past_session: Option<LatestSession>,
     pub(super) sessions: Vec<SessionStats>,
     pub(super) words: i64,
     pub(super) exercises: i64,
+}
+
+#[derive(Serialize)]
+pub struct LatestSession {
+    pub(super) id: i64,
+    pub(super) title: String,
+    pub(super) starts_at: chrono::DateTime<chrono::Utc>,
 }

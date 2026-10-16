@@ -333,7 +333,7 @@ async fn library_stats_and_course_decks_follow_ownership_and_current_notes() {
     response.assert_status_ok();
     assert_eq!(
         response.json::<Value>()["data"],
-        json!({"words":1,"exercises":0,"sessions":[{"id":ids[0],"words":1,"exercises":0}]})
+        json!({"words":1,"exercises":0,"session_count":1,"latest_past_session":{"id":ids[0],"title":"Lesson","starts_at":"2026-10-15T11:00:00Z"},"sessions":[{"id":ids[0],"words":1,"exercises":0}]})
     );
     app.api
         .get(&url)

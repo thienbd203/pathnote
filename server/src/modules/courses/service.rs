@@ -190,7 +190,7 @@ pub async fn library_stats(
     model(db, user_id, id).await?;
     let rows = super::dto::SessionStats::find_by_statement(Statement::from_sql_and_values(
         DbBackend::Postgres,
-        r#"SELECT s.id,
+        r#"SELECT s.id, s.title, s.starts_at,
             (SELECT COUNT(DISTINCT node #>> '{attrs,id}')
              FROM jsonb_path_query(n.content, '$.** ? (@.type == "vocabularyEntry")') AS node
              WHERE btrim(COALESCE(node #>> '{attrs,word}', '')) <> '') AS words,
@@ -206,7 +206,18 @@ pub async fn library_stats(
     ))
     .all(db)
     .await?;
+    let latest_past_session = rows
+        .iter()
+        .rev()
+        .find(|row| row.starts_at <= chrono::Utc::now())
+        .map(|row| super::dto::LatestSession {
+            id: row.id,
+            title: row.title.clone(),
+            starts_at: row.starts_at.with_timezone(&chrono::Utc),
+        });
     Ok(super::dto::CourseStats {
+        session_count: rows.len(),
+        latest_past_session,
         words: rows.iter().map(|row| row.words).sum(),
         exercises: rows.iter().map(|row| row.exercises).sum(),
         sessions: rows,
