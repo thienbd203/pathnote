@@ -150,3 +150,13 @@ IPA riêng và xóa nhiều nơi/khóa: [hướng dẫn](plans/08-ipa-and-bulk-u
 Cài đặt cá nhân và giờ học mặc định: [hướng dẫn](plans/09-personal-settings.md).
 
 [Hướng dẫn cấu hình PostgreSQL, systemd, Nginx, pgAdmin và GitHub Actions lần đầu](deploy/README.md).
+
+## Kiến trúc hiện tại
+
+[Chuẩn và kế hoạch kiến trúc](plans/10-architecture.md),
+[báo cáo hoàn thành và kiểm thử](plans/10-architecture-report.md).
+Backend dùng handler/service/DTO, extractor và lỗi JSON chung; frontend theo
+chuẩn tại `../pathnote-web/docs/architecture.md`.
+
+[Flashcard gộp theo từ và loại từ](plans/flashcard-word-groups.md): các bài có
+cùng từ, locale và loại từ dùng chung lịch ôn, gom các nghĩa để hiển thị.
