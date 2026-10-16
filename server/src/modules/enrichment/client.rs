@@ -140,7 +140,7 @@ impl LearningServices {
                     target: "vi",
                     format: "text",
                 },
-                30,
+                20,
             )
             .await?;
         if !valid(&result.translated_text) {

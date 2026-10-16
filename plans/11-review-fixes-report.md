@@ -9,7 +9,9 @@
 
 | P0.3 | 8d69f4c | Checklist chỉ viết tài liệu; không chạy SQL/backup production |
 
-| P1.1 | Commit `Index flashcard meaning lookups and remove redundant index` | Migration up/down test; grouping fixture chọn migration theo tên; Rust fmt/clippy/workspace (101 API pass, 2 ignored) |
+| P1.1 | f58db37 | Migration up/down test; grouping fixture chọn migration theo tên; Rust fmt/clippy/workspace (101 API pass, 2 ignored) |
+
+| P1.2 | Rust: commit `Return gateway timeouts and shorten translation upstream deadline`; Web: d43b896 | Rust fmt/clippy/workspace, test JSON 504; web 190 tests/build/format |
 
 ## Giới hạn và việc người vận hành cần làm
 

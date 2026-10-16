@@ -277,6 +277,8 @@ Mỗi dòng dưới đây là một commit. Hành vi không đổi, test cũ ph�
 | B.4.1 | `GET /courses/{id}/library-stats` | — | Thêm `session_count`, `latest_past_session: {id,title,starts_at} \| null`; lấy cùng truy vấn thống kê hiện có |
 | Sau chuẩn hóa: gộp Flashcard theo từ/loại từ | `GET /flashcards`, `POST /flashcards/next`, `POST /flashcards/{id}/reveal` | Đếm/lên lịch từng nghĩa nguồn; hiển thị một nghĩa | Đếm/lên lịch theo từ chuẩn hóa + locale + loại từ + chiều ôn; `front` Việt–Anh và `back.meaning` gom các nghĩa có quyền truy cập bằng `; `. JSON giữ shape. Frontend đổi nhãn `Nghĩa` thành `Mục ôn`. Chi tiết: `plans/flashcard-word-groups.md` |
 
+| Review 11 P1.2 | mọi route quá thời gian | HTTP 408 | HTTP 504, giữ message; upstream dịch 20s, web 28s, route 30s |
+
 ### Điều kiện hoàn thành
 
 - `rg "JsonRejection|QueryRejection" server/src/modules` chỉ còn trong các ngoại lệ có comment.

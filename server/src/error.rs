@@ -55,7 +55,7 @@ impl IntoResponse for AppError {
                 (StatusCode::CONFLICT, message)
             }
             AppError::RequestTimeout => (
-                StatusCode::REQUEST_TIMEOUT,
+                StatusCode::GATEWAY_TIMEOUT,
                 "Yêu cầu quá thời gian chờ. Bạn hãy thử lại.".into(),
             ),
             AppError::MethodNotAllowed => (
@@ -111,5 +111,24 @@ impl AppError {
             field.to_owned(),
             vec![message.to_owned()],
         )]))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn route_timeout_is_gateway_timeout_with_the_existing_json_message() {
+        let response = AppError::RequestTimeout.into_response();
+        assert_eq!(response.status(), StatusCode::GATEWAY_TIMEOUT);
+        let bytes = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            body["message"],
+            "Yêu cầu quá thời gian chờ. Bạn hãy thử lại."
+        );
     }
 }
