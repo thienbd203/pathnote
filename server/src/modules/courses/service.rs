@@ -9,7 +9,6 @@ use sea_orm::{
     sea_query::{Expr, Func, LikeExpr},
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, JoinType,
     PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, RelationTrait, Select, Set,
-    TransactionTrait,
 };
 
 fn missing() -> AppError {
@@ -103,8 +102,8 @@ pub async fn create(
     dto::validate_dates(input.starts_on, input.ends_on)?;
     let name = dto::validate_name(input.name)?;
     let description = dto::validate_description(input.description)?;
-    let txn = db.begin().await?;
-    let parent = place_service::lock_for_write(&txn, user_id, place_id).await?;
+    let txn = place_service::write_tx(db, user_id, place_id).await?;
+    let parent = place_service::get(&txn, user_id, place_id).await?;
     let now = chrono::Utc::now().fixed_offset();
     let course = courses::ActiveModel {
         place_id: Set(place_id),
@@ -128,8 +127,8 @@ pub async fn update(
     input: UpdateCourse,
 ) -> Result<CourseResource, AppError> {
     let parent_id = model(db, user_id, id).await?.place_id;
-    let txn = db.begin().await?;
-    let parent = place_service::lock_for_write(&txn, user_id, parent_id).await?;
+    let txn = place_service::write_tx(db, user_id, parent_id).await?;
+    let parent = place_service::get(&txn, user_id, parent_id).await?;
     let current = model(&txn, user_id, id).await?;
     let start = match input.starts_on {
         Some(Some(v)) => v,
@@ -161,8 +160,7 @@ pub async fn update(
 }
 pub async fn delete(db: &DatabaseConnection, user_id: i64, id: i64) -> Result<(), AppError> {
     let parent_id = model(db, user_id, id).await?.place_id;
-    let txn = db.begin().await?;
-    place_service::lock_for_write(&txn, user_id, parent_id).await?;
+    let txn = place_service::write_tx(db, user_id, parent_id).await?;
     let current = model(&txn, user_id, id).await?;
     let now = chrono::Utc::now().fixed_offset();
     let mut changes: courses::ActiveModel = current.into();

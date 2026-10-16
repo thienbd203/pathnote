@@ -5,7 +5,7 @@ use crate::{
     state::AppState,
     AppError,
 };
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TransactionTrait};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use serde::Serialize;
 #[derive(Serialize)]
 pub struct MediaResource {
@@ -79,8 +79,7 @@ pub(super) async fn create(
         .await
         .map_err(|e| AppError::Internal(e.to_string()))??;
     let result = async {
-        let txn = state.db.begin().await?;
-        places::lock_for_write(&txn, place.user_id, place.id).await?;
+        let txn = places::write_tx(&state.db, place.user_id, place.id).await?;
         notes::access(&txn, user, id, false).await?;
         let model = media::ActiveModel {
             session_id: Set(id),

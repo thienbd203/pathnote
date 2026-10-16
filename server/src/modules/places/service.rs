@@ -98,6 +98,17 @@ pub async fn update(
         .next()
         .ok_or_else(not_found)
 }
+/// Serialize writes to a learning hierarchy under its owner place lock.
+pub(in crate::modules) async fn write_tx(
+    db: &DatabaseConnection,
+    user_id: i64,
+    place_id: i64,
+) -> Result<sea_orm::DatabaseTransaction, AppError> {
+    let txn = db.begin().await?;
+    lock_for_write(&txn, user_id, place_id).await?;
+    Ok(txn)
+}
+
 pub async fn lock_for_write(
     db: &DatabaseTransaction,
     user_id: i64,
@@ -111,8 +122,7 @@ pub async fn lock_for_write(
         .ok_or_else(not_found)
 }
 pub async fn delete(db: &DatabaseConnection, user_id: i64, id: i64) -> Result<(), AppError> {
-    let txn = db.begin().await?;
-    lock_for_write(&txn, user_id, id).await?;
+    let txn = write_tx(db, user_id, id).await?;
     let now = chrono::Utc::now().fixed_offset();
     use crate::entities::sessions;
     sessions::Entity::update_many()

@@ -9,7 +9,7 @@ use sea_orm::{
     sea_query::{Expr, Func, LikeExpr, Query},
     ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, EntityTrait,
     JoinType, ModelTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, RelationTrait,
-    Select, Set, TransactionTrait,
+    Select, Set,
 };
 use serde_json::json;
 fn missing() -> AppError {
@@ -104,9 +104,7 @@ pub async fn save(
             "Phiên bản ghi chép không hợp lệ.",
         ));
     }
-    let txn = db.begin().await?;
-    // Share/revoke/delete use the same parent lock; recheck access after waiting.
-    place_service::lock_for_write(&txn, place.user_id, place.id).await?;
+    let txn = place_service::write_tx(db, place.user_id, place.id).await?;
     access(&txn, user, id, false).await?;
     validate_references(&txn, id, &references).await?;
     let current = note(&txn, id).await?;
@@ -180,8 +178,7 @@ pub async fn invite(
     email: String,
 ) -> Result<Member, AppError> {
     let (_, place) = access(db, user, id, true).await?;
-    let txn = db.begin().await?;
-    place_service::lock_for_write(&txn, user, place.id).await?;
+    let txn = place_service::write_tx(db, user, place.id).await?;
     access(&txn, user, id, true).await?;
     let email = email.trim().to_lowercase();
     if email.len() > 255 || !email.contains('@') {
@@ -229,8 +226,7 @@ pub async fn revoke(
     member: i64,
 ) -> Result<(), AppError> {
     let (_, place) = access(db, user, id, true).await?;
-    let txn = db.begin().await?;
-    place_service::lock_for_write(&txn, user, place.id).await?;
+    let txn = place_service::write_tx(db, user, place.id).await?;
     access(&txn, user, id, true).await?;
     note_collaborators::Entity::delete_by_id((id, member))
         .exec(&txn)

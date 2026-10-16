@@ -28,7 +28,6 @@ use axum::{
 use sea_orm::{
     sea_query::{LockType, OnConflict},
     ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QuerySelect, Set,
-    TransactionTrait,
 };
 use serde_json::{json, Value};
 use uuid::Uuid;
@@ -219,8 +218,7 @@ async fn reveal(
     let t = ticket(s.db.as_ref(), user.id, id, false).await?;
     let c = card(s.db.as_ref(), user.id, &t).await?;
     let (_, place) = notes::access(s.db.as_ref(), user.id, c.session_id, false).await?;
-    let txn = s.db.begin().await?;
-    places::lock_for_write(&txn, place.user_id, place.id).await?;
+    let txn = places::write_tx(&s.db, place.user_id, place.id).await?;
     let t = ticket(&txn, user.id, id, true).await?;
     let c = card(&txn, user.id, &t).await?;
     let profile = personal::for_ticket(&t)?;
@@ -258,8 +256,7 @@ async fn grade(
     let t = ticket(s.db.as_ref(), user.id, id, false).await?;
     let c = card(s.db.as_ref(), user.id, &t).await?;
     let (_, place) = notes::access(s.db.as_ref(), user.id, c.session_id, false).await?;
-    let txn = s.db.begin().await?;
-    places::lock_for_write(&txn, place.user_id, place.id).await?;
+    let txn = places::write_tx(&s.db, place.user_id, place.id).await?;
     // Serializes updates to this user's memory, including two independently opened cards.
     users::Entity::find_by_id(user.id)
         .lock(LockType::Update)

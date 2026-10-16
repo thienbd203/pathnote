@@ -6,7 +6,7 @@ use crate::{
 };
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DatabaseTransaction,
-    EntityTrait, QueryFilter, QueryOrder, Set, TransactionTrait,
+    EntityTrait, QueryFilter, QueryOrder, Set,
 };
 use serde_json::{json, Value};
 fn missing() -> AppError {
@@ -21,8 +21,7 @@ async fn lock(
     session: i64,
 ) -> Result<(DatabaseTransaction, i64), AppError> {
     let (_, place) = notes::access(db, user, session, false).await?;
-    let txn = db.begin().await?;
-    place_service::lock_for_write(&txn, place.user_id, place.id).await?;
+    let txn = place_service::write_tx(db, place.user_id, place.id).await?;
     let (_, place) = notes::access(&txn, user, session, false).await?;
     Ok((txn, place.user_id))
 }

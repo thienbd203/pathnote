@@ -12,7 +12,6 @@ use sea_orm::{
     sea_query::{Expr, Func, LikeExpr},
     ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, EntityTrait,
     JoinType, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, RelationTrait, Select, Set,
-    TransactionTrait,
 };
 #[derive(Clone, Copy)]
 pub enum Parent {
@@ -216,8 +215,7 @@ pub async fn create(
     let title = dto::title(input.title)?;
     let initial_content =
         super::initial_note::prepare(db, user, initial_course, &input.initial_note).await?;
-    let txn = db.begin().await?;
-    place_service::lock_for_write(&txn, user, place_id).await?;
+    let txn = place_service::write_tx(db, user, place_id).await?;
     let (_, course_id) = parent(&txn, user, scope).await?;
     if let dto::InitialNote::Structure { session_id } = &input.initial_note {
         let source = model(&txn, user, *session_id).await?;
@@ -265,8 +263,7 @@ pub async fn update(
     input: UpdateSession,
 ) -> Result<SessionResource, AppError> {
     let place_id = model(db, user, id).await?.place_id;
-    let txn = db.begin().await?;
-    place_service::lock_for_write(&txn, user, place_id).await?;
+    let txn = place_service::write_tx(db, user, place_id).await?;
     let current = model(&txn, user, id).await?;
     let changes_time = input.starts_at.is_some() || input.duration_minutes.is_some();
     let start = match input.starts_at {
@@ -320,8 +317,7 @@ pub async fn update(
 }
 pub async fn delete(db: &DatabaseConnection, user: i64, id: i64) -> Result<(), AppError> {
     let place_id = model(db, user, id).await?.place_id;
-    let txn = db.begin().await?;
-    place_service::lock_for_write(&txn, user, place_id).await?;
+    let txn = place_service::write_tx(db, user, place_id).await?;
     let current = model(&txn, user, id).await?;
     let now = chrono::Utc::now().fixed_offset();
     let mut changes: sessions::ActiveModel = current.into();
