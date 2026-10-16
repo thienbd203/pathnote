@@ -25,7 +25,7 @@ async fn ipa_words_are_private_locale_scoped_paginated_trimmed_and_duplicate_imp
         .json(&body)
         .await;
     r.assert_status_ok();
-    assert_eq!(r.json::<Value>()["meta"]["added"], 131);
+    assert_eq!(r.json::<Value>()["data"]["added"], 131);
     let r = app
         .api
         .get("/api/v1/ipa-vocabulary?locale=en-US")
@@ -39,7 +39,10 @@ async fn ipa_words_are_private_locale_scoped_paginated_trimmed_and_duplicate_imp
             .len(),
         100
     );
-    assert_eq!(r.json::<Value>()["meta"]["last_page"], 2);
+    assert_eq!(
+        r.json::<Value>()["meta"],
+        json!({"current_page":1,"last_page":2,"per_page":100,"total":131})
+    );
     let r = app
         .api
         .get("/api/v1/ipa-vocabulary?locale=en-US&page=2")
@@ -67,9 +70,9 @@ async fn ipa_words_are_private_locale_scoped_paginated_trimmed_and_duplicate_imp
     );
     a.assert_status_ok();
     b.assert_status_ok();
-    assert_eq!(a.json::<Value>()["meta"]["added"], 0);
+    assert_eq!(a.json::<Value>()["data"]["added"], 0);
     assert_eq!(
-        b.json::<Value>()["meta"]["skipped"]
+        b.json::<Value>()["data"]["skipped"]
             .as_array()
             .unwrap()
             .len(),
@@ -103,7 +106,7 @@ async fn ipa_pairs_validate_phonemes_reverse_orientation_and_reject_all_invalid_
         .json(&body)
         .await;
     r.assert_status_ok();
-    assert_eq!(r.json::<Value>()["meta"]["added"], 1);
+    assert_eq!(r.json::<Value>()["data"]["added"], 1);
     let mut reverse = body.clone();
     reverse["sounds"] = json!(["ɪ", "iː"]);
     reverse["pairs"][0] =
@@ -115,7 +118,7 @@ async fn ipa_pairs_validate_phonemes_reverse_orientation_and_reject_all_invalid_
         .json(&reverse)
         .await;
     r.assert_status_ok();
-    assert_eq!(r.json::<Value>()["meta"]["added"], 0);
+    assert_eq!(r.json::<Value>()["data"]["added"], 0);
     let r = app
         .api
         .get("/api/v1/ipa-pairs?locale=en-GB")

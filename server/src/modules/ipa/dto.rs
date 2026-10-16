@@ -127,3 +127,38 @@ pub fn key(word: &str) -> String {
 pub fn value<T: Serialize>(data: &T) -> Result<Value, AppError> {
     serde_json::to_value(data).map_err(|e| AppError::Internal(e.to_string()))
 }
+
+#[derive(Serialize)]
+#[serde(untagged)]
+pub enum LibraryData {
+    Words {
+        version: u8,
+        locale: String,
+        entries: Vec<Entry>,
+    },
+    Pairs {
+        version: u8,
+        locale: String,
+        sets: Vec<PairSet>,
+    },
+}
+#[derive(Serialize)]
+pub struct PairSet {
+    pub sounds: [String; 2],
+    pub pairs: Vec<PairContent>,
+}
+#[derive(Serialize)]
+pub struct PairContent {
+    pub left: Entry,
+    pub right: Entry,
+}
+#[derive(Serialize)]
+pub struct ListResource {
+    pub data: LibraryData,
+    pub meta: crate::pagination::PageMeta,
+}
+#[derive(Serialize)]
+pub struct ImportResource {
+    pub added: usize,
+    pub skipped: Vec<String>,
+}
