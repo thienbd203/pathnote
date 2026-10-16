@@ -1,8 +1,9 @@
-mod client;
+pub(crate) mod client;
+mod dto;
 mod handlers;
+mod service;
 use crate::state::AppState;
 use axum::{routing::post, Router};
-pub use client::LearningServices;
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/sessions/{id}/pronunciation", post(handlers::ipa))

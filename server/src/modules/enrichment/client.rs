@@ -1,5 +1,6 @@
+use super::dto::*;
 use crate::{config::Config, AppError};
-use serde_json::{json, Value};
+use serde::{de::DeserializeOwned, Serialize};
 use std::{collections::HashMap, time::Duration};
 pub struct LearningServices {
     http: reqwest::Client,
@@ -9,14 +10,12 @@ pub struct LearningServices {
 fn unavailable() -> AppError {
     AppError::Unavailable("Dịch vụ học tập chưa sẵn sàng. Bạn có thể nhập tay hoặc thử lại.".into())
 }
-fn valid(value: &Value) -> bool {
-    value.as_str().is_some_and(|s| {
-        !s.trim().is_empty()
-            && s.chars().count() <= 6000
-            && !s
-                .chars()
-                .any(|c| c.is_control() && !matches!(c, '\n' | '\t'))
-    })
+fn valid(s: &str) -> bool {
+    !s.trim().is_empty()
+        && s.chars().count() <= 6000
+        && !s
+            .chars()
+            .any(|c| c.is_control() && !matches!(c, '\n' | '\t'))
 }
 impl LearningServices {
     pub fn new(config: &Config) -> Result<Self, reqwest::Error> {
@@ -33,13 +32,13 @@ impl LearningServices {
     pub fn enabled(&self) -> bool {
         self.pronunciation.is_some() && self.translation.is_some()
     }
-    async fn post(
+    async fn post<B: Serialize, R: DeserializeOwned>(
         &self,
         base: &Option<String>,
         path: &str,
-        body: Value,
+        body: B,
         timeout: u64,
-    ) -> Result<Value, AppError> {
+    ) -> Result<R, AppError> {
         let base = base.as_ref().ok_or_else(unavailable)?;
         let mut response = self
             .http
@@ -61,71 +60,97 @@ impl LearningServices {
         }
         serde_json::from_slice(&bytes).map_err(|_| unavailable())
     }
-    pub async fn ipa(&self, text: &str, locale: &str) -> Result<Value, AppError> {
-        let result = self
+
+    pub async fn ipa(&self, text: &str, locale: &str) -> Result<IpaResource, AppError> {
+        let result: UpstreamIpa = self
             .post(
                 &self.pronunciation,
                 "/ipa",
-                json!({"text":text,"locale":locale}),
+                Ipa {
+                    text: text.into(),
+                    locale: locale.into(),
+                },
                 6,
             )
             .await?;
-        if result["locale"] != locale || !valid(&result["ipa"]) {
+        if result.locale != locale || !valid(&result.ipa) {
             return Err(unavailable());
         }
-        Ok(json!({"ipa":result["ipa"],"locale":locale,"engine":"espeak-ng"}))
+        Ok(IpaResource {
+            ipa: result.ipa,
+            locale: locale.into(),
+            engine: "espeak-ng",
+        })
     }
-    pub async fn batch(&self, texts: &[String], locale: &str) -> Result<Value, AppError> {
+    pub async fn batch(&self, texts: &[String], locale: &str) -> Result<BatchResource, AppError> {
         let mut unique = Vec::new();
         for text in texts {
             if !unique.contains(text) {
                 unique.push(text.clone());
             }
         }
-        let result = self
+        let result: UpstreamBatch = self
             .post(
                 &self.pronunciation,
                 "/ipa/batch",
-                json!({"texts":unique,"locale":locale}),
+                Batch {
+                    texts: unique.clone(),
+                    locale: locale.into(),
+                },
                 15,
             )
             .await?;
-        let rows = result["results"].as_array().ok_or_else(unavailable)?;
-        if result["locale"] != locale || rows.len() != unique.len() {
+        if result.locale != locale || result.results.len() != unique.len() {
             return Err(unavailable());
         }
         let mut answers = HashMap::new();
-        for (row, text) in rows.iter().zip(&unique) {
-            if row["text"] != *text {
+        for (row, text) in result.results.into_iter().zip(&unique) {
+            if row.text != *text {
                 return Err(unavailable());
             }
-            let answer = if valid(&row["ipa"]) {
-                json!({"text":text,"ipa":row["ipa"]})
-            } else if row.get("ipa").is_none() && row["error"] == "generation_failed" {
-                json!({"text":text,"error":"Chưa tạo được IPA. Bạn hãy thử lại."})
-            } else {
-                return Err(unavailable());
+            let answer = match row.ipa {
+                Some(ipa) if valid(&ipa) => BatchItemResource::Success {
+                    text: text.clone(),
+                    ipa,
+                },
+                None if row.error.as_deref() == Some("generation_failed") => {
+                    BatchItemResource::Error {
+                        text: text.clone(),
+                        error: "Chưa tạo được IPA. Bạn hãy thử lại.".into(),
+                    }
+                }
+                _ => return Err(unavailable()),
             };
             answers.insert(text, answer);
         }
-        Ok(
-            json!({"locale":locale,"engine":"espeak-ng","results":texts.iter().map(|t| answers[t].clone()).collect::<Vec<_>>()}),
-        )
+        Ok(BatchResource {
+            locale: locale.into(),
+            engine: "espeak-ng",
+            results: texts.iter().map(|text| answers[text].clone()).collect(),
+        })
     }
-    pub async fn translate(&self, text: &str) -> Result<Value, AppError> {
-        let result = self
+    pub async fn translate(&self, text: &str) -> Result<TranslationResource, AppError> {
+        let result: UpstreamTranslation = self
             .post(
                 &self.translation,
                 "/translate",
-                json!({"q":text,"source":"en","target":"vi","format":"text"}),
+                TranslationRequest {
+                    q: text,
+                    source: "en",
+                    target: "vi",
+                    format: "text",
+                },
                 30,
             )
             .await?;
-        if !valid(&result["translatedText"]) {
+        if !valid(&result.translated_text) {
             return Err(unavailable());
         }
-        Ok(
-            json!({"meaning":result["translatedText"],"source":"en","target":"vi","engine":"libretranslate"}),
-        )
+        Ok(TranslationResource {
+            meaning: result.translated_text,
+            source: "en",
+            target: "vi",
+            engine: "libretranslate",
+        })
     }
 }
