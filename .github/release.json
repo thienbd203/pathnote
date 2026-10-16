@@ -1,4 +1,5 @@
 {
   "frontend_repository": "thienbd203/pathnote-web",
-  "frontend_sha": "246afddc2feae670e093d698a2e086c37da0e062"
+  "frontend_sha": "246afddc2feae670e093d698a2e086c37da0e062",
+  "breaking_migration": true
 }

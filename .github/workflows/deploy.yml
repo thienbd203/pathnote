@@ -25,6 +25,7 @@ jobs:
       frontend_sha: ${{ steps.pair.outputs.frontend_sha }}
       backend_sha: ${{ steps.pair.outputs.backend_sha }}
       release_id: ${{ steps.pair.outputs.release_id }}
+      breaking_migration: ${{ steps.pair.outputs.breaking_migration }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -221,6 +222,7 @@ jobs:
           SSH_USER: ${{ secrets.SSH_USER }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
           RELEASE: ${{ needs.release.outputs.release_id }}
+          BREAKING_MIGRATION: ${{ needs.release.outputs.breaking_migration }}
         run: |
           set -euo pipefail
           : "${SSH_HOST:?Missing SSH_HOST}" "${SSH_USER:?Missing SSH_USER}" "${SSH_PORT:?Missing SSH_PORT}"
@@ -236,7 +238,7 @@ jobs:
           rsync -az --delete --chmod=D750,F640 \
             -e "ssh -i $HOME/.ssh/id_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -p $SSH_PORT" \
             artifact/ "$SSH_USER@$SSH_HOST:$RELEASE_PATH/"
-          printf -v DEPLOY_COMMAND 'bash -s -- %q %q %q %q' "$DEPLOY_PATH" "$RELEASE" "$HEALTHCHECK_URL" "$GITHUB_SHA"
+          printf -v DEPLOY_COMMAND 'bash -s -- %q %q %q %q %q' "$DEPLOY_PATH" "$RELEASE" "$HEALTHCHECK_URL" "$GITHUB_SHA" "$BREAKING_MIGRATION"
           "${SSH[@]}" "$SSH_USER@$SSH_HOST" "$DEPLOY_COMMAND" < .github/deploy.sh
       - name: Remove SSH credentials
         if: always()

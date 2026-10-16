@@ -107,7 +107,8 @@ tạo hoặc thay đổi chúng.
 
 - Check hoặc build một bên lỗi: không chạy bước triển khai của cả hai bên.
 - Backend triển khai hoặc healthcheck lỗi: frontend mới không được kích hoạt.
-  Script backend giữ cơ chế khôi phục **code** cũ hiện có.
+  Chỉ khôi phục **code** cũ với migration tương thích. Chế độ breaking giữ
+  service dừng nếu migration đã bắt đầu, chờ người vận hành phục hồi DB.
 - Frontend lỗi: script frontend khôi phục bản frontend cũ; backend mới đã khỏe
   vẫn được giữ lại. Job báo thất bại để có thể sửa và phát hành lại.
 - Kiểm tra backend trả bản cũ hoặc database không khỏe cũng là lỗi; chỉ HTTP 200
@@ -164,3 +165,22 @@ Sau restore thành công, trỏ `current` về release cũ khớp schema rồi k
 service và kiểm tra health. Nếu DB ngoài máy hoặc khác tên/role, sửa kết nối đích;
 không dùng nguyên ví dụ. Restore quay dữ liệu về thời điểm backup, cần cân nhắc
 các lượt ghi mới sau đó. Dump này không chứa roles và không thay backup định kỳ.
+
+## Migration không tương thích ngược
+
+Manifest bắt buộc có boolean JSON `breaking_migration`. Release đầu tiên chứa
+`m20261016_*` đang đặt `true`. Mọi migration thêm NOT NULL không có default,
+xóa/đổi dữ liệu hoặc làm binary cũ không thể chạy đều phải bật cờ này.
+Với `true`: dừng Rust → backup → migration → đổi current → khởi động → health.
+Với `false`: backup → migration khi binary cũ phục vụ → đổi current → restart;
+chỉ dùng nếu schema còn tương thích binary cũ, kể cả khi rollback code.
+
+- Lỗi trước khi bắt đầu migration: nếu đã dừng và có release cũ, khởi động lại
+  release đó; lần cài đầu giữ service dừng.
+- Lệnh migration đã được gọi, kể cả trả lỗi giữa chừng: giữ service dừng,
+  không đổi current về code cũ. Health thất bại cũng giữ service dừng.
+  Script báo tên dump và lệnh restore mẫu; người vận hành xác minh DB và dừng
+  mọi writer, restore thành công rồi chọn code khớp schema mới được restart.
+
+Cờ true vẫn được giữ cho tới khi người vận hành xác nhận migration đầu đã chạy
+và release tiếp theo chỉ chứa thay đổi tương thích. Không tự đổi false sau build.

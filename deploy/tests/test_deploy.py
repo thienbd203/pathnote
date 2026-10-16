@@ -64,8 +64,8 @@ class DeployTests(unittest.TestCase):
         names = ['server', 'migration', 'healthcheck.py', 'deploy-version.txt', 'build-target.txt']
         (path / 'SHA256SUMS').write_text(''.join(hashlib.sha256((path / name).read_bytes()).hexdigest() + '  ' + name + '\n' for name in names))
 
-    def run_deploy(self):
-        return subprocess.run(['bash', str(SCRIPT), str(self.root), NEW, 'https://example.com/health', SHA], env=self.env, capture_output=True, text=True)
+    def run_deploy(self, breaking=False):
+        return subprocess.run(['bash', str(SCRIPT), str(self.root), NEW, 'https://example.com/health', SHA, 'true' if breaking else 'false'], env=self.env, capture_output=True, text=True)
 
     def assert_current(self, release):
         self.assertEqual((self.root / 'current').resolve(), self.root / 'releases' / release)
@@ -115,6 +115,50 @@ class DeployTests(unittest.TestCase):
         self.assertNotEqual(self.run_deploy().returncode, 0)
         self.assert_current(OLD)
         self.assertNotIn('migration', self.log.read_text())
+
+    def test_breaking_success_stops_before_backup_then_migrates_and_activates(self):
+        result = self.run_deploy(breaking=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assert_current(NEW)
+        calls = self.log.read_text()
+        self.assertLess(calls.index('stop pathnote-rust.service'), calls.index('backup'))
+        self.assertLess(calls.index('backup'), calls.index('migration'))
+        self.assertLess(calls.index('migration'), calls.index('restart pathnote-rust.service'))
+
+    def test_breaking_backup_failure_restarts_old_code_without_migration(self):
+        self.env['BACKUP_STATUS'] = '1'
+        result = self.run_deploy(breaking=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assert_current(OLD)
+        calls = self.log.read_text()
+        self.assertNotIn('migration', calls)
+        self.assertEqual(calls.count('restart pathnote-rust.service'), 1)
+        self.assertIn('Migration was not started', result.stderr)
+
+    def test_breaking_migration_failure_stays_stopped_without_code_rollback(self):
+        self.release(NEW, migration_fail=True)
+        result = self.run_deploy(breaking=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assert_current(OLD)
+        self.assertNotIn('restart', self.log.read_text())
+        self.assertIn('pg_restore', result.stderr)
+        self.assertIn(NEW + '.dump', result.stderr)
+
+    def test_breaking_health_failure_stops_new_code_and_never_restarts_old(self):
+        self.release(NEW, health_fail=True)
+        result = self.run_deploy(breaking=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assert_current(NEW)
+        calls = self.log.read_text()
+        self.assertEqual(calls.count('restart pathnote-rust.service'), 1)
+        self.assertEqual(calls.count('stop pathnote-rust.service'), 2)
+        self.assertIn('will NOT be restored', result.stderr)
+
+    def test_breaking_first_deploy_backup_failure_does_not_start_any_service(self):
+        (self.root / 'current').unlink()
+        self.env['BACKUP_STATUS'] = '1'
+        self.assertNotEqual(self.run_deploy(breaking=True).returncode, 0)
+        self.assertNotIn('restart', self.log.read_text())
 
     def test_pruning_keeps_previous_and_unrelated_directories(self):
         for name in ('20261012000000-40-1', '20261011000000-39-1', 'manual-backup'):

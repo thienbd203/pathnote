@@ -5,6 +5,7 @@ DEPLOY_PATH=${1:?Deploy path required}
 RELEASE=${2:?Release required}
 HEALTHCHECK_URL=${3:?Public health URL required}
 COMMIT_SHA=${4:?Commit SHA required}
+BREAKING_MIGRATION=${5:?Breaking migration flag required}
 SERVICE=pathnote-rust.service
 APP_USER=pathnote
 
@@ -12,6 +13,7 @@ APP_USER=pathnote
 [[ "$RELEASE" =~ ^[0-9]{14}-[0-9]+-[0-9]+$ ]]
 [[ "$HEALTHCHECK_URL" =~ ^https://[a-zA-Z0-9.-]+(:[0-9]+)?/health$ ]]
 [[ "$COMMIT_SHA" =~ ^[a-f0-9]{40}$ ]]
+[[ "$BREAKING_MIGRATION" == true || "$BREAKING_MIGRATION" == false ]]
 SHARED="$DEPLOY_PATH/shared"
 RELEASE_PATH="$DEPLOY_PATH/releases/$RELEASE"
 test -d "$RELEASE_PATH" && test ! -L "$RELEASE_PATH"
@@ -32,6 +34,8 @@ if [[ -L "$DEPLOY_PATH/current" ]]; then
   PREVIOUS_RELEASE=$(readlink -f "$DEPLOY_PATH/current" || true)
 fi
 SWITCHED=false
+STOPPED=false
+MIGRATION_STARTED=false
 
 switch_release() {
   ln -sfn "$1" "$DEPLOY_PATH/.current-$RELEASE"
@@ -40,7 +44,17 @@ switch_release() {
 on_exit() {
   local status=$?
   trap - EXIT HUP INT TERM
-  if (( status != 0 )) && [[ "$SWITCHED" == true ]]; then
+  if (( status != 0 )) && [[ "$BREAKING_MIGRATION" == true && "$MIGRATION_STARTED" == true ]]; then
+    sudo -n systemctl stop "$SERVICE" || echo 'Could not stop service; operator intervention required.' >&2
+    echo 'Breaking migration started; previous code will NOT be restored. Keep all writers stopped until recovery.' >&2
+    echo "Recovery dump: $DEPLOY_PATH/backups/$RELEASE.dump" >&2
+    echo "After verifying the target database, restore with: sudo cat '$DEPLOY_PATH/backups/$RELEASE.dump' | sudo -u postgres pg_restore --exit-on-error --single-transaction --clean --if-exists --dbname=pathnote_rust" >&2
+  elif (( status != 0 )) && [[ "$STOPPED" == true && "$SWITCHED" == false ]]; then
+    if [[ -n "$PREVIOUS_RELEASE" && -d "$PREVIOUS_RELEASE" ]]; then
+      sudo -n systemctl restart "$SERVICE" || echo 'Previous service failed to restart.' >&2
+      echo 'Migration was not started; previous code restarted.' >&2
+    fi
+  elif (( status != 0 )) && [[ "$SWITCHED" == true ]]; then
     if [[ -n "$PREVIOUS_RELEASE" && -d "$PREVIOUS_RELEASE" ]]; then
       switch_release "$PREVIOUS_RELEASE"
       sudo -n systemctl restart "$SERVICE" || echo 'Previous Rust service failed to restart.' >&2
@@ -51,7 +65,7 @@ on_exit() {
       echo 'First deployment failed; failed service stopped.' >&2
     fi
   fi
-  if (( status != 0 )); then
+  if (( status != 0 )) && [[ "$BREAKING_MIGRATION" == false ]]; then
     echo 'Database migrations are retained; use backward-compatible schema changes.' >&2
   fi
   exit "$status"
@@ -76,7 +90,13 @@ ln -s "$SHARED/.env" .env
 sudo -n -u "$APP_USER" test -r "$SHARED/.env"
 sudo -n -u "$APP_USER" test -r "$SHARED/keys/access-token.pem"
 sudo -n -u "$APP_USER" test -w "$SHARED/media"
+if [[ "$BREAKING_MIGRATION" == true ]]; then
+  STOPPED=true
+  sudo -n systemctl stop "$SERVICE"
+fi
 sudo -n /usr/local/sbin/pathnote-db-backup "$RELEASE"
+# A migration can partially modify the database before returning an error.
+MIGRATION_STARTED=true
 sudo -n -u "$APP_USER" "$RELEASE_PATH/migration" up
 
 SWITCHED=true

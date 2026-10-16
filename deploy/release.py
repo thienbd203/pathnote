@@ -12,8 +12,10 @@ FRONTEND_REPOSITORY = "thienbd203/pathnote-web"
 
 def resolve(path: Path, backend_sha: str, run_id: str, attempt: str) -> dict[str, str]:
     manifest = json.loads(path.read_text())
-    if not isinstance(manifest, dict) or set(manifest) != {"frontend_repository", "frontend_sha"}:
-        raise ValueError("Release manifest must contain only frontend_repository and frontend_sha")
+    if not isinstance(manifest, dict) or set(manifest) != {"frontend_repository", "frontend_sha", "breaking_migration"}:
+        raise ValueError("Release manifest must contain frontend_repository, frontend_sha and breaking_migration")
+    if type(manifest['breaking_migration']) is not bool:
+        raise ValueError("breaking_migration must be a JSON boolean")
     if manifest["frontend_repository"] != FRONTEND_REPOSITORY:
         raise ValueError("Unexpected frontend repository")
     for value in (backend_sha, manifest["frontend_sha"]):
@@ -24,6 +26,7 @@ def resolve(path: Path, backend_sha: str, run_id: str, attempt: str) -> dict[str
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M%S")
     return {
         **manifest,
+        "breaking_migration": str(manifest['breaking_migration']).lower(),
         "backend_sha": backend_sha,
         "release_id": f"{stamp}-{run_id}-{attempt}",
     }
@@ -39,6 +42,7 @@ def main() -> None:
         summary.write("## Selected release pair\n\n")
         summary.write(f"- Backend: `{release['backend_sha']}`\n")
         summary.write(f"- Frontend: `{release['frontend_sha']}`\n\n")
+        summary.write(f"- Breaking migration: `{release['breaking_migration']}`\n\n")
         summary.write("Both builds must succeed before backend deployment. Frontend deployment also requires a healthy backend of this exact version.\n")
 
 

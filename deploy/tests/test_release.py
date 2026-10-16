@@ -22,7 +22,7 @@ class ReleaseManifestTests(unittest.TestCase):
         self.addCleanup(directory.cleanup)
         self.root = Path(directory.name)
         self.manifest = self.root / 'release.json'
-        self.write({'frontend_repository': release.FRONTEND_REPOSITORY, 'frontend_sha': FRONTEND_SHA})
+        self.write({'frontend_repository': release.FRONTEND_REPOSITORY, 'frontend_sha': FRONTEND_SHA, 'breaking_migration': True})
 
     def write(self, data):
         self.manifest.write_text(json.dumps(data))
@@ -31,6 +31,7 @@ class ReleaseManifestTests(unittest.TestCase):
         result = release.resolve(self.manifest, SHA, '42', '1')
         self.assertEqual(result['frontend_sha'], FRONTEND_SHA)
         self.assertEqual(result['backend_sha'], SHA)
+        self.assertEqual(result['breaking_migration'], 'true')
         self.assertRegex(result['release_id'], r'^\d{14}-42-1$')
 
     def test_moving_refs_wrong_repositories_and_unexpected_fields_are_rejected(self):
@@ -46,6 +47,14 @@ class ReleaseManifestTests(unittest.TestCase):
                 self.write(data)
                 with self.assertRaises(ValueError):
                     release.resolve(self.manifest, SHA, '42', '1')
+
+    def test_breaking_flag_requires_an_explicit_json_boolean(self):
+        for flag in ('true', 'false', 0, 1, None):
+            self.write({'frontend_repository': release.FRONTEND_REPOSITORY, 'frontend_sha': FRONTEND_SHA, 'breaking_migration': flag})
+            with self.assertRaises(ValueError):
+                release.resolve(self.manifest, SHA, '42', '1')
+        self.write({'frontend_repository': release.FRONTEND_REPOSITORY, 'frontend_sha': FRONTEND_SHA, 'breaking_migration': False})
+        self.assertEqual(release.resolve(self.manifest, SHA, '42', '1')['breaking_migration'], 'false')
 
     def test_invalid_backend_revision_or_run_id_cannot_enter_action_outputs(self):
         for sha, run_id, attempt in [('master', '42', '1'), (SHA, '42\nbad', '1'), (SHA, '42', '-1')]:
@@ -92,6 +101,10 @@ class ReleaseWorkflowTests(unittest.TestCase):
         # Frontend preparation can run while Rust checks/release compilation run.
         self.assertEqual(self.jobs['build-frontend']['needs'], 'release')
         self.assertFalse(self.workflow['concurrency']['cancel-in-progress'])
+        backend = self.jobs['deploy-backend']
+        activation = next(step for step in backend['steps'] if step.get('name') == 'Upload and activate release')
+        self.assertEqual(activation['env']['BREAKING_MIGRATION'], '${{ needs.release.outputs.breaking_migration }}')
+        self.assertIn('\"$BREAKING_MIGRATION\"', activation['run'])
 
     def test_frontend_checkout_and_activation_use_the_same_pinned_revision(self):
         checkout = self.jobs['build-frontend']['steps'][0]['with']
