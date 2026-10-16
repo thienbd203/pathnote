@@ -1,48 +1,22 @@
-use super::{dto, queue};
+use super::super::{dto, queue};
 use crate::{
-    access_token::CurrentUser,
     entities::{flashcard_attempts as attempts, places, sessions, vocabulary_cards as cards},
     modules::notes::service as notes,
     pagination::{ListQuery, Page, PageMeta},
-    state::AppState,
     AppError,
 };
-use axum::{
-    extract::{rejection::QueryRejection, Query, State},
-    Json,
-};
-use chrono::{NaiveDate, TimeZone, Utc};
+use chrono::{TimeZone, Utc};
 use sea_orm::{
     sea_query::{extension::postgres::PgExpr, Expr, LikeExpr},
     ColumnTrait, Condition, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QueryOrder,
     QuerySelect, QueryTrait, RelationTrait,
 };
-use serde::Deserialize;
-use serde_json::{json, Value};
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Filters {
-    session_id: Option<i64>,
-    course_id: Option<i64>,
-    topic: Option<String>,
-    q: Option<String>,
-    date: Option<NaiveDate>,
-    from: Option<NaiveDate>,
-    to: Option<NaiveDate>,
-    run_id: Option<uuid::Uuid>,
-    card_id: Option<i64>,
-    timezone: Option<String>,
-    page: Option<u64>,
-    per_page: Option<u64>,
-    rating: Option<i32>,
-}
-pub async fn list(
-    State(s): State<AppState>,
-    user: CurrentUser,
-    input: Result<Query<Filters>, QueryRejection>,
-) -> Result<Json<Page<Value>>, AppError> {
-    let Query(input) =
-        input.map_err(|_| AppError::validation("filters", "Bộ lọc lịch sử không hợp lệ."))?;
+use serde_json::json;
+pub async fn history(
+    db: &sea_orm::DatabaseConnection,
+    user: i64,
+    input: dto::HistoryFilters,
+) -> Result<Page<dto::HistoryEntry>, AppError> {
     let mut filters = dto::Filters {
         session_id: input.session_id,
         course_id: input.course_id,
@@ -57,8 +31,8 @@ pub async fn list(
         q: None,
     };
     let size = paging.page_size()?;
-    queue::authorize(s.db.as_ref(), user.id, &filters).await?;
-    let mut accessible = notes::accessible(user.id, false);
+    queue::authorize(db, user, &filters).await?;
+    let mut accessible = notes::accessible(user, false);
     if let Some(course) = filters.course_id {
         accessible = accessible.filter(sessions::Column::CourseId.eq(course));
     }
@@ -67,7 +41,7 @@ pub async fn list(
         .column(sessions::Column::Id)
         .into_query();
     let mut query = attempts::Entity::find()
-        .filter(attempts::Column::UserId.eq(user.id))
+        .filter(attempts::Column::UserId.eq(user))
         .filter(attempts::Column::Rating.is_not_null())
         .filter(attempts::Column::ReviewedAt.is_not_null())
         .join(JoinType::InnerJoin, attempts::Relation::Card.def())
@@ -76,7 +50,7 @@ pub async fn list(
         query = query.filter(cards::Column::SessionId.eq(session));
     }
     if let Some(id) = input.run_id {
-        super::runs::load(s.db.as_ref(), user.id, id).await?;
+        super::runs::load(db, user, id).await?;
         query = query.filter(attempts::Column::RunId.eq(id));
     }
     if let Some(id) = input.card_id {
@@ -136,15 +110,15 @@ pub async fn list(
             .filter(attempts::Column::ReviewedAt.gte(start.with_timezone(&Utc).fixed_offset()))
             .filter(attempts::Column::ReviewedAt.lt(end.with_timezone(&Utc).fixed_offset()));
     }
-    let total = query.clone().count(s.db.as_ref()).await?;
+    let total = query.clone().count(db).await?;
     let rows = query
         .order_by_desc(attempts::Column::ReviewedAt)
         .order_by_desc(attempts::Column::Id)
         .select_also(cards::Entity)
-        .paginate(s.db.as_ref(), size)
+        .paginate(db, size)
         .fetch_page(paging.page - 1)
         .await?;
-    let sources: std::collections::HashMap<_, _> = notes::accessible(user.id, false)
+    let sources: std::collections::HashMap<_, _> = notes::accessible(user, false)
         .filter(
             sessions::Column::Id.is_in(
                 rows.iter()
@@ -152,18 +126,52 @@ pub async fn list(
             ),
         )
         .select_also(places::Entity)
-        .all(s.db.as_ref())
+        .all(db)
         .await?
         .into_iter()
         .map(|(session, place)| (session.id, (session, place)))
         .collect();
-    let data=rows.into_iter().filter_map(|(attempt,card)| {
-        let card=card?;let (session,place)=sources.get(&card.session_id)?;
-        let snapshot=attempt.snapshot.is_some();
-        let content=attempt.snapshot.or_else(||(queue::key(&card)==attempt.study_key).then(||json!({"word":card.word,"meaning":card.meaning,"ipa":card.ipa,"locale":card.locale,"part_of_speech":card.part_of_speech,"topics":card.topics,"examples":card.examples})));
-        Some(json!({"id":attempt.id,"card_id":card.id,"run_id":attempt.run_id,"direction":attempt.direction,"rating":attempt.rating,"reviewed_at":attempt.reviewed_at,"due_at":attempt.due_at,"snapshot":snapshot,"card":content,"source":{"id":session.id,"title":session.title,"shared":place.as_ref().is_some_and(|p|p.user_id!=user.id)}}))
-    }).collect();
-    Ok(Json(Page {
+    let data = rows
+        .into_iter()
+        .filter_map(|(attempt, card)| {
+            let card = card?;
+            let (session, place) = sources.get(&card.session_id)?;
+            let snapshot = attempt.snapshot.is_some();
+            let content = match attempt.snapshot {
+                Some(value) => Some(value),
+                None if queue::key(&card) == attempt.study_key => Some(
+                    serde_json::to_value(dto::Snapshot {
+                        word: card.word,
+                        meaning: card.meaning,
+                        ipa: card.ipa,
+                        locale: card.locale,
+                        part_of_speech: card.part_of_speech,
+                        topics: card.topics,
+                        examples: card.examples,
+                    })
+                    .expect("Snapshot serialization"),
+                ),
+                None => None,
+            };
+            Some(dto::HistoryEntry {
+                id: attempt.id,
+                card_id: card.id,
+                run_id: attempt.run_id,
+                direction: attempt.direction,
+                rating: attempt.rating,
+                reviewed_at: attempt.reviewed_at,
+                due_at: attempt.due_at,
+                snapshot,
+                card: content,
+                source: dto::Source {
+                    id: session.id,
+                    title: session.title.clone(),
+                    shared: place.as_ref().is_some_and(|p| p.user_id != user),
+                },
+            })
+        })
+        .collect();
+    Ok(Page {
         data,
         meta: PageMeta {
             current_page: paging.page,
@@ -171,5 +179,5 @@ pub async fn list(
             per_page: size,
             total,
         },
-    }))
+    })
 }

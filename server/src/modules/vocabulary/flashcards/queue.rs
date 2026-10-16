@@ -1,4 +1,4 @@
-use super::dto::{Direction, Filters};
+use super::dto::{Configuration, Direction, Filters, Overview};
 use crate::{
     entities::{
         flashcard_memory as memory, flashcard_settings as settings, vocabulary_cards as cards,
@@ -93,7 +93,7 @@ pub async fn overview<C: ConnectionTrait>(
     db: &C,
     user: i64,
     f: &Filters,
-) -> Result<Value, AppError> {
+) -> Result<Overview, AppError> {
     overview_with_settings(db, user, f, configuration(db, user, f).await?).await
 }
 pub async fn overview_with_settings<C: ConnectionTrait>(
@@ -101,7 +101,7 @@ pub async fn overview_with_settings<C: ConnectionTrait>(
     user: i64,
     f: &Filters,
     (direction, retention): (Direction, f32),
-) -> Result<Value, AppError> {
+) -> Result<Overview, AppError> {
     let now = chrono::Utc::now().fixed_offset();
     let (mut new, mut due, mut learning) = (0, 0, 0);
     let mut next_due: Option<chrono::DateTime<chrono::FixedOffset>> = None;
@@ -130,9 +130,18 @@ pub async fn overview_with_settings<C: ConnectionTrait>(
         "SELECT AVG(seconds)::double precision AS average FROM (SELECT EXTRACT(EPOCH FROM (reviewed_at-created_at)) AS seconds FROM flashcard_attempts WHERE user_id=$1 AND reviewed_at IS NOT NULL ORDER BY reviewed_at DESC LIMIT 100) recent WHERE seconds BETWEEN 1 AND 120 HAVING COUNT(*) >= 10",[user.into()])).await?.and_then(|row|row.try_get::<Option<f64>>("","average").ok().flatten());
     let estimate = average
         .map(|seconds| (seconds * (new + if f.new_only { 0 } else { due }) as f64).round() as u64);
-    Ok(
-        json!({"estimated_seconds":estimate,"settings":{"direction":direction,"retention":retention},"new":new,"due":due,"learning":learning,"next_due_at":next_due,"algorithm":"FSRS-6"}),
-    )
+    Ok(Overview {
+        estimated_seconds: estimate,
+        settings: Configuration {
+            direction,
+            retention,
+        },
+        new,
+        due,
+        learning,
+        next_due_at: next_due,
+        algorithm: "FSRS-6",
+    })
 }
 pub async fn next<C: ConnectionTrait>(
     db: &C,

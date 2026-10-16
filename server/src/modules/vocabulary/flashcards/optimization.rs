@@ -1,12 +1,8 @@
 use super::{history, personal};
 use crate::{
-    access_token::CurrentUser,
     entities::{flashcard_attempts as attempts, flashcard_models as models, users},
-    response::ApiResponse,
-    state::AppState,
     AppError,
 };
-use axum::extract::State;
 use fsrs::{compute_parameters, CombinedProgressState, ComputeParametersInput, FSRS};
 use sea_orm::{
     sea_query::{Expr, ExprTrait, LockType, OnConflict},
@@ -32,13 +28,10 @@ fn metadata(profile: &personal::Profile, data: &history::Dataset) -> Value {
     };
     json!({"automatic":true,"state":state,"personalized":profile.version()>0,"version":profile.version(),"reviews":data.review_count(),"samples":samples,"minimum_samples":history::MIN_SAMPLES,"eligible":samples>=history::MIN_SAMPLES,"trained_reviews":profile.model.as_ref().map_or(0,|m|m.trained_reviews),"optimized_at":profile.model.as_ref().and_then(|m|m.optimized_at)})
 }
-pub async fn status(
-    State(s): State<AppState>,
-    user: CurrentUser,
-) -> Result<ApiResponse<Value>, AppError> {
-    let profile = personal::load(s.db.as_ref(), user.id).await?;
-    let data = history::load(s.db.as_ref(), user.id).await?;
-    Ok(ApiResponse::ok(metadata(&profile, &data)))
+pub async fn status(db: &DatabaseConnection, user: i64) -> Result<Value, AppError> {
+    let profile = personal::load(db, user).await?;
+    let data = history::load(db, user).await?;
+    Ok(metadata(&profile, &data))
 }
 struct CancelTraining(Arc<Mutex<CombinedProgressState>>);
 impl Drop for CancelTraining {
