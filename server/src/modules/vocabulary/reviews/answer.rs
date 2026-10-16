@@ -11,7 +11,7 @@ use sea_orm::{
     sea_query::OnConflict, ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait,
     QueryFilter, QuerySelect, Set, TransactionTrait,
 };
-use serde_json::{json, Value};
+
 use std::collections::BTreeSet;
 fn conflict() -> AppError {
     AppError::Conflict("Câu hỏi hoặc lần thử đã thay đổi. Hãy tải lại lượt ôn.".into())
@@ -21,7 +21,7 @@ pub async fn answer(
     user: i64,
     id: i64,
     input: AnswerInput,
-) -> Result<Value, AppError> {
+) -> Result<AnswerResource, AppError> {
     if input.position >= 50
         || input.attempt > 1
         || input.answer.trim().is_empty()
@@ -65,7 +65,10 @@ pub async fn answer(
         {
             return Err(conflict());
         }
-        return Ok(json!({"result":previous,"review":review.state()}));
+        return Ok(AnswerResource {
+            result: Some(previous.clone()),
+            review: review.state(),
+        });
     }
     if input.position != review.answers.len() {
         return Err(conflict());
@@ -92,7 +95,10 @@ pub async fn answer(
         {
             return Err(conflict());
         }
-        return Ok(json!({"result":null,"review":review.state()}));
+        return Ok(AnswerResource {
+            result: None,
+            review: review.state(),
+        });
     }
     if input.attempt != u8::from(assisted) {
         return Err(conflict());
@@ -163,11 +169,17 @@ pub async fn answer(
         Some(result)
     };
     let mut model: reviews::ActiveModel = review.model.clone().into();
-    model.questions = Set(json!(review.questions));
-    model.answers = Set(json!(review.answers));
+    model.questions =
+        Set(serde_json::to_value(&review.questions)
+            .map_err(|e| AppError::Internal(e.to_string()))?);
+    model.answers =
+        Set(serde_json::to_value(&review.answers).map_err(|e| AppError::Internal(e.to_string()))?);
     model.updated_at = Set(chrono::Utc::now().fixed_offset());
     review.model = model.update(&txn).await?;
-    let result = json!({"result":result,"review":review.state()});
+    let result = AnswerResource {
+        result,
+        review: review.state(),
+    };
     txn.commit().await?;
     Ok(result)
 }

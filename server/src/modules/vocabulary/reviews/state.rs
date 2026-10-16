@@ -5,7 +5,7 @@ use crate::{
     AppError,
 };
 use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, PaginatorTrait, QueryFilter};
-use serde_json::{json, Value};
+
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 pub fn key(card: &cards::Model) -> String {
@@ -79,14 +79,47 @@ impl Review {
         }
         Ok(Some(card))
     }
-    pub fn state(&self) -> Value {
-        let question=self.questions.get(self.answers.len()).map(|q| {
-   let retry=q.first_attempt.as_ref().map(|a|json!({"answer":a,"pattern":if self.mode==Mode::Typing {pattern(&q.card.word)} else {Vec::new()}}));
-   let mut value=json!({"position":self.answers.len(),"meaning":q.card.meaning,"part_of_speech":q.card.part_of_speech,"options":q.options,"attempt":u8::from(q.first_attempt.is_some()),"retry":retry});
-   if self.mode==Mode::Typing { value["ipa"]=json!(q.card.ipa);value["locale"]=json!(q.card.locale);value["letters"]=json!(q.letters); }
-   value
-  });
-        json!({"id":self.model.id,"mode":self.mode,"filters":self.model.filters,"total":self.questions.len(),"answered":self.answers.len(),"correct":self.answers.iter().filter(|a|a.correct).count(),"complete":question.is_none(),"question":question,"mistakes":if question.is_none(){self.answers.iter().filter(|a|!a.correct||a.assisted).map(|a|&a.card).collect::<Vec<_>>()}else{Vec::new()}})
+    pub fn state(&self) -> ReviewResource {
+        let question = self
+            .questions
+            .get(self.answers.len())
+            .map(|q| QuestionResource {
+                position: self.answers.len(),
+                meaning: q.card.meaning.clone(),
+                part_of_speech: q.card.part_of_speech.clone(),
+                options: q.options.clone(),
+                attempt: u8::from(q.first_attempt.is_some()),
+                retry: q.first_attempt.as_ref().map(|answer| Retry {
+                    answer: answer.clone(),
+                    pattern: if self.mode == Mode::Typing {
+                        pattern(&q.card.word)
+                    } else {
+                        Vec::new()
+                    },
+                }),
+                ipa: (self.mode == Mode::Typing).then(|| q.card.ipa.clone()),
+                locale: (self.mode == Mode::Typing).then(|| q.card.locale.clone()),
+                letters: (self.mode == Mode::Typing).then(|| q.letters.clone()),
+            });
+        ReviewResource {
+            id: self.model.id,
+            mode: self.mode,
+            filters: self.model.filters.clone(),
+            total: self.questions.len(),
+            answered: self.answers.len(),
+            correct: self.answers.iter().filter(|a| a.correct).count(),
+            complete: question.is_none(),
+            mistakes: if question.is_none() {
+                self.answers
+                    .iter()
+                    .filter(|a| !a.correct || a.assisted)
+                    .map(|a| a.card.clone())
+                    .collect()
+            } else {
+                Vec::new()
+            },
+            question,
+        }
     }
 }
 fn pattern(word: &str) -> Vec<Option<String>> {

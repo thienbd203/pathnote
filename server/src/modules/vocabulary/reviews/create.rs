@@ -16,7 +16,7 @@ use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder,
     QuerySelect, Set,
 };
-use serde_json::json;
+
 use std::collections::{HashMap, HashSet};
 pub async fn create(db: &DatabaseConnection, user: i64, input: Create) -> Result<Review, AppError> {
     let limit = input.limit.unwrap_or(20);
@@ -155,7 +155,29 @@ pub async fn create(db: &DatabaseConnection, user: i64, input: Create) -> Result
                 .take(3)
                 .cloned()
                 .collect();
-            questions.push(Question { card_id:card.id,study_key,source_sessions,card:Card { word:card.word,meaning:card.meaning,ipa:card.ipa,locale:card.locale,part_of_speech:card.part_of_speech,topics:card.topics,examples:json!(examples),source:json!({"id":source.id,"title":source.title,"shared":owners.get(&source.place_id)!=Some(&user)}) },options,letters,first_attempt:None });
+            questions.push(Question {
+                card_id: card.id,
+                study_key,
+                source_sessions,
+                card: Card {
+                    word: card.word,
+                    meaning: card.meaning,
+                    ipa: card.ipa,
+                    locale: card.locale,
+                    part_of_speech: card.part_of_speech,
+                    topics: card.topics,
+                    examples: serde_json::Value::Array(examples),
+                    source: serde_json::to_value(Source {
+                        id: source.id,
+                        title: source.title.clone(),
+                        shared: owners.get(&source.place_id) != Some(&user),
+                    })
+                    .map_err(|e| AppError::Internal(e.to_string()))?,
+                },
+                options,
+                letters,
+                first_attempt: None,
+            });
             if questions.len() == limit {
                 break;
             }
@@ -172,18 +194,23 @@ pub async fn create(db: &DatabaseConnection, user: i64, input: Create) -> Result
         ));
     }
     let now = chrono::Utc::now().fixed_offset();
-    let model = reviews::ActiveModel {
-        user_id: Set(user),
-        mode: Set(input.mode.label().into()),
-        filters: Set(json!(filters)),
-        questions: Set(json!(questions)),
-        answers: Set(json!([])),
-        created_at: Set(now),
-        updated_at: Set(now),
-        ..Default::default()
-    }
-    .insert(db)
-    .await?;
+    let model =
+        reviews::ActiveModel {
+            user_id: Set(user),
+            mode: Set(input.mode.label().into()),
+            filters: Set(
+                serde_json::to_value(&filters).map_err(|e| AppError::Internal(e.to_string()))?
+            ),
+            questions: Set(
+                serde_json::to_value(&questions).map_err(|e| AppError::Internal(e.to_string()))?
+            ),
+            answers: Set(serde_json::Value::Array(Vec::new())),
+            created_at: Set(now),
+            updated_at: Set(now),
+            ..Default::default()
+        }
+        .insert(db)
+        .await?;
     let review = Review::parse(model)?;
     review.authorize(db).await?;
     review.current(db).await?;

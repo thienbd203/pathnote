@@ -75,3 +75,58 @@ pub struct Answer {
     pub attempt: u8,
     pub card: Card,
 }
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Position {
+    pub position: usize,
+}
+#[derive(Serialize)]
+pub struct Pronunciation {
+    pub text: String,
+    pub locale: String,
+}
+#[derive(Serialize)]
+pub struct Retry {
+    pub answer: String,
+    pub pattern: Vec<Option<String>>,
+}
+#[derive(Serialize)]
+pub struct QuestionResource {
+    pub position: usize,
+    pub meaning: String,
+    pub part_of_speech: String,
+    pub options: Vec<String>,
+    pub attempt: u8,
+    pub retry: Option<Retry>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ipa: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub locale: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub letters: Option<Vec<String>>,
+}
+#[derive(Serialize)]
+pub struct ReviewResource {
+    pub id: i64,
+    pub mode: Mode,
+    pub filters: Value,
+    pub total: usize,
+    pub answered: usize,
+    pub correct: usize,
+    pub complete: bool,
+    pub question: Option<QuestionResource>,
+    pub mistakes: Vec<Card>,
+}
+#[derive(Serialize)]
+pub struct AnswerResource {
+    pub result: Option<Answer>,
+    pub review: ReviewResource,
+}
+
+#[derive(Serialize)]
+pub struct Source {
+    pub id: i64,
+    pub title: String,
+    pub shared: bool,
+}
