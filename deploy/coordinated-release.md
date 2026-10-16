@@ -184,3 +184,32 @@ chỉ dùng nếu schema còn tương thích binary cũ, kể cả khi rollback 
 
 Cờ true vẫn được giữ cho tới khi người vận hành xác nhận migration đầu đã chạy
 và release tiếp theo chỉ chứa thay đổi tương thích. Không tự đổi false sau build.
+
+## Checklist người vận hành: lần đầu có m20261016_*
+
+Các bước sau do người vận hành thực hiện trên production; Codex không chạy
+chúng thay người vận hành. Hoàn thành trước khi cho phép phát hành:
+
+1. Kiểm tra trên **đúng database production**:
+
+   ```sql
+   SELECT lower('É') = 'é';
+   ```
+
+   Kết quả phải là `true`; nếu `false` thì dừng phát hành và xử lý locale trước.
+   Migration tạo khóa bằng PostgreSQL lower(), còn Rust dùng to_lowercase();
+   locale C có thể làm khóa chữ có dấu khác nhau. Đây là kiểm tra tối thiểu,
+   không chứng minh mọi ký tự Unicode đều cho kết quả giống nhau.
+2. Xác minh client PostgreSQL, helper root-owned, sudoers và thư mục backup
+   theo README. Tạo một backup thử với release ID riêng (không trùng ID của CI),
+   ví dụ `sudo /usr/local/sbin/pathnote-db-backup "$(date -u +%Y%m%d%H%M%S)-0-1"`.
+   Xác nhận dump tồn tại, không rỗng, owner root/mode 600 và đọc được bằng
+   `sudo pg_restore --list /opt/pathnote-rust/backups/ID.dump`.
+3. Giữ `breaking_migration: true`. Sắp xếp thời gian dừng ghi; dừng collaboration
+   và các writer khác để không nhận sửa note chưa thể lưu khi API dừng.
+4. Khi CI chạy, xác nhận log `Backup ready` với **đúng release ID**, trước bước
+   migration. Nếu cần phục hồi, dùng dump của chính release đó; backup thử chỉ
+   để kiểm tra cấu hình. Không cho frontend mới lên khi backend health thất bại.
+5. Sau release thành công, kiểm tra đăng nhập, mở note và ôn flashcard, rồi mới
+   cho các writer hoạt động lại. Nếu có lỗi sau migration, giữ chúng dừng và
+   làm quy trình restore phía trên; không chỉ khởi động binary cũ.

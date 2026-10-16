@@ -5,7 +5,9 @@
 | Chỉnh plan | 9c139f4 | Đối chiếu code và thử disabled QueryObserver; refetchType all không tải lại |
 | P0.1 | 2e31a8a | Rust fmt/clippy; workspace tests (100 API pass, 2 ignored); deploy tests macOS 17 pass/8 skip, Linux container 20 pass/5 skip; bash syntax |
 
-| P0.2 | Commit `Stop safely around breaking migrations` | Rust fmt/clippy/workspace; macOS 18 pass/13 skip, Linux 26 pass/5 skip; actionlint; migration lỗi và health lỗi đều không rollback code cũ |
+| P0.2 | 9e187dd | Rust fmt/clippy/workspace; macOS 18 pass/13 skip, Linux 26 pass/5 skip; actionlint; migration lỗi và health lỗi đều không rollback code cũ |
+
+| P0.3 | Commit `Document operator checks before flashcard migrations` | Checklist chỉ viết tài liệu; không chạy SQL/backup production |
 
 ## Giới hạn và việc người vận hành cần làm
 
