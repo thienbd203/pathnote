@@ -324,6 +324,42 @@ async fn library_stats_and_course_decks_follow_ownership_and_current_notes() {
         .await;
         ids.push(id);
     }
+    let empty = course(&app, p, input()).await;
+    let bulk_url = format!("/api/v1/courses/library-stats?ids={other},{c},{empty},{c},999999");
+    let bulk = app
+        .api
+        .get(&bulk_url)
+        .add_header("authorization", bearer(&app.owner_token))
+        .await;
+    bulk.assert_status_ok();
+    let summary = bulk.json::<Value>()["data"].clone();
+    assert_eq!(summary.as_array().unwrap().len(), 3);
+    assert_eq!(summary[0]["id"], other);
+    assert_eq!(summary[1]["id"], c);
+    assert_eq!(summary[1]["words"], 1);
+    assert_eq!(summary[1]["session_count"], 1);
+    assert_eq!(summary[1]["latest_past_session"]["id"], ids[0]);
+    assert!(summary[1].get("sessions").is_none());
+    assert_eq!(summary[2]["session_count"], 0);
+    assert!(summary[2]["latest_past_session"].is_null());
+    let foreign = app
+        .api
+        .get(&bulk_url)
+        .add_header("authorization", bearer(&app.other_token))
+        .await;
+    foreign.assert_status_ok();
+    assert_eq!(foreign.json::<Value>()["data"], json!([]));
+    for invalid in [
+        "0".to_string(),
+        "1,,2".into(),
+        vec![c.to_string(); 101].join(","),
+    ] {
+        app.api
+            .get(&format!("/api/v1/courses/library-stats?ids={invalid}"))
+            .add_header("authorization", bearer(&app.owner_token))
+            .await
+            .assert_status(axum::http::StatusCode::UNPROCESSABLE_ENTITY);
+    }
     let url = format!("/api/v1/courses/{c}/library-stats");
     let response = app
         .api

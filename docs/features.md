@@ -355,3 +355,5 @@ Code: web `e2e/`, `playwright*.config.ts`; Rust `server/tests/api/browser.rs`, `
 - Hiệu năng R2: places/catalog của dialog đóng không tự tải; mở dialog/drawer mới tải khi cần. Mobile Learn 9 → 7, note 7 → 5; flashcard 5 → 3, cài đặt 3 → 1 (hai kích thước). Hai request chuyển sang thao tác mở Buổi mới/drawer, không bị loại mất chức năng. Timeline vẫn theo dõi đổi tên khóa.
 
 - Hiệu năng R3: next/grade trả thêm `run` thuộc user hiện tại; tổng kết dùng một aggregate SQL thay sáu truy vấn. UI dùng response, các cache khác chỉ đánh dấu cũ đến lúc cần đọc. Startup ôn 4 → 2 API sau R2 (1 GET run + 1 POST next); grade/thẻ kế 5 → 2 (grade + next), reveal vẫn riêng. Giữ ticket, bước xem đáp án, idempotency và FSRS.
+
+- Hiệu năng R4: `GET /courses/library-stats?ids=…` trả summary tối đa 100 khóa, một aggregate SQL theo owner, loại mục đã xóa/mất quyền; không trả note hay danh sách buổi. Parent thư viện tải summary cho nhóm khóa rồi truyền xuống cards. Thư viện desktop 6 → 5 API, mobile 11 → 8 sau R2 (ba nơi/sáu khóa); vào khóa mới tải stats đầy đủ/danh sách buổi.

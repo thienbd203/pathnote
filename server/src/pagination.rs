@@ -74,3 +74,29 @@ mod tests {
         assert_eq!(PageMeta::new(2, 25, 26).last_page, 2);
     }
 }
+
+/// Bounded, read-only ID selection shared by owner-scoped bulk readers.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct IdsQuery {
+    pub ids: String,
+}
+impl IdsQuery {
+    pub fn validate(&self) -> Result<Vec<i64>, AppError> {
+        let invalid = || AppError::validation("ids", "Cần từ 1 đến 100 ID hợp lệ.");
+        let mut ids = Vec::new();
+        for part in self.ids.split(',') {
+            if ids.len() == 100 || part.is_empty() || !part.bytes().all(|b| b.is_ascii_digit()) {
+                return Err(invalid());
+            }
+            let id = part.parse::<i64>().map_err(|_| invalid())?;
+            if id <= 0 {
+                return Err(invalid());
+            }
+            ids.push(id);
+        }
+        let mut seen = std::collections::HashSet::new();
+        ids.retain(|id| seen.insert(*id));
+        Ok(ids)
+    }
+}

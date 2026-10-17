@@ -196,3 +196,4 @@ Ghi mỗi thay đổi response/request mà frontend thấy. Cột đầu là đ�
 
 | R3 request | `POST /flashcards/next`, `POST /flashcards/{id}/grade` | Không có tổng kết run | Thêm `data.run: RunSummary \| null` theo user của ticket/run; summary là dữ liệu tổng hợp, không lộ đáp án. `next.overview` giữ nguyên; không đổi chấm điểm, khóa hay lịch ôn. |
 
+| R4 request | `GET /courses/library-stats?ids=…` | — | Thêm `{data:[{id,session_count,words,exercises,latest_past_session}]}`; tối đa 100 ID thô, loại trùng/giữ thứ tự, bỏ mục mất quyền hoặc đã xóa; một aggregate SQL, không trả nội dung note/danh sách buổi. API stats từng khóa giữ nguyên. |

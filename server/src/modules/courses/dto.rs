@@ -119,3 +119,41 @@ pub struct LatestSession {
     pub(super) title: String,
     pub(super) starts_at: chrono::DateTime<chrono::Utc>,
 }
+
+#[derive(Serialize)]
+pub struct CourseSummary {
+    pub id: i64,
+    pub session_count: i64,
+    pub words: i64,
+    pub exercises: i64,
+    pub latest_past_session: Option<LatestSession>,
+}
+#[derive(sea_orm::FromQueryResult)]
+pub(super) struct SummaryRow {
+    pub id: i64,
+    pub session_count: i64,
+    pub words: i64,
+    pub exercises: i64,
+    pub latest_id: Option<i64>,
+    pub latest_title: Option<String>,
+    pub latest_starts_at: Option<chrono::DateTime<chrono::FixedOffset>>,
+}
+impl From<SummaryRow> for CourseSummary {
+    fn from(row: SummaryRow) -> Self {
+        Self {
+            id: row.id,
+            session_count: row.session_count,
+            words: row.words,
+            exercises: row.exercises,
+            latest_past_session: row
+                .latest_id
+                .zip(row.latest_title)
+                .zip(row.latest_starts_at)
+                .map(|((id, title), starts_at)| LatestSession {
+                    id,
+                    title,
+                    starts_at: starts_at.with_timezone(&chrono::Utc),
+                }),
+        }
+    }
+}

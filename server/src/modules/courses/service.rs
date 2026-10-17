@@ -223,3 +223,28 @@ pub async fn library_stats(
         sessions: rows,
     })
 }
+
+pub async fn library_summaries(
+    db: &DatabaseConnection,
+    user: i64,
+    query: crate::pagination::IdsQuery,
+) -> Result<Vec<dto::CourseSummary>, AppError> {
+    let ids = query.validate()?;
+    let rows = dto::SummaryRow::find_by_statement(Statement::from_sql_and_values(DbBackend::Postgres,
+        r#"SELECT c.id, COUNT(s.id)::bigint AS session_count,
+          COALESCE(SUM((SELECT COUNT(DISTINCT node #>> '{attrs,id}') FROM jsonb_path_query(n.content, '$.** ? (@.type == "vocabularyEntry")') node WHERE btrim(COALESCE(node #>> '{attrs,word}', '')) <> '')),0)::bigint AS words,
+          COALESCE(SUM((SELECT COUNT(DISTINCT node #>> '{attrs,exerciseId}') FROM jsonb_path_query(n.content, '$.** ? (@.type == "exercise")') node)),0)::bigint AS exercises,
+          latest.id AS latest_id, latest.title AS latest_title, latest.starts_at AS latest_starts_at
+        FROM courses c JOIN places p ON p.id=c.place_id AND p.deleted_at IS NULL
+        LEFT JOIN sessions s ON s.course_id=c.id AND s.place_id=p.id AND s.deleted_at IS NULL
+        LEFT JOIN notes n ON n.session_id=s.id
+        LEFT JOIN LATERAL (SELECT id,title,starts_at FROM sessions WHERE course_id=c.id AND place_id=p.id AND deleted_at IS NULL AND starts_at <= CURRENT_TIMESTAMP ORDER BY starts_at DESC,id DESC LIMIT 1) latest ON true
+        WHERE c.id=ANY($1) AND p.user_id=$2 AND c.deleted_at IS NULL
+        GROUP BY c.id, latest.id, latest.title, latest.starts_at"#,
+        [ids.clone().into(),user.into()])).all(db).await?;
+    let mut rows: std::collections::HashMap<_, _> = rows
+        .into_iter()
+        .map(|row| (row.id, dto::CourseSummary::from(row)))
+        .collect();
+    Ok(ids.into_iter().filter_map(|id| rows.remove(&id)).collect())
+}
