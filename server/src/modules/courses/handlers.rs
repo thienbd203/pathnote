@@ -88,3 +88,13 @@ pub async fn library_summaries(
         service::library_summaries(&state.db, user.id, input).await?,
     ))
 }
+
+pub async fn read_many(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    AppQuery(input): AppQuery<crate::pagination::IdsQuery>,
+) -> Result<ApiResponse<Vec<super::dto::CourseResource>>, AppError> {
+    Ok(ApiResponse::ok(
+        service::read_many(&state.db, user.id, input).await?,
+    ))
+}

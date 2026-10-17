@@ -199,3 +199,5 @@ Ghi mỗi thay đổi response/request mà frontend thấy. Cột đầu là đ�
 | R4 request | `GET /courses/library-stats?ids=…` | — | Thêm `{data:[{id,session_count,words,exercises,latest_past_session}]}`; tối đa 100 ID thô, loại trùng/giữ thứ tự, bỏ mục mất quyền hoặc đã xóa; một aggregate SQL, không trả nội dung note/danh sách buổi. API stats từng khóa giữ nguyên. |
 
 | R5 request | `GET /sessions/bulk?ids=…` | — | Thêm `{data:[SessionResource]}` tối đa 100 ID thô, giữ thứ tự sau loại trùng, chỉ metadata buổi thuộc owner đang hoạt động; bỏ ID không tồn tại/mất quyền/đã xóa, không trả note/đáp án. |
+
+| R6 request | `GET /places/bulk?ids=…`, `GET /courses/bulk?ids=…` | — | Thêm `{data:[PlaceResource/CourseResource]}`; cùng validator 1–100 ID thô, giữ thứ tự sau loại trùng, chỉ owner/parent đang hoạt động, bỏ mục không truy cập được. Không mở rộng quyền đọc. |

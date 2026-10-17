@@ -14,7 +14,6 @@ Báo cáo đo tay ngày 17/10/2026 (frontend `8aaae7a`) cho thấy nhiều màn 
   - Sau khi xác minh, xóa mục này. R1–R8 giữ nguyên thứ tự bên dưới.
 
 - **Sửa theo báo cáo**, mỗi mục một commit và hạ ngân sách tương ứng:
-  - **R6** Chip ẩn/ghim lấy tên từ catalog hoặc place list. Chỉ bulk tải ID còn thiếu, không tải từ lúc khởi động: `useNavigationPreferences.ts:29`.
   - **R7** Tab Lịch sử flashcard không tải overview và recent của tab Ôn tập: `FlashcardsView.vue:27`.
   - **R8** IPA chỉ tải bộ dữ liệu đang xem. Kiểm tra trùng khi import thì đối chiếu riêng các mục được nhập: `IpaView.vue:87`, `lib/api/ipa.ts:12`.
 

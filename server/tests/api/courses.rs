@@ -453,3 +453,58 @@ async fn library_stats_and_course_decks_follow_ownership_and_current_notes() {
     assert_eq!(response.json::<Value>()["data"]["sessions"], json!([]));
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn navigation_bulk_metadata_omits_foreign_and_deleted_parents() {
+    let app = LearningApp::spawn().await;
+    let a = place(&app, &app.owner_token, "A").await;
+    let b = place(&app, &app.owner_token, "B").await;
+    let c = course(&app, a, input()).await;
+    let d = course(&app, b, input()).await;
+    for (domain, first, second) in [("places", a, b), ("courses", c, d)] {
+        let url = format!("/api/v1/{domain}/bulk?ids={second},{first},{second},999999");
+        let response = app
+            .api
+            .get(&url)
+            .add_header("authorization", bearer(&app.owner_token))
+            .await;
+        response.assert_status_ok();
+        let rows = response.json::<Value>()["data"].clone();
+        assert_eq!(rows.as_array().unwrap().len(), 2);
+        assert_eq!(rows[0]["id"], second);
+        assert_eq!(rows[1]["id"], first);
+        let foreign = app
+            .api
+            .get(&url)
+            .add_header("authorization", bearer(&app.other_token))
+            .await;
+        foreign.assert_status_ok();
+        assert_eq!(foreign.json::<Value>()["data"], json!([]));
+        for invalid in [
+            "-1".to_string(),
+            "".into(),
+            vec![first.to_string(); 101].join(","),
+        ] {
+            app.api
+                .get(&format!("/api/v1/{domain}/bulk?ids={invalid}"))
+                .add_header("authorization", bearer(&app.owner_token))
+                .await
+                .assert_status(axum::http::StatusCode::UNPROCESSABLE_ENTITY);
+        }
+    }
+    app.api
+        .delete(&format!("/api/v1/places/{a}"))
+        .add_header("authorization", bearer(&app.owner_token))
+        .await
+        .assert_status_no_content();
+    for (domain, id) in [("places", a), ("courses", c)] {
+        let r = app
+            .api
+            .get(&format!("/api/v1/{domain}/bulk?ids={id}"))
+            .add_header("authorization", bearer(&app.owner_token))
+            .await;
+        r.assert_status_ok();
+        assert_eq!(r.json::<Value>()["data"], json!([]));
+    }
+    app.cleanup().await;
+}

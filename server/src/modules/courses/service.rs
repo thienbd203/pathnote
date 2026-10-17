@@ -1,3 +1,4 @@
+mod read;
 use super::dto::{self, CoursePage, CourseResource, CreateCourse, UpdateCourse};
 use crate::modules::places::service as place_service;
 use crate::{
@@ -5,6 +6,7 @@ use crate::{
     pagination::{ListQuery, PageMeta},
     AppError,
 };
+pub use read::read_many;
 use sea_orm::{
     sea_query::{Expr, Func, LikeExpr},
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, JoinType,

@@ -1,5 +1,7 @@
+mod read;
 use super::dto::{self, CreatePlace, ListPlaces, PageMeta, PlacePage, UpdatePlace};
 use crate::{entities::places, AppError};
+pub use read::read_many;
 use sea_orm::{
     sea_query::{Expr, Func, LikeExpr},
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DatabaseTransaction,

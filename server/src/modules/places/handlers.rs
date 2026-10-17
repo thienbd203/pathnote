@@ -49,3 +49,13 @@ pub async fn delete(
     service::delete(&state.db, user.id, id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
+
+pub async fn read_many(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    AppQuery(input): AppQuery<crate::pagination::IdsQuery>,
+) -> Result<ApiResponse<Vec<super::dto::PlaceResource>>, AppError> {
+    Ok(ApiResponse::ok(
+        service::read_many(&state.db, user.id, input).await?,
+    ))
+}
