@@ -361,3 +361,5 @@ Code: web `e2e/`, `playwright*.config.ts`; Rust `server/tests/api/browser.rs`, `
 - Hiệu năng R5: Mở gần đây dùng timeline trước, thiếu metadata mới gọi `GET /sessions/bulk?ids=…` (1–100 ID, đúng owner/đang hoạt động, không có note). Giữ thứ tự local, loại ID không còn truy cập và dùng lại response sau khi loại ID để không tải lặp. Với năm buổi đã có trong timeline, Learn desktop 12 → 7 và mobile 7 → 2 sau R2. Browser kiểm tra cả trường hợp thiếu metadata và ID không tồn tại.
 
 - Hiệu năng R6: tên chip ẩn/ghim dùng catalog/place-list sẵn có; chỉ bulk các ID thiếu (1–100/request) khi navigation cần, không đọc từng detail hoặc tải từ popover đóng. `places/bulk` và `courses/bulk` giữ đúng owner/parent đang hoạt động. Learn desktop 7 → 6, note desktop 11 → 10; mở drawer mobile 5 → 4 sau R5. Unit kiểm tra metadata ngoài trang đầu, bỏ ID thiếu và không tải khi picker đóng.
+
+- Hiệu năng R7: tab Lịch sử chỉ tải danh sách lịch sử, không overview/recent dashboard (3 → 1 API sau R2, hai kích thước). Quay lại Ôn tập bật lại query đúng lúc, dùng cache còn mới hoặc tải lại nếu cũ. Browser kiểm tra cả lịch sử cold và quay lại khi cache hết hạn.

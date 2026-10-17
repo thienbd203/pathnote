@@ -14,7 +14,7 @@ Báo cáo đo tay ngày 17/10/2026 (frontend `8aaae7a`) cho thấy nhiều màn 
   - Sau khi xác minh, xóa mục này. R1–R8 giữ nguyên thứ tự bên dưới.
 
 - **Sửa theo báo cáo**, mỗi mục một commit và hạ ngân sách tương ứng:
-  - **R7** Tab Lịch sử flashcard không tải overview và recent của tab Ôn tập: `FlashcardsView.vue:27`.
+  - Kế hoạch R8: không tải words khi đang xem pairs; chế độ tất cả từ vẫn cần pairs để giữ các từ nhập qua cặp âm. Preview import đối chiếu khóa của payload thay vì tải toàn bộ kho. Thêm lookup read-only, dùng chung validator/canonical keys với import.
   - **R8** IPA chỉ tải bộ dữ liệu đang xem. Kiểm tra trùng khi import thì đối chiếu riêng các mục được nhập: `IpaView.vue:87`, `lib/api/ipa.ts:12`.
 
 **Phát hành**
