@@ -337,3 +337,15 @@ Code: `server/src/modules/ipa/` (`phonemes.rs`); web `IpaView.vue`, `lib/ipa-lib
 - `GET|PUT /settings/navigation` — `{"hidden_chips":[...],"pinned_places":[...]}`, body ≤16 KiB.
 
 Code: `server/src/modules/settings/`.
+
+
+## Kiểm thử tự động và điều kiện phát hành
+
+- Web có bộ Playwright Chromium cho desktop 1440×900 và Pixel 7 (touch/user agent), context và cache mới mỗi kịch bản. API fixture có kiểu theo contract thật; dữ liệu/giờ/font cố định, chặn host ngoài loopback và endpoint chưa khai báo.
+- Đo 16 màn cùng các thao tác mở form, tìm kiếm, AI copy sau khi cache hết hạn, reveal/grade/next, drawer và buổi trước/sau trên mobile. Mỗi bước có ngân sách request, cấm request trùng (hai ngoại lệ GET run giới hạn chờ R3) và cấm ghi ngoài lệnh đã khai báo. JSON và bảng CI chỉ rõ request khi vượt ngân sách; tối ưu phải hạ ngân sách cùng commit.
+- So sánh ảnh ghi chép, thư viện, flashcard và hộp tạo buổi trên cả hai kích thước. Baseline macOS/Linux riêng; Linux dùng official Playwright image cùng phiên bản Chromium/Ubuntu của CI. Thay ảnh chuẩn phải xem ảnh/diff, không tự cập nhật trong CI.
+- Bộ browser contract dùng backend Rust thật và schema PostgreSQL dùng một lần, kiểm tra tạo buổi qua UI, autosave/F5, chấm bài và ẩn đáp án, chia sẻ/thu hồi giữa hai user, lưu lịch ôn flashcard. Harness chỉ nằm trong test binary; JWT test ở file tạm mode 600, không có đường đăng nhập tắt trong production.
+- Coordinator checkout đúng backend SHA và frontend SHA từ manifest; kiểm tra request/giao diện và contract phải qua trước deploy backend. Bản build dành cho test dùng loopback, độc lập artifact production. Khi lỗi, CI giữ trace/ảnh/report 7 ngày.
+- Phạm vi còn cần thử thật: OAuth Google, realtime hai người, Safari iOS. Mock network không chứng minh độ trễ production; bộ contract không thay phép đo đường truyền/DB trên VPS.
+
+Code: web `e2e/`, `playwright*.config.ts`; Rust `server/tests/api/browser.rs`, `.github/workflows/deploy.yml`. Cách chạy: README web.

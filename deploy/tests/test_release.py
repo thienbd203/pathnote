@@ -98,7 +98,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.jobs = self.workflow['jobs']
 
     def test_no_deployment_can_start_before_both_builds_succeed(self):
-        self.assertEqual(set(self.jobs['deploy-backend']['needs']), {'release', 'build-backend', 'build-frontend'})
+        self.assertEqual(set(self.jobs['deploy-backend']['needs']), {'release', 'build-backend', 'build-frontend', 'browser-contract'})
         self.assertEqual(set(self.jobs['deploy-frontend']['needs']), {'release', 'build-frontend', 'deploy-backend'})
         for name in ('deploy-backend', 'deploy-frontend'):
             job = self.jobs[name]
@@ -117,6 +117,17 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertEqual(checkout['ref'], '${{ needs.release.outputs.frontend_sha }}')
         self.assertFalse(checkout['persist-credentials'])
         self.assertEqual(self.jobs['deploy-frontend']['env']['FRONTEND_SHA'], checkout['ref'])
+        browser = self.jobs['browser-contract']
+        self.assertNotIn('if', browser)  # Failed upstream checks must skip this gate.
+        self.assertEqual(set(browser['needs']), {'release', 'check'})
+        checkouts = [step['with'] for step in browser['steps'] if step.get('uses', '').startswith('actions/checkout@')]
+        self.assertEqual(checkouts[1]['repository'], checkout['repository'])
+        self.assertEqual(checkouts[1]['ref'], checkout['ref'])
+        self.assertFalse(checkouts[1]['persist-credentials'])
+        commands = '\n'.join(step.get('run', '') for step in browser['steps'])
+        self.assertIn('npm run e2e:build', commands)
+        self.assertIn('npm run e2e:integration', commands)
+        self.assertNotIn('continue-on-error', json.dumps(browser))
         artifacts = [step['with'] for step in self.jobs['deploy-frontend']['steps'] if step.get('uses', '').startswith('actions/download-artifact@')]
         self.assertEqual(artifacts, [{'name': 'pathnote-web-release', 'path': 'web-release'}])
 
@@ -135,7 +146,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertLess(activation.index('python3 deploy/healthcheck.py'), activation.index('< web-release/deploy.sh'))
         self.assertLess(activation.index('\"$COLLABORATION_SHA\" collaboration'), activation.index('< web-release/deploy.sh'))
         self.assertEqual(deploy['env']['COLLABORATION_SHA'], '${{ needs.release.outputs.collaboration_sha }}')
-        for name in ('check', 'build-backend', 'build-frontend'):
+        for name in ('check', 'build-backend', 'build-frontend', 'browser-contract'):
             self.assertNotIn('SSH_PRIVATE_KEY', json.dumps(self.jobs[name]))
         guard = self.jobs['release']['if']
         self.assertIn("github.event_name != 'pull_request'", guard)

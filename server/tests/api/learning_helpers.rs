@@ -37,7 +37,7 @@ impl LearningApp {
         Self::spawn_config(false, false, Some((ipa, translation))).await
     }
     async fn spawn_config(enabled: bool, network: bool, service_url: Option<(&str, &str)>) -> Self {
-        Self::spawn_migrations(enabled, network, service_url, None).await
+        Self::spawn_migrations(enabled, network, service_url, None, None).await
     }
     pub async fn spawn_before_flashcard_grouping() -> Self {
         Self::spawn_migrations(
@@ -52,14 +52,19 @@ impl LearningApp {
                     })
                     .expect("shared-memory migration is registered") as u32,
             ),
+            None,
         )
         .await
+    }
+    pub async fn spawn_browser() -> Self {
+        Self::spawn_migrations(false, true, None, None, Some(4180)).await
     }
     async fn spawn_migrations(
         enabled: bool,
         network: bool,
         service_url: Option<(&str, &str)>,
         steps: Option<u32>,
+        browser_port: Option<u16>,
     ) -> Self {
         dotenvy::dotenv().ok();
         let explicit = std::env::var("TEST_DATABASE_URL").ok();
@@ -106,7 +111,12 @@ impl LearningApp {
             google_redirect_url: "http://localhost:3000/api/v1/auth/google/callback".into(),
             cookie_secure: true,
             bind_addr: "127.0.0.1:3000".into(),
-            frontend_url: "https://frontend.example.test".into(),
+            frontend_url: if browser_port.is_some() {
+                "http://127.0.0.1:4173"
+            } else {
+                "https://frontend.example.test"
+            }
+            .into(),
             database_max_connections: 10,
             database_acquire_timeout_secs: 5,
             database_url: "unused".into(),
@@ -137,7 +147,8 @@ impl LearningApp {
             config: config.clone(),
         };
         let builder = if network {
-            TestServer::builder().http_transport()
+            TestServer::builder()
+                .http_transport_with_ip_port(Some("127.0.0.1".parse().unwrap()), browser_port)
         } else {
             TestServer::builder()
         };

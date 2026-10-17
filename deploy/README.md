@@ -428,3 +428,16 @@ Pipeline chỉ khôi phục **code**, **không rollback database**; migration đ
 
 Sau sự cố migration breaking: xác minh DB đích, dừng mọi writer, restore (4.4),
 chọn code khớp schema rồi mới restart. Log và health: mục 4.5.
+
+
+### Browser gate của release
+
+Coordinator chạy bộ request/ảnh và browser contract với đúng frontend SHA trong
+`.github/release.json` và backend SHA của workflow, trước khi cho phép deploy.
+Job dùng PostgreSQL 17 dùng một lần, không dùng database hay Google account production.
+`FRONTEND_READ_TOKEN` hiện có phải đọc được frontend revision đó; không cần secret mới.
+Bản web dành cho test dùng `127.0.0.1:4173`, tuyệt đối không dùng artifact test để deploy.
+Khi nâng bộ Playwright lần đầu, frontend SHA trong manifest phải chứa scripts/test mới.
+Nếu gate lỗi, xem `release-browser-diagnostics` và job summary; không tăng ngân sách
+hay ghi đè ảnh chuẩn chỉ để bỏ qua lỗi. OAuth thật, Safari iOS và realtime vẫn theo
+checklist smoke riêng.
