@@ -7,8 +7,8 @@ use crate::{
     AppError,
 };
 use sea_orm::{
-    sea_query::Expr, ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, PaginatorTrait,
-    QueryFilter, QuerySelect, Set,
+    sea_query::Expr, ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter,
+    QuerySelect, Set,
 };
 
 use uuid::Uuid;
@@ -31,24 +31,27 @@ pub async fn summary<C: ConnectionTrait>(
         .filter(attempts::Column::UserId.eq(run.user_id))
         .filter(attempts::Column::RunId.eq(run.id))
         .filter(attempts::Column::Rating.is_not_null());
-    let reviewed = base.clone().count(db).await?;
-    let unique: i64 = base
-        .clone()
+    // One aggregate over the user's graded tickets, including distinct study groups.
+    let counts = base
         .select_only()
+        .expr(Expr::cust("COUNT(*)"))
         .expr(Expr::cust("COUNT(DISTINCT (study_key, direction))"))
-        .into_tuple()
+        .expr(Expr::cust("COUNT(*) FILTER (WHERE rating = 1)"))
+        .expr(Expr::cust("COUNT(*) FILTER (WHERE rating = 2)"))
+        .expr(Expr::cust("COUNT(*) FILTER (WHERE rating = 3)"))
+        .expr(Expr::cust("COUNT(*) FILTER (WHERE rating = 4)"))
+        .into_tuple::<(i64, i64, i64, i64, i64, i64)>()
         .one(db)
         .await?
-        .unwrap_or(0);
-    let mut ratings = Vec::new();
-    for rating in 1..=4 {
-        ratings.push(
-            base.clone()
-                .filter(attempts::Column::Rating.eq(rating))
-                .count(db)
-                .await?,
-        );
-    }
+        .unwrap_or_default();
+    let reviewed = counts.0 as u64;
+    let unique = counts.1;
+    let ratings = vec![
+        counts.2 as u64,
+        counts.3 as u64,
+        counts.4 as u64,
+        counts.5 as u64,
+    ];
     Ok(RunSummary {
         id: run.id,
         filters: run.filters.clone(),
@@ -132,4 +135,18 @@ pub async fn end(
     finish(db, user, id, false).await?;
     let run = load(db, user, id).await?;
     summary(db, &run).await
+}
+
+pub async fn optional_summary<C: ConnectionTrait>(
+    db: &C,
+    user: i64,
+    id: Option<Uuid>,
+) -> Result<Option<RunSummary>, AppError> {
+    match id {
+        Some(id) => {
+            let run = load(db, user, id).await?;
+            Ok(Some(summary(db, &run).await?))
+        }
+        None => Ok(None),
+    }
 }

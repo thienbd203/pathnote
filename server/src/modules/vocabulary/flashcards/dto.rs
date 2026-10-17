@@ -156,6 +156,7 @@ pub struct Front {
 }
 #[derive(Serialize)]
 pub struct Next {
+    pub run: Option<RunSummary>,
     pub card: Option<Front>,
     pub overview: Overview,
 }
@@ -175,6 +176,7 @@ pub struct Reveal {
 }
 #[derive(Serialize)]
 pub struct GradeResult {
+    pub run: Option<RunSummary>,
     pub rating: i32,
     pub due_at: Option<DateTime<FixedOffset>>,
 }

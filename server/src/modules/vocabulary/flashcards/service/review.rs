@@ -134,6 +134,7 @@ pub async fn grade(
             return Err(AppError::Conflict("Thẻ đã được đánh giá.".into()));
         }
         return Ok(dto::GradeResult {
+            run: super::runs::optional_summary(&txn, user, t.run_id).await?,
             rating,
             due_at: t.due_at,
         });
@@ -226,6 +227,7 @@ pub async fn grade(
     let saved = saved.update(&txn).await?;
     txn.commit().await?;
     Ok(dto::GradeResult {
+        run: super::runs::optional_summary(db, user, saved.run_id).await?,
         rating: i32::from(input.rating),
         due_at: saved.due_at,
     })

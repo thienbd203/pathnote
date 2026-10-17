@@ -193,3 +193,6 @@ Ghi mỗi thay đổi response/request mà frontend thấy. Cột đầu là đ�
 | Review 11 P1.2 | mọi route quá thời gian | HTTP 408 | HTTP 504, giữ message; upstream dịch 20s, web 28s, route 30s |
 | Review 11 P2.9 | `GET /flashcards/runs/{id}` và tổng kết lượt ôn | `unique_reviewed` đếm card nguồn + chiều | Đếm nhóm `study_key` + chiều; một nhóm ôn ở nhiều bài vẫn tính một mục. JSON giữ shape. |
 | Bulk đọc bài tập | `GET /sessions/{session}/exercises?ids=1,2,...` | Chỉ có GET từng bài | Thêm `{data:[ExerciseResource]}` tối đa 100 ID dương; loại trùng, giữ thứ tự, bỏ qua ID thiếu/khác buổi; quyền theo note, lượt riêng theo user/revision; dùng cùng public projection và quy tắc ẩn đáp án với GET từng bài. API cũ giữ nguyên. |
+
+| R3 request | `POST /flashcards/next`, `POST /flashcards/{id}/grade` | Không có tổng kết run | Thêm `data.run: RunSummary \| null` theo user của ticket/run; summary là dữ liệu tổng hợp, không lộ đáp án. `next.overview` giữ nguyên; không đổi chấm điểm, khóa hay lịch ôn. |
+

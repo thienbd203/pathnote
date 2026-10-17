@@ -881,3 +881,70 @@ async fn run_counts_shared_word_once_even_when_retried_from_another_lesson() {
     assert_eq!(summary["data"]["unique_reviewed"], 1);
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn flashcard_command_summaries_are_user_scoped_idempotent_and_finish_with_next() {
+    let app = LearningApp::spawn().await;
+    let session = lesson(&app, &app.owner_token).await;
+    save(&app, session, &doc(vec![entry("remember", "nhớ", &[])]), 0).await;
+    let created = app
+        .api
+        .post("/api/v1/flashcards/runs")
+        .add_header("authorization", auth(&app.owner_token))
+        .json(&json!({}))
+        .await;
+    created.assert_status(StatusCode::CREATED);
+    let run = created.json::<Value>()["data"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let next = app
+        .api
+        .post("/api/v1/flashcards/next")
+        .add_header("authorization", auth(&app.owner_token))
+        .json(&json!({"run_id":run}))
+        .await;
+    next.assert_status_ok();
+    let data = next.json::<Value>()["data"].clone();
+    assert_eq!(data["run"]["reviewed"], 0);
+    assert_eq!(data["run"]["id"], run);
+    assert!(data["card"].get("back").is_none());
+    let ticket = data["card"]["id"].as_str().unwrap();
+    app.api
+        .post("/api/v1/flashcards/next")
+        .add_header("authorization", auth(&app.other_token))
+        .json(&json!({"run_id":run}))
+        .await
+        .assert_status(StatusCode::NOT_FOUND);
+    app.api
+        .post(&format!("/api/v1/flashcards/{ticket}/reveal"))
+        .add_header("authorization", auth(&app.owner_token))
+        .await
+        .assert_status_ok();
+    for _ in 0..2 {
+        let graded = app
+            .api
+            .post(&format!("/api/v1/flashcards/{ticket}/grade"))
+            .add_header("authorization", auth(&app.owner_token))
+            .json(&json!({"rating":3}))
+            .await;
+        graded.assert_status_ok();
+        let summary = graded.json::<Value>()["data"]["run"].clone();
+        assert_eq!(summary["reviewed"], 1);
+        assert_eq!(summary["unique_reviewed"], 1);
+        assert_eq!(summary["ratings"], json!([0, 0, 1, 0]));
+    }
+    let next = app
+        .api
+        .post("/api/v1/flashcards/next")
+        .add_header("authorization", auth(&app.owner_token))
+        .json(&json!({"run_id":run}))
+        .await;
+    next.assert_status_ok();
+    let data = next.json::<Value>()["data"].clone();
+    assert!(data["card"].is_null());
+    assert_eq!(data["run"]["completed"], true);
+    assert_eq!(data["run"]["reviewed"], 1);
+    assert!(data["run"]["finished_at"].is_string());
+    app.cleanup().await;
+}

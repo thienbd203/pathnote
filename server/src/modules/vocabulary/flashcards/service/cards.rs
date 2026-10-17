@@ -73,6 +73,7 @@ pub async fn next(
         .is_some_and(|run| run.finished_at.is_some())
     {
         return Ok(dto::Next {
+            run: runs::optional_summary(db, user, run_id).await?,
             card: None,
             overview: queue::counts(db, user, &f, (direction, retention)).await?,
         });
@@ -83,6 +84,7 @@ pub async fn next(
             runs::finish(db, user, id, true).await?;
         }
         return Ok(dto::Next {
+            run: runs::optional_summary(db, user, run_id).await?,
             card: None,
             overview: queue::counts(db, user, &f, (direction, retention)).await?,
         });
@@ -123,6 +125,7 @@ pub async fn next(
     };
     let meaning = queue::meanings(db, user, &card).await?;
     Ok(dto::Next {
+        run: runs::optional_summary(db, user, run_id).await?,
         card: Some(dto::Front {
             id,
             card_id: card.id,

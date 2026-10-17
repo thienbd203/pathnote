@@ -342,7 +342,7 @@ Code: `server/src/modules/settings/`.
 ## Kiểm thử tự động và điều kiện phát hành
 
 - Web có bộ Playwright Chromium cho desktop 1440×900 và Pixel 7 (touch/user agent), context và cache mới mỗi kịch bản. API fixture có kiểu theo contract thật; dữ liệu/giờ/font cố định, chặn host ngoài loopback và endpoint chưa khai báo.
-- Đo 16 màn cùng các thao tác mở form, tìm kiếm, AI copy sau khi cache hết hạn, reveal/grade/next, drawer và buổi trước/sau trên mobile. Mỗi bước có ngân sách request, cấm request trùng (hai ngoại lệ GET run giới hạn chờ R3) và cấm ghi ngoài lệnh đã khai báo. JSON và bảng CI chỉ rõ request khi vượt ngân sách; tối ưu phải hạ ngân sách cùng commit.
+- Đo 16 màn cùng các thao tác mở form, tìm kiếm, AI copy sau khi cache hết hạn, reveal/grade/next, drawer và buổi trước/sau trên mobile. Mỗi bước có ngân sách request, cấm request trùng (không còn ngoại lệ sau R3) và cấm ghi ngoài lệnh đã khai báo. JSON và bảng CI chỉ rõ request khi vượt ngân sách; tối ưu phải hạ ngân sách cùng commit.
 - So sánh ảnh ghi chép, thư viện, flashcard và hộp tạo buổi trên cả hai kích thước. Baseline macOS/Linux riêng; Linux dùng official Playwright image cùng phiên bản Chromium/Ubuntu của CI. Thay ảnh chuẩn phải xem ảnh/diff, không tự cập nhật trong CI.
 - Bộ browser contract dùng backend Rust thật và schema PostgreSQL dùng một lần, kiểm tra tạo buổi qua UI, autosave/F5, chấm bài và ẩn đáp án, chia sẻ/thu hồi giữa hai user, lưu lịch ôn flashcard. Harness chỉ nằm trong test binary; JWT test ở file tạm mode 600, không có đường đăng nhập tắt trong production.
 - Coordinator checkout đúng backend SHA và frontend SHA từ manifest; kiểm tra request/giao diện và contract phải qua trước deploy backend. Bản build dành cho test dùng loopback, độc lập artifact production. Khi lỗi, CI giữ trace/ảnh/report 7 ngày.
@@ -353,3 +353,5 @@ Code: web `e2e/`, `playwright*.config.ts`; Rust `server/tests/api/browser.rs`, `
 - Hiệu năng R1: sao chép prompt AI dùng reader public bulk tối đa 100 ID và cache từng bài; note 24 bài cần 1 GET sau khi cache cũ (trước 24), không đọc definition/đáp án quản lý. Đã đo trên desktop/mobile.
 
 - Hiệu năng R2: places/catalog của dialog đóng không tự tải; mở dialog/drawer mới tải khi cần. Mobile Learn 9 → 7, note 7 → 5; flashcard 5 → 3, cài đặt 3 → 1 (hai kích thước). Hai request chuyển sang thao tác mở Buổi mới/drawer, không bị loại mất chức năng. Timeline vẫn theo dõi đổi tên khóa.
+
+- Hiệu năng R3: next/grade trả thêm `run` thuộc user hiện tại; tổng kết dùng một aggregate SQL thay sáu truy vấn. UI dùng response, các cache khác chỉ đánh dấu cũ đến lúc cần đọc. Startup ôn 4 → 2 API sau R2 (1 GET run + 1 POST next); grade/thẻ kế 5 → 2 (grade + next), reveal vẫn riêng. Giữ ticket, bước xem đáp án, idempotency và FSRS.

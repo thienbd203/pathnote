@@ -14,12 +14,7 @@ Báo cáo đo tay ngày 17/10/2026 (frontend `8aaae7a`) cho thấy nhiều màn 
   - Sau khi xác minh, xóa mục này. R1–R8 giữ nguyên thứ tự bên dưới.
 
 - **Sửa theo báo cáo**, mỗi mục một commit và hạ ngân sách tương ứng:
-  - Kế hoạch R3: trả run summary trong next/grade, gom aggregate summary thành một truy vấn; dùng response cập nhật UI/cache, không refetch nền từng thẻ. Giữ nguyên ticket/reveal/lịch ôn.
-  - **R3** Vòng flashcard:
-    - Không GET run hai lần.
-    - `grade`/`next` cập nhật summary và overview từ response.
-    - Invalidate các màn khác mà không refetch ngay query không cần.
-    - Giữ nguyên ticket, quyền, FSRS và bước reveal: `VocabularyFlashcardsView.vue:241,260`, `lib/api/flashcards.ts:276`.
+  - Kế hoạch R4: endpoint tổng hợp read-only tối đa 100 khóa, một aggregate theo owner, không trả nội dung buổi; cards dùng summary từ parent thay GET từng khóa.
   - **R4** Thư viện: thống kê khóa trả kèm list, hoặc dùng endpoint bulk (chỉ số buổi và buổi gần nhất). Danh sách buổi chỉ tải khi vào khóa: `LibraryPlaceGroup.vue:26,32`, `lib/api/courses.ts:259`. Đây là thay đổi contract, phải ghi vào `docs/architecture.md`.
   - **R5** Mở gần đây:
     - Lấy dữ liệu từ timeline đã tải.
