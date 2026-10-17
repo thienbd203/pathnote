@@ -1,5 +1,7 @@
 # Sửa lỗi sau review toàn project — 16/10/2026
 
+> **Trạng thái 17/10/2026:** đã hoàn tất phần sửa code và tài liệu của P0/P1/P2, mỗi mục một commit theo repo. Xem [báo cáo và commit](11-review-fixes-report.md). Các bước kiểm tra/cấu hình production dành cho người vận hành vẫn cần thực hiện trước khi deploy.
+
 Danh sách này đến từ đợt review lại sau khi hoàn tất `10-architecture.md` và commit gộp flashcard `d83be81`. Các mục P0 và P1 đã được xác minh lại trực tiếp trên code. Mục P2 lấy từ báo cáo review và đã đọc lại vị trí code được trỏ tới.
 
 ## Quy tắc chung
