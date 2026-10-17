@@ -276,8 +276,9 @@ Mỗi dòng dưới đây là một commit. Hành vi không đổi, test cũ ph�
 | B.3.4 / B.4.2 | `GET /flashcards`, `POST /flashcards/next` | Không có số từ/nghĩa; next tính lại ước lượng | Thêm `word_count`, `reviewable`; next giữ overview counts, `estimated_seconds: null` |
 | B.4.1 | `GET /courses/{id}/library-stats` | — | Thêm `session_count`, `latest_past_session: {id,title,starts_at} \| null`; lấy cùng truy vấn thống kê hiện có |
 | Sau chuẩn hóa: gộp Flashcard theo từ/loại từ | `GET /flashcards`, `POST /flashcards/next`, `POST /flashcards/{id}/reveal` | Đếm/lên lịch từng nghĩa nguồn; hiển thị một nghĩa | Đếm/lên lịch theo từ chuẩn hóa + locale + loại từ + chiều ôn; `front` Việt–Anh và `back.meaning` gom các nghĩa có quyền truy cập bằng `; `. JSON giữ shape. Frontend đổi nhãn `Nghĩa` thành `Mục ôn`. Chi tiết: `plans/flashcard-word-groups.md` |
-
 | Review 11 P1.2 | mọi route quá thời gian | HTTP 408 | HTTP 504, giữ message; upstream dịch 20s, web 28s, route 30s |
+
+| Review 11 P2.9 | `GET /flashcards/runs/{id}` và tổng kết lượt ôn | `unique_reviewed` đếm card nguồn + chiều | Đếm nhóm `study_key` + chiều; một nhóm ôn ở nhiều bài vẫn tính một mục. JSON giữ shape. |
 
 ### Điều kiện hoàn thành
 

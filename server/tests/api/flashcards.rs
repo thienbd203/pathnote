@@ -805,3 +805,79 @@ async fn meanings_index_migration_can_be_reversed_without_touching_schedules() {
     assert!(exists(&app.db, "vocabulary_cards_word_locale_pos").await);
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn run_counts_shared_word_once_even_when_retried_from_another_lesson() {
+    use server::entities::{flashcard_attempts as attempts, vocabulary_cards as cards};
+    let app = LearningApp::spawn().await;
+    for meaning in ["nhớ", "ghi nhớ"] {
+        let session = lesson(&app, &app.owner_token).await;
+        save(
+            &app,
+            session,
+            &doc(vec![typed_entry("remember", meaning, "verb")]),
+            0,
+        )
+        .await;
+    }
+    let response = app
+        .api
+        .post("/api/v1/flashcards/runs")
+        .add_header("authorization", auth(&app.owner_token))
+        .json(&json!({}))
+        .await;
+    response.assert_status(StatusCode::CREATED);
+    let run = response.json::<Value>()["data"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let first = next(&app, &app.owner_token, json!({"run_id":run})).await;
+    let ticket = first["card"]["id"].as_str().unwrap();
+    reveal(&app, &app.owner_token, ticket).await;
+    grade(&app, ticket, 1).await;
+    let attempt = attempts::Entity::find_by_id(uuid::Uuid::parse_str(ticket).unwrap())
+        .one(app.db.as_ref())
+        .await
+        .unwrap()
+        .unwrap();
+    let source = cards::Entity::find_by_id(attempt.card_id)
+        .one(app.db.as_ref())
+        .await
+        .unwrap()
+        .unwrap();
+    save(
+        &app,
+        source.session_id,
+        &json!({"type":"doc","content":[{"type":"paragraph"}]}),
+        1,
+    )
+    .await;
+    memory::Entity::update_many()
+        .col_expr(
+            memory::Column::DueAt,
+            sea_orm::sea_query::Expr::value(Utc::now().fixed_offset() - Duration::seconds(1)),
+        )
+        .filter(memory::Column::UserId.eq(app.owner_id))
+        .exec(app.db.as_ref())
+        .await
+        .unwrap();
+    let second = next(&app, &app.owner_token, json!({"run_id":run})).await;
+    let ticket = second["card"]["id"].as_str().unwrap();
+    reveal(&app, &app.owner_token, ticket).await;
+    grade(&app, ticket, 3).await;
+    let attempt2 = attempts::Entity::find_by_id(uuid::Uuid::parse_str(ticket).unwrap())
+        .one(app.db.as_ref())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_ne!(attempt.card_id, attempt2.card_id);
+    let summary = app
+        .api
+        .get(&format!("/api/v1/flashcards/runs/{run}"))
+        .add_header("authorization", auth(&app.owner_token))
+        .await
+        .json::<Value>();
+    assert_eq!(summary["data"]["reviewed"], 2);
+    assert_eq!(summary["data"]["unique_reviewed"], 1);
+    app.cleanup().await;
+}

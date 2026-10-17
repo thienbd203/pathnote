@@ -24,7 +24,11 @@
 | P2.3 | Web: c8c19aa | 196 tests/build/format; kiểm tra invalidation notes và AI import |
 | P2.4 | Web: 0bda4ee | 196 tests/build/format; reset generation/error khi đổi lesson |
 | P2.5 | Web: b7fdc2e | 196 tests/build/format; bỏ polling chết |
-| P2.6 | Rust: commit `Apply browser headers to JSON fallback errors` | fmt/clippy/workspace; 404 và 405 đều có no-store/no-referrer và JSON |
+| P2.6 | Rust: a751c23 | fmt/clippy/workspace; 404 và 405 đều có no-store/no-referrer và JSON |
+
+| P2.7 | Rust: 3ab1e2f | fmt/clippy/workspace; request ID được propagate và expose qua CORS; field trong trace span |
+| P2.8 | Rust: 1fc119c | fmt/clippy/workspace; predicate giữ mặc định tower-http và chỉ nén text/JSON, test PDF/ZIP/DOCX/image |
+| P2.9 | Rust: commit `Count unique reviewed word groups across source lessons` | fmt/clippy/workspace; test một nhóm ôn Again rồi từ source khác: reviewed 2, unique 1; ghi B.6 |
 
 ## Giới hạn và việc người vận hành cần làm
 

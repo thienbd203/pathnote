@@ -35,7 +35,7 @@ pub async fn summary<C: ConnectionTrait>(
     let unique: i64 = base
         .clone()
         .select_only()
-        .expr(Expr::cust("COUNT(DISTINCT (card_id, direction))"))
+        .expr(Expr::cust("COUNT(DISTINCT (study_key, direction))"))
         .into_tuple()
         .one(db)
         .await?
