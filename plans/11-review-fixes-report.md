@@ -28,7 +28,10 @@
 
 | P2.7 | Rust: 3ab1e2f | fmt/clippy/workspace; request ID được propagate và expose qua CORS; field trong trace span |
 | P2.8 | Rust: 1fc119c | fmt/clippy/workspace; predicate giữ mặc định tower-http và chỉ nén text/JSON, test PDF/ZIP/DOCX/image |
-| P2.9 | Rust: commit `Count unique reviewed word groups across source lessons` | fmt/clippy/workspace; test một nhóm ôn Again rồi từ source khác: reviewed 2, unique 1; ghi B.6 |
+| P2.9 | Rust: 9fff301 | fmt/clippy/workspace; test một nhóm ôn Again rồi từ source khác: reviewed 2, unique 1; ghi B.6 |
+
+| P2.10 | Rust: f6f2c87 | fmt/clippy/workspace; auth/me dùng service, ghi ngoại lệ multi-place lock ở A.1 |
+| P2.11 | Rust: commit `Validate the complete IPA batch request size` | fmt/clippy/workspace (104 API pass, 2 ignored); test mảng <64KiB nhưng cả body >64KiB bị 422 |
 
 ## Giới hạn và việc người vận hành cần làm
 

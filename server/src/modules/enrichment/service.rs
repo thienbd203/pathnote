@@ -25,7 +25,7 @@ pub async fn batch(
     let input = input?;
     if input.texts.is_empty()
         || input.texts.len() > 50
-        || serde_json::to_vec(&input.texts)
+        || serde_json::to_vec(&input)
             .map_err(|_| AppError::BadRequest("Lô không hợp lệ.".into()))?
             .len()
             > 65536

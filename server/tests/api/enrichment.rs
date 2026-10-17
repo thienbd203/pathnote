@@ -170,3 +170,23 @@ async fn enrichment_with_real_local_services() {
         .is_empty());
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn batch_size_limit_includes_the_json_envelope() {
+    let app = LearningApp::spawn().await;
+    let id = lesson(&app, &app.owner_token).await;
+    let mut texts = vec!["é".repeat(1000); 32];
+    texts.push("é".repeat(710));
+    let input = json!({"texts": texts, "locale": "en-US"});
+    assert!(serde_json::to_vec(&input["texts"]).unwrap().len() <= 65536);
+    assert!(serde_json::to_vec(&input).unwrap().len() > 65536);
+    let response = app
+        .api
+        .post(&format!("/api/v1/sessions/{id}/pronunciation/batch"))
+        .add_header("authorization", auth(&app.owner_token))
+        .json(&input)
+        .await;
+    response.assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(response.json::<Value>()["errors"]["texts"].is_array());
+    app.cleanup().await;
+}
