@@ -295,3 +295,192 @@ async fn exercise_references_roundtrip_through_realtime_snapshot_and_reject_othe
         .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
     app.cleanup().await;
 }
+
+async fn bulk(app: &LearningApp, session: i64, ids: &str, token: &str) -> Value {
+    let response = app
+        .api
+        .get(&format!("/api/v1/sessions/{session}/exercises"))
+        .add_query_param("ids", ids)
+        .add_header("authorization", auth(token))
+        .await;
+    response.assert_status_ok();
+    response.json::<Value>()["data"].clone()
+}
+
+#[tokio::test]
+async fn bulk_exercises_are_bounded_session_scoped_and_use_the_public_projection() {
+    let app = LearningApp::spawn().await;
+    let session = lesson(&app).await;
+    let another = lesson(&app).await;
+    let id = create(&app, session, choice(), &app.owner_token).await;
+    let foreign = create(&app, another, fill(), &app.owner_token).await;
+    let url = format!("/api/v1/sessions/{session}/exercises");
+    app.api
+        .get(&url)
+        .add_query_param("ids", id)
+        .await
+        .assert_status_unauthorized();
+    app.api
+        .get(&url)
+        .add_query_param("ids", id)
+        .add_header("authorization", auth(&app.other_token))
+        .await
+        .assert_status_not_found();
+    app.api
+        .get("/api/v1/sessions/999999/exercises")
+        .add_query_param("ids", id)
+        .add_header("authorization", auth(&app.owner_token))
+        .await
+        .assert_status_not_found();
+    for invalid in [
+        "".to_owned(),
+        "0".into(),
+        "-1".into(),
+        "1,no".into(),
+        "1,".into(),
+        " 1".into(),
+        "9223372036854775808".into(),
+        vec!["1"; 101].join(","),
+    ] {
+        app.api
+            .get(&url)
+            .add_query_param("ids", invalid)
+            .add_header("authorization", auth(&app.owner_token))
+            .await
+            .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+    }
+    app.api
+        .get(&url)
+        .add_header("authorization", auth(&app.owner_token))
+        .await
+        .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+    app.api
+        .get(&url)
+        .add_query_param("ids", id)
+        .add_query_param("definition", true)
+        .add_header("authorization", auth(&app.owner_token))
+        .await
+        .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+    let rows = bulk(
+        &app,
+        session,
+        &format!("{foreign},{id},999999,{id}"),
+        &app.owner_token,
+    )
+    .await;
+    let single = app
+        .api
+        .get(&format!("{url}/{id}"))
+        .add_header("authorization", auth(&app.owner_token))
+        .await
+        .json::<Value>();
+    assert_eq!(rows, json!([single["data"]]));
+    assert!(!rows.to_string().contains("answers"));
+    assert!(!rows.to_string().contains("explanation"));
+    assert_eq!(
+        bulk(&app, session, &foreign.to_string(), &app.owner_token).await,
+        json!([])
+    );
+    let imported = app
+        .api
+        .post(&format!("{url}/import"))
+        .add_header("authorization", auth(&app.owner_token))
+        .json(&json!({"title":"100 questions","questions":vec![choice();100]}))
+        .await;
+    imported.assert_status(StatusCode::CREATED);
+    let ids = imported.json::<Value>()["data"]["ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .rev()
+        .map(|v| v.as_i64().unwrap().to_string())
+        .collect::<Vec<_>>();
+    let rows = bulk(&app, session, &ids.join(","), &app.owner_token).await;
+    assert_eq!(rows.as_array().unwrap().len(), 100);
+    assert_eq!(rows[0]["id"].as_i64().unwrap().to_string(), ids[0]);
+    app.cleanup().await;
+}
+
+#[tokio::test]
+async fn bulk_attempts_are_personal_latest_current_revision_and_revocation_safe() {
+    let app = LearningApp::spawn().await;
+    let session = lesson(&app).await;
+    let owner = auth(&app.owner_token);
+    let guest = auth(&app.other_token);
+    let member = app
+        .api
+        .post(&format!("/api/v1/sessions/{session}/collaborators"))
+        .add_header("authorization", &owner)
+        .json(&json!({"email":"other@example.test"}))
+        .await;
+    member.assert_status(StatusCode::CREATED);
+    let id = create(&app, session, fill(), &app.owner_token).await;
+    let other_id = create(&app, session, choice(), &app.other_token).await;
+    let path = format!("/api/v1/sessions/{session}/exercises/{id}");
+    let a = start(&app, &path, &app.other_token, false).await;
+    app.api
+        .post(&format!("{path}/attempts/{}/answers", a["id"]))
+        .add_header("authorization", &guest)
+        .json(&json!({"position":0,"answer":"wrong","try":0}))
+        .await
+        .assert_status_ok();
+    let rows = bulk(&app, session, &format!("{id},{other_id}"), &app.other_token).await;
+    assert_eq!(rows[0]["can_manage"], false);
+    assert_eq!(rows[1]["can_manage"], true);
+    assert!(!rows.to_string().contains("answers"));
+    app.api
+        .post(&format!("{path}/attempts/{}/answers", a["id"]))
+        .add_header("authorization", &guest)
+        .json(&json!({"position":0,"answer":"wrong","try":1}))
+        .await
+        .assert_status_ok();
+    let rows = bulk(&app, session, &id.to_string(), &app.other_token).await;
+    assert_eq!(rows[0]["attempt"]["results"][0]["answers"], json!(["as"]));
+    let single = app
+        .api
+        .get(&path)
+        .add_header("authorization", &guest)
+        .await
+        .json::<Value>();
+    assert_eq!(rows[0], single["data"]);
+    let owner_rows = bulk(&app, session, &id.to_string(), &app.owner_token).await;
+    assert!(owner_rows[0]["attempt"].is_null());
+    assert!(!owner_rows.to_string().contains("answers"));
+    let restart = start(&app, &path, &app.other_token, true).await;
+    let rows = bulk(&app, session, &id.to_string(), &app.other_token).await;
+    assert_eq!(rows[0]["attempt"]["id"], restart["id"]);
+    assert!(!rows.to_string().contains("answers"));
+    app.api
+        .put(&path)
+        .add_header("authorization", &owner)
+        .json(&json!({"title":"New revision","questions":[fill()],"revision":1}))
+        .await
+        .assert_status_ok();
+    let rows = bulk(&app, session, &id.to_string(), &app.other_token).await;
+    assert_eq!(rows[0]["revision"], 2);
+    assert!(rows[0]["attempt"].is_null());
+    let current = start(&app, &path, &app.other_token, false).await;
+    assert_eq!(
+        bulk(&app, session, &id.to_string(), &app.other_token).await[0]["attempt"]["id"],
+        current["id"]
+    );
+    let members = app
+        .api
+        .get(&format!("/api/v1/sessions/{session}/collaborators"))
+        .add_header("authorization", &owner)
+        .await
+        .json::<Value>();
+    let uid = members["data"][0]["id"].as_i64().unwrap();
+    app.api
+        .delete(&format!("/api/v1/sessions/{session}/collaborators/{uid}"))
+        .add_header("authorization", &owner)
+        .await
+        .assert_status(StatusCode::NO_CONTENT);
+    app.api
+        .get(&format!("/api/v1/sessions/{session}/exercises"))
+        .add_query_param("ids", id)
+        .add_header("authorization", &guest)
+        .await
+        .assert_status_not_found();
+    app.cleanup().await;
+}

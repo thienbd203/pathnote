@@ -1,7 +1,7 @@
 use super::{dto, service};
 use crate::{
     access_token::CurrentUser,
-    extract::{AppJson, AppPath},
+    extract::{AppJson, AppPath, AppQuery},
     response::ApiResponse,
     state::AppState,
     AppError,
@@ -29,6 +29,16 @@ pub async fn import(
 ) -> Result<ApiResponse<dto::CreateResource>, AppError> {
     Ok(ApiResponse::created(
         service::create(&s.db, u.id, session, body(input)?, true).await?,
+    ))
+}
+pub async fn index(
+    State(s): State<AppState>,
+    u: CurrentUser,
+    AppPath(session): AppPath<i64>,
+    AppQuery(input): AppQuery<dto::ReadQuery>,
+) -> Result<ApiResponse<Vec<dto::ExerciseResource>>, AppError> {
+    Ok(ApiResponse::ok(
+        service::read(&s.db, u.id, session, input).await?,
     ))
 }
 pub async fn show(

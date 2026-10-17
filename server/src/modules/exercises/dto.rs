@@ -7,6 +7,31 @@ fn text(s: &str, max: usize) -> bool {
 pub fn invalid() -> AppError {
     AppError::validation("questions", "Đề bài hoặc cấu trúc câu hỏi không hợp lệ.")
 }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReadQuery {
+    pub ids: String,
+}
+impl ReadQuery {
+    pub fn validate(&self) -> Result<Vec<i64>, AppError> {
+        let invalid = || AppError::validation("ids", "Cần từ 1 đến 100 ID bài tập hợp lệ.");
+        let mut ids = Vec::new();
+        for part in self.ids.split(',') {
+            if ids.len() == 100 || part.is_empty() || !part.bytes().all(|b| b.is_ascii_digit()) {
+                return Err(invalid());
+            }
+            let id = part.parse::<i64>().map_err(|_| invalid())?;
+            if id <= 0 {
+                return Err(invalid());
+            }
+            ids.push(id);
+        }
+        // Count the raw input before deduplicating, so repeated IDs cannot bypass the limit.
+        let mut seen = std::collections::HashSet::new();
+        ids.retain(|id| seen.insert(*id));
+        Ok(ids)
+    }
+}
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Definition {

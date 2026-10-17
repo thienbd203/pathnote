@@ -1,4 +1,5 @@
 mod create;
+mod read;
 use super::dto::*;
 use crate::{
     entities::{exercise_attempts as attempts, exercises},
@@ -6,6 +7,7 @@ use crate::{
     AppError,
 };
 pub use create::create;
+pub use read::read;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DatabaseTransaction,
     EntityTrait, QueryFilter, QueryOrder, Set,
@@ -89,6 +91,22 @@ fn attempt(model: &attempts::Model, q: &Question) -> Result<AttemptResource, App
         results,
     })
 }
+fn public_exercise(
+    model: exercises::Model,
+    latest: Option<&attempts::Model>,
+    user: i64,
+    owner: i64,
+) -> Result<ExerciseResource, AppError> {
+    let q = question(&model)?;
+    Ok(ExerciseResource {
+        id: model.id,
+        title: model.title,
+        revision: model.revision,
+        can_manage: user == owner || user == model.user_id,
+        questions: vec![q.public()],
+        attempt: latest.map(|a| attempt(a, &q)).transpose()?,
+    })
+}
 pub async fn show(
     db: &DatabaseConnection,
     user: i64,
@@ -98,8 +116,8 @@ pub async fn show(
 ) -> Result<ShowResource, AppError> {
     let (_, place) = notes::access(db, user, session, false).await?;
     let model = get(db, session, id).await?;
-    let q = question(&model)?;
     if definition {
+        let q = question(&model)?;
         manage(&model, user, place.user_id)?;
         Ok(ShowResource::Definition(DefinitionResource {
             title: model.title,
@@ -108,14 +126,12 @@ pub async fn show(
         }))
     } else {
         let a = latest(db, user, &model).await?;
-        Ok(ShowResource::Exercise(ExerciseResource {
-            id,
-            title: model.title,
-            revision: model.revision,
-            can_manage: user == place.user_id || user == model.user_id,
-            questions: vec![q.public()],
-            attempt: a.as_ref().map(|a| attempt(a, &q)).transpose()?,
-        }))
+        Ok(ShowResource::Exercise(public_exercise(
+            model,
+            a.as_ref(),
+            user,
+            place.user_id,
+        )?))
     }
 }
 pub async fn update(

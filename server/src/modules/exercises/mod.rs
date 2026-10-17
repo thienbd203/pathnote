@@ -9,7 +9,10 @@ use axum::{
 };
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/sessions/{session}/exercises", post(handlers::create))
+        .route(
+            "/sessions/{session}/exercises",
+            post(handlers::create).get(handlers::index),
+        )
         .route(
             "/sessions/{session}/exercises/import",
             post(handlers::import),

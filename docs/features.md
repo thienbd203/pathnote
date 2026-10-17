@@ -259,12 +259,15 @@ Ví dụ import:
 ]}
 ```
 
+- Editor gom các block đang tải bằng DataLoader, tối đa 100 ID/request; cache vẫn theo từng bài trong Vue Query. Block mới (import/realtime) tải theo lô mới; trả lời/làm lại cập nhật đúng cache của bài đó, sửa đề chỉ tải lại bài vừa sửa. Hủy một block không hủy request của block khác; hủy tất cả/đổi tài khoản loại bỏ kết quả cũ.
+
 ### API
 
 Prefix `/sessions/{session}/exercises`:
 
 - `POST /` — tạo một câu `{title,questions:[1 câu]}` → id.
 - `POST /import` — 1–100 câu → ids theo thứ tự.
+- `GET /?ids=1,2,...` — đọc theo lô 1–100 ID dương (kể cả ID lặp), loại trùng và giữ thứ tự đầu vào; `{data:[ExerciseResource]}`. Bỏ qua ID không tồn tại/thuộc buổi khác theo cùng quy tắc, buổi không có quyền → 404. Chỉ đề public + lượt mới nhất của chính người gọi ở revision hiện tại; không có chế độ definition. Sau kiểm tra quyền, hai truy vấn lấy đề và lượt làm cho cả lô, không truy vấn trong vòng lặp; dùng index `exercise_attempts_latest` và PostgreSQL `DISTINCT ON`.
 - `GET /{id}` — đề public + lượt hiện tại của người gọi.
 - `GET /{id}/definition` — đề + đáp án (chỉ người quản lý).
 - `PUT /{id}` — sửa, kèm `revision` hiện tại.
