@@ -37,7 +37,7 @@ pub async fn answer(
         .await?
         .ok_or_else(|| AppError::NotFound("Không tìm thấy lượt ôn.".into()))?;
     let mut review = Review::parse(model)?;
-    // Note saves and share revocation take the same parent locks. Order prevents cross-review deadlocks.
+    // Intentional multi-place locking exception (architecture A.1): match note/revocation locks in ascending ID order.
     let sessions: BTreeSet<_> = review
         .questions
         .iter()

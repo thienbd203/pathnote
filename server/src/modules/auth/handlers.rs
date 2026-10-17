@@ -1,18 +1,15 @@
 use super::{
     dto::{TokenResource, UserResource},
     google::{GoogleCredentials, LoginAttempt},
+    service,
 };
-use crate::{
-    access_token::{CurrentUser, ACCESS_TOKEN_TTL},
-    entities::users,
-};
+use crate::access_token::{CurrentUser, ACCESS_TOKEN_TTL};
 use crate::{auth::AuthSession, error::AppError, response::ApiResponse, state::AppState};
 use axum::{
     extract::{Query, State},
     http::StatusCode,
     response::{IntoResponse, Redirect, Response},
 };
-use sea_orm::EntityTrait;
 use serde::Deserialize;
 use tower_sessions::{Expiry, Session};
 const LOGIN_ATTEMPT: &str = "google_login_attempt";
@@ -110,11 +107,11 @@ pub async fn me(
     State(state): State<AppState>,
     user: CurrentUser,
 ) -> Result<ApiResponse<UserResource>, AppError> {
-    let user = users::Entity::find_by_id(user.id)
-        .one(state.db.as_ref())
-        .await?
-        .ok_or(AppError::Unauthenticated)?;
-    Ok(ApiResponse::ok(user.into()))
+    Ok(ApiResponse::ok(
+        service::current_user(state.db.as_ref(), user.id)
+            .await?
+            .into(),
+    ))
 }
 pub async fn jwks(State(state): State<AppState>) -> axum::Json<serde_json::Value> {
     axum::Json(state.access_tokens.jwks())

@@ -37,6 +37,7 @@ Quy tắc:
 - **Service lớn:** khi một service vượt khoảng 300 dòng, đổi thành thư mục `service/` và tách theo hành động (`service/create.rs`, `service/answer.rs`), như `vocabulary/reviews` đang làm.
 - **Domain con:** dùng cùng layout lồng bên trong, ví dụ `vocabulary/flashcards/{mod,handlers,service,dto}.rs`.
 - **Route nội bộ** (bridge collaboration): đặt trong `<domain>/internal.rs`, có router và middleware riêng, nhưng vẫn gọi service. Không ghi DB trực tiếp trong file đó.
+- **Khóa nhiều place trong reviews/answer.rs:** ngoại lệ có chủ đích cho lượt ôn từ nhiều bài. Khóa parent theo ID tăng dần, dùng cùng lock_for_write với lưu note/thu hồi quyền để tránh deadlock và không chấm sau khi mất quyền. Không đổi thành các khóa rời ngoài transaction.
 - **Thao tác liên domain:** `modules/bulk.rs` được giữ làm ngoại lệ có chủ đích, vì xóa nhiều place, course hoặc session cần một thứ tự khóa chung. Không thêm file liên domain mới nếu chưa ghi lý do vào tài liệu này.
 
 ### A.2 Hạ tầng dùng chung (`server/src/`)

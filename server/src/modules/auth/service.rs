@@ -61,3 +61,13 @@ pub async fn find_or_create_google_user(
     model.updated_at = Set(chrono::Utc::now().fixed_offset());
     Ok(model.update(db).await?)
 }
+
+pub async fn current_user<C: sea_orm::ConnectionTrait>(
+    db: &C,
+    user: i64,
+) -> Result<users::Model, AppError> {
+    users::Entity::find_by_id(user)
+        .one(db)
+        .await?
+        .ok_or(AppError::Unauthenticated)
+}
