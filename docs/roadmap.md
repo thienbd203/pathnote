@@ -14,7 +14,6 @@ Báo cáo đo tay ngày 17/10/2026 (frontend `8aaae7a`) cho thấy nhiều màn 
   - Sau khi xác minh, xóa mục này. R1–R8 giữ nguyên thứ tự bên dưới.
 
 - **Sửa theo báo cáo**, mỗi mục một commit và hạ ngân sách tương ứng:
-  - **R1** Sao chép prompt AI dùng reader bulk đã có (gom tối đa 100 ID, dùng cache còn mới, không gọi `/definition`): `AIStudyDialog.vue:74`, `lib/api/exercises.ts:151`.
   - **R2** Hộp Buổi mới chỉ bật query `places`/`courses/search` khi mở dialog hoặc khi navigation cần: `WorkspaceCreateDialog.vue:47`, `useWorkspaceData.ts:39`.
   - **R3** Vòng flashcard:
     - Không GET run hai lần.

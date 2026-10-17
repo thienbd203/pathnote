@@ -349,3 +349,5 @@ Code: `server/src/modules/settings/`.
 - Phạm vi còn cần thử thật: OAuth Google, realtime hai người, Safari iOS. Mock network không chứng minh độ trễ production; bộ contract không thay phép đo đường truyền/DB trên VPS.
 
 Code: web `e2e/`, `playwright*.config.ts`; Rust `server/tests/api/browser.rs`, `.github/workflows/deploy.yml`. Cách chạy: README web.
+
+- Hiệu năng R1: sao chép prompt AI dùng reader public bulk tối đa 100 ID và cache từng bài; note 24 bài cần 1 GET sau khi cache cũ (trước 24), không đọc definition/đáp án quản lý. Đã đo trên desktop/mobile.
