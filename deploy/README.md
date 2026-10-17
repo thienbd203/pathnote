@@ -137,8 +137,10 @@ Chưa start service; binary lên ở lần deploy đầu. Quy tắc `.env`:
   COLLABORATION_SECRET giữa Rust/Hocuspocus; Hocuspocus trỏ API nội bộ sang Rust.
 
 Helper backup do root cài cố định; CI không upload/thay nó. Nó chạy `pg_dump` bằng
-user ứng dụng (không phải root), nhận URL qua biến môi trường con (không qua tham số
-hay log), ghi dump root mode 600, giữ 5 bản hoàn tất mới nhất; dump lỗi/rỗng làm
+user ứng dụng (không phải root), tách URL thành các biến libpq (`PGHOST`, `PGPORT`,
+`PGUSER`, `PGPASSWORD`, `PGDATABASE`); không truyền nguyên URL vào `PGDATABASE`.
+Thông tin kết nối không vào tham số hay log. Helper ghi dump root mode 600,
+giữ 5 bản hoàn tất mới nhất; dump lỗi/rỗng làm
 deploy dừng trước migration. Đổi DEPLOY_PATH/user thì root sửa hằng số trong helper
 cùng sudoers. Không cấp sudo chạy helper từ thư mục releases (deploy có quyền ghi).
 
@@ -155,6 +157,12 @@ sudo visudo -cf /etc/sudoers.d/pathnote-rust
 ```
 
 VPS đã có từ trước: cài helper, client và sudoers **trước lần deploy tiếp theo**.
+Khi helper thay đổi, upload lại `deploy/database-backup.py` và chạy lại lệnh
+`install` ở mục 2.3; chỉ chạy lại CI không cập nhật helper trên VPS.
+Helper hỗ trợ URL một host (kể cả IPv6), database và credential percent-encoded;
+query hỗ trợ `sslmode`, `sslrootcert`, `sslcert`, `sslkey`, `application_name`,
+`options`, `connect_timeout`, `target_session_attrs`. Option khác bị từ chối,
+không âm thầm bỏ qua cấu hình kết nối/TLS.
 
 ### 2.4 Domain và Nginx HTTPS
 

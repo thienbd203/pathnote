@@ -11,11 +11,48 @@ import pwd
 import re
 import subprocess
 import sys
+from urllib.parse import parse_qsl, unquote, urlsplit
 
 DEPLOY = Path('/opt/pathnote-rust')
 # Outside the deploy-owned tree: a replaced symlink cannot redirect root writes.
 BACKUPS = Path('/var/backups/pathnote-rust')
 RELEASE = re.compile(r'[0-9]{14}-[0-9]+-[0-9]+')
+
+
+def connection_environment(url):
+    # libpq does not expand a connection URI supplied through PGDATABASE.
+    # Keep credentials out of argv, and reject unsupported options rather than
+    # silently connecting to a different database or dropping TLS requirements.
+    parsed = urlsplit(url)
+    if parsed.scheme not in ('postgres', 'postgresql') or parsed.fragment or not parsed.hostname:
+        raise ValueError('Expected a single-host PostgreSQL URL without a fragment')
+    if ',' in parsed.netloc:
+        raise ValueError('Multi-host PostgreSQL URLs are not supported by the backup helper')
+    environment = {'PATH': '/usr/bin:/bin', 'PGCONNECT_TIMEOUT': '15'}
+    components = {
+        'PGHOST': parsed.hostname,
+        'PGPORT': str(parsed.port) if parsed.port is not None else None,
+        'PGUSER': parsed.username,
+        'PGPASSWORD': parsed.password,
+        'PGDATABASE': parsed.path.removeprefix('/'),
+    }
+    for name, value in components.items():
+        if value is not None:
+            environment[name] = unquote(value, errors='strict')
+    options = {
+        'sslmode': 'PGSSLMODE', 'sslrootcert': 'PGSSLROOTCERT',
+        'sslcert': 'PGSSLCERT', 'sslkey': 'PGSSLKEY',
+        'application_name': 'PGAPPNAME', 'options': 'PGOPTIONS',
+        'connect_timeout': 'PGCONNECT_TIMEOUT',
+        'target_session_attrs': 'PGTARGETSESSIONATTRS',
+    }
+    for name, value in parse_qsl(parsed.query, keep_blank_values=True, strict_parsing=True) if parsed.query else []:
+        if name not in options:
+            raise ValueError('Unsupported PostgreSQL URL option in backup configuration')
+        environment[options[name]] = value
+    if not environment['PGDATABASE'] or any('\x00' in value for value in environment.values()):
+        raise ValueError('Invalid PostgreSQL connection configuration')
+    return environment
 
 
 def database_url(text):
@@ -49,6 +86,7 @@ def backup(release, deploy=DEPLOY, directory=BACKUPS):
         raise ValueError('Backup helper must run as root')
     account = pwd.getpwnam('pathnote')
     url = database_url((deploy / 'shared/.env').read_text())
+    environment = connection_environment(url)
     # The operator creates this root-only directory; never follow a leaf symlink.
     folder = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
@@ -68,7 +106,7 @@ def backup(release, deploy=DEPLOY, directory=BACKUPS):
                     ['/usr/bin/pg_dump', '--format=custom', '--no-password'],
                     stdout=output, stderr=subprocess.DEVNULL, check=True,
                     user=account.pw_uid, group=account.pw_gid, extra_groups=[], cwd='/',
-                    env={'PATH': '/usr/bin:/bin', 'PGDATABASE': url, 'PGCONNECT_TIMEOUT': '15'},
+                    env=environment,
                 )
                 output.flush()
                 if os.fstat(output.fileno()).st_size == 0:

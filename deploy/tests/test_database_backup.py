@@ -14,6 +14,25 @@ NEW = '20261016000000-42-1'
 
 
 class BackupTests(unittest.TestCase):
+    def test_connection_url_becomes_individual_libpq_environment_variables(self):
+        environment = helper.connection_environment(
+            'postgresql://backup:p%40ss%3A%2F%25%27@127.0.0.1:5433/pathnote%5Frust'
+            '?sslmode=require&application_name=pre+deploy&options=-c%20statement_timeout%3D0'
+        )
+        self.assertEqual(environment, {
+            'PATH': '/usr/bin:/bin', 'PGCONNECT_TIMEOUT': '15',
+            'PGHOST': '127.0.0.1', 'PGPORT': '5433', 'PGUSER': 'backup',
+            'PGPASSWORD': "p@ss:/%'", 'PGDATABASE': 'pathnote_rust',
+            'PGSSLMODE': 'require', 'PGAPPNAME': 'pre deploy',
+            'PGOPTIONS': '-c statement_timeout=0',
+        })
+        self.assertEqual(helper.connection_environment('postgres://user@[::1]/db')['PGHOST'], '::1')
+        for url in ('postgres://host/', 'postgres://one,two/db', 'postgres://host/db#fragment',
+                    'postgres://host/db?unknown=1', 'postgres://host/db?sslmode',
+                    'postgres://host/db%00', 'postgres://host:wrong/db'):
+            with self.subTest(url=url), self.assertRaises(ValueError):
+                helper.connection_environment(url)
+
     def test_env_quotes_comments_and_url_characters_without_shell_execution(self):
         url = 'postgres://user:p%40ss@localhost/db?application_name=backup#fragment'
         for value in (url, f"'{url}'", f'"{url}" # comment', url + ' # comment'):
@@ -38,7 +57,8 @@ class BackupTests(unittest.TestCase):
                 self.assertEqual(args, ['/usr/bin/pg_dump', '--format=custom', '--no-password'])
                 self.assertEqual(kwargs['user'], 123)
                 self.assertEqual(kwargs['extra_groups'], [])
-                self.assertEqual(kwargs['env']['PGDATABASE'], 'postgres://localhost/test')
+                self.assertEqual(kwargs['env']['PGDATABASE'], 'test')
+                self.assertEqual(kwargs['env']['PGHOST'], 'localhost')
                 kwargs['stdout'].write(b'PGDMP-test')
 
             real_fstat = os.fstat
