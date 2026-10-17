@@ -320,3 +320,60 @@ async fn concurrent_session_creation_and_course_deletion_leave_no_active_childre
         .is_empty());
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn bulk_session_metadata_is_ordered_bounded_and_owner_scoped() {
+    let app = LearningApp::spawn().await;
+    let (p, c) = parents(&app).await;
+    let a = create(&app, &format!("/api/v1/places/{p}/sessions"), input()).await["id"]
+        .as_i64()
+        .unwrap();
+    let b = create(&app, &format!("/api/v1/courses/{c}/sessions"), input()).await["id"]
+        .as_i64()
+        .unwrap();
+    let url = format!("/api/v1/sessions/bulk?ids={b},{a},{b},999999");
+    let response = app
+        .api
+        .get(&url)
+        .add_header("authorization", bearer(&app))
+        .await;
+    response.assert_status_ok();
+    let rows = response.json::<Value>()["data"].clone();
+    assert_eq!(rows.as_array().unwrap().len(), 2);
+    assert_eq!(rows[0]["id"], b);
+    assert_eq!(rows[1]["id"], a);
+    assert!(rows[0].get("content").is_none());
+    let foreign = app
+        .api
+        .get(&url)
+        .add_header("authorization", format!("Bearer {}", app.other_token))
+        .await;
+    foreign.assert_status_ok();
+    assert_eq!(foreign.json::<Value>()["data"], json!([]));
+    app.api
+        .delete(&format!("/api/v1/courses/{c}"))
+        .add_header("authorization", bearer(&app))
+        .await
+        .assert_status_no_content();
+    let rows = app
+        .api
+        .get(&url)
+        .add_header("authorization", bearer(&app))
+        .await
+        .json::<Value>()["data"]
+        .clone();
+    assert_eq!(rows.as_array().unwrap().len(), 1);
+    assert_eq!(rows[0]["id"], a);
+    for ids in [
+        "0".to_string(),
+        "1,,2".into(),
+        vec![a.to_string(); 101].join(","),
+    ] {
+        app.api
+            .get(&format!("/api/v1/sessions/bulk?ids={ids}"))
+            .add_header("authorization", bearer(&app))
+            .await
+            .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+    }
+    app.cleanup().await;
+}

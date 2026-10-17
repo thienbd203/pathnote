@@ -6,6 +6,7 @@ use crate::state::AppState;
 use axum::{routing::get, Router};
 pub fn routes() -> Router<AppState> {
     Router::new()
+        .route("/sessions/bulk", get(handlers::read_many))
         .route("/sessions", axum::routing::delete(super::bulk::sessions))
         .route("/sessions/search", get(handlers::search))
         .route("/sessions/{id}/neighbors", get(handlers::neighbors))

@@ -108,3 +108,13 @@ pub async fn search(
         input.map_err(|_| AppError::validation("query", "Tham số tìm kiếm không hợp lệ."))?;
     Ok(Json(service::search(&state.db, user.id, input).await?))
 }
+
+pub async fn read_many(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    AppQuery(input): AppQuery<crate::pagination::IdsQuery>,
+) -> Result<ApiResponse<Vec<SessionResource>>, AppError> {
+    Ok(ApiResponse::ok(
+        service::read_many(&state.db, user.id, input).await?,
+    ))
+}

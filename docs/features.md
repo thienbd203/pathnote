@@ -357,3 +357,5 @@ Code: web `e2e/`, `playwright*.config.ts`; Rust `server/tests/api/browser.rs`, `
 - Hiệu năng R3: next/grade trả thêm `run` thuộc user hiện tại; tổng kết dùng một aggregate SQL thay sáu truy vấn. UI dùng response, các cache khác chỉ đánh dấu cũ đến lúc cần đọc. Startup ôn 4 → 2 API sau R2 (1 GET run + 1 POST next); grade/thẻ kế 5 → 2 (grade + next), reveal vẫn riêng. Giữ ticket, bước xem đáp án, idempotency và FSRS.
 
 - Hiệu năng R4: `GET /courses/library-stats?ids=…` trả summary tối đa 100 khóa, một aggregate SQL theo owner, loại mục đã xóa/mất quyền; không trả note hay danh sách buổi. Parent thư viện tải summary cho nhóm khóa rồi truyền xuống cards. Thư viện desktop 6 → 5 API, mobile 11 → 8 sau R2 (ba nơi/sáu khóa); vào khóa mới tải stats đầy đủ/danh sách buổi.
+
+- Hiệu năng R5: Mở gần đây dùng timeline trước, thiếu metadata mới gọi `GET /sessions/bulk?ids=…` (1–100 ID, đúng owner/đang hoạt động, không có note). Giữ thứ tự local, loại ID không còn truy cập và dùng lại response sau khi loại ID để không tải lặp. Với năm buổi đã có trong timeline, Learn desktop 12 → 7 và mobile 7 → 2 sau R2. Browser kiểm tra cả trường hợp thiếu metadata và ID không tồn tại.
