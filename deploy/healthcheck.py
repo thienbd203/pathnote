@@ -17,7 +17,11 @@ def check(url: str, expected_version: str, service: str = "backend") -> None:
         parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "localhost"}
     ):
         raise ValueError("Healthcheck requires HTTPS or a local HTTP address")
-    request = urllib.request.Request(url, headers={"Cache-Control": "no-cache"})
+    request = urllib.request.Request(url, headers={
+        "Cache-Control": "no-cache",
+        "User-Agent": "Pathnote-Healthcheck/1.0",
+        "Accept": "application/json",
+    })
     with urllib.request.urlopen(request, timeout=10) as response:
         body = response.read(4097)
         if len(body) > 4096:

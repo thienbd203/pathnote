@@ -19,8 +19,12 @@ class HealthcheckTests(unittest.TestCase):
         return patch.object(healthcheck.urllib.request, 'urlopen', side_effect=opened)
 
     def test_matching_running_process_and_database(self):
-        with self.response({'data': {'status': 'ok', 'database': 'ok', 'version': 'new'}}):
+        with self.response({'data': {'status': 'ok', 'database': 'ok', 'version': 'new'}}) as request:
             healthcheck.check('http://127.0.0.1:3000/health', 'new')
+        headers = dict((key.lower(), value) for key, value in request.call_args[0][0].header_items())
+        self.assertEqual(headers['user-agent'], 'Pathnote-Healthcheck/1.0')
+        self.assertEqual(headers['accept'], 'application/json')
+        self.assertEqual(headers['cache-control'], 'no-cache')
 
     def test_old_process_or_failed_database_is_rejected(self):
         for data in ({'status': 'ok', 'database': 'ok', 'version': 'old'},

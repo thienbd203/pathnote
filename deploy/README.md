@@ -353,6 +353,11 @@ sudo sh -c 'umask 077; sudo -u postgres pg_dump -Fc pathnote_rust > /var/backups
 
 ### 4.5 Kiểm tra sau release
 
+Healthcheck HTTPS gửi `User-Agent: Pathnote-Healthcheck/1.0` và nhận JSON;
+không dùng User-Agent mặc định của Python (Cloudflare có thể chặn với lỗi 1010).
+Vẫn kiểm tra status, database, SHA chính xác và từ chối redirect; không bỏ kiểm tra
+TLS hay nới điều kiện thành công để vượt lỗi 403.
+
 ```sh
 sudo systemctl status pathnote-rust.service --no-pager -l
 sudo journalctl -u pathnote-rust.service -n 100 --no-pager
