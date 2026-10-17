@@ -351,3 +351,5 @@ Code: `server/src/modules/settings/`.
 Code: web `e2e/`, `playwright*.config.ts`; Rust `server/tests/api/browser.rs`, `.github/workflows/deploy.yml`. Cách chạy: README web.
 
 - Hiệu năng R1: sao chép prompt AI dùng reader public bulk tối đa 100 ID và cache từng bài; note 24 bài cần 1 GET sau khi cache cũ (trước 24), không đọc definition/đáp án quản lý. Đã đo trên desktop/mobile.
+
+- Hiệu năng R2: places/catalog của dialog đóng không tự tải; mở dialog/drawer mới tải khi cần. Mobile Learn 9 → 7, note 7 → 5; flashcard 5 → 3, cài đặt 3 → 1 (hai kích thước). Hai request chuyển sang thao tác mở Buổi mới/drawer, không bị loại mất chức năng. Timeline vẫn theo dõi đổi tên khóa.

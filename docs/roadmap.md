@@ -14,7 +14,7 @@ Báo cáo đo tay ngày 17/10/2026 (frontend `8aaae7a`) cho thấy nhiều màn 
   - Sau khi xác minh, xóa mục này. R1–R8 giữ nguyên thứ tự bên dưới.
 
 - **Sửa theo báo cáo**, mỗi mục một commit và hạ ngân sách tương ứng:
-  - **R2** Hộp Buổi mới chỉ bật query `places`/`courses/search` khi mở dialog hoặc khi navigation cần: `WorkspaceCreateDialog.vue:47`, `useWorkspaceData.ts:39`.
+  - Kế hoạch R3: trả run summary trong next/grade, gom aggregate summary thành một truy vấn; dùng response cập nhật UI/cache, không refetch nền từng thẻ. Giữ nguyên ticket/reveal/lịch ôn.
   - **R3** Vòng flashcard:
     - Không GET run hai lần.
     - `grade`/`next` cập nhật summary và overview từ response.
