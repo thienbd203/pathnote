@@ -1,19 +1,11 @@
-# Chuẩn kiến trúc backend và kế hoạch chuẩn hóa
+# Kiến trúc backend
 
-Ngày chốt: 16/10/2026. Tài liệu có hai phần:
+Chuẩn bắt buộc cho mọi code mới và code được sửa trong `pathnote-rust`. Module mẫu là `server/src/modules/places`; khi phân vân, làm giống `places`.
 
-- **Phần A** là chuẩn bắt buộc cho mọi code mới và code được sửa.
-- **Phần B** là danh sách việc để đưa code hiện tại về chuẩn. Mỗi task nhỏ, làm và commit riêng.
+Frontend có chuẩn tương ứng tại [`../pathnote-web/docs/architecture.md`](../../pathnote-web/docs/architecture.md). Mọi thay đổi JSON mà frontend thấy phải ghi vào bảng [Thay đổi contract API](#thay-đổi-contract-api) ở cuối tài liệu này, trong cùng commit.
 
-Module mẫu là `server/src/modules/places`. Khi phân vân, làm giống `places`.
 
-Frontend đi kèm có chuẩn riêng tại `../pathnote-web/docs/architecture.md`. Mọi thay đổi contract API phải ghi trong mục B.6 để frontend cập nhật cùng lúc.
-
----
-
-## Phần A — Chuẩn
-
-### A.1 Layout một module
+## A.1 Layout một module
 
 ```text
 server/src/modules/<domain>/
@@ -40,7 +32,7 @@ Quy tắc:
 - **Khóa nhiều place trong reviews/answer.rs:** ngoại lệ có chủ đích cho lượt ôn từ nhiều bài. Khóa parent theo ID tăng dần, dùng cùng lock_for_write với lưu note/thu hồi quyền để tránh deadlock và không chấm sau khi mất quyền. Không đổi thành các khóa rời ngoài transaction.
 - **Thao tác liên domain:** `modules/bulk.rs` được giữ làm ngoại lệ có chủ đích, vì xóa nhiều place, course hoặc session cần một thứ tự khóa chung. Không thêm file liên domain mới nếu chưa ghi lý do vào tài liệu này.
 
-### A.2 Hạ tầng dùng chung (`server/src/`)
+## A.2 Hạ tầng dùng chung (`server/src/`)
 
 | File | Nội dung | Ghi chú |
 | --- | --- | --- |
@@ -50,7 +42,7 @@ Quy tắc:
 | `extract.rs` (mới) | `AppJson<T>`, `AppQuery<T>`, `AppPath<T>` | Xem A.3 |
 | `access_token.rs` | Extractor `CurrentUser` | Không đổi |
 
-### A.3 Extractor: mọi lỗi đều trả JSON
+## A.3 Extractor: mọi lỗi đều trả JSON
 
 Không dùng `Result<Json<T>, JsonRejection>` rồi `map_err` trong từng handler nữa. Thay bằng extractor của axum với `rejection(AppError)`. Cần bật feature `macros` cho axum trong `Cargo.toml` gốc.
 
@@ -99,7 +91,7 @@ pub async fn update(
 - **Thông báo lỗi riêng:** handler cần thông báo khác (ví dụ note dùng field `content`) thì vẫn nhận `Result<AppJson<T>, AppError>` và đổi lỗi tại chỗ. Đây là ngoại lệ, phải có comment một dòng giải thích.
 - **405 trả JSON:** trong `app.rs`, thêm `.method_not_allowed_fallback(...)` trả `AppError` với status 405 (thêm biến thể `MethodNotAllowed`).
 
-### A.4 Envelope response
+## A.4 Envelope response
 
 | Trường hợp | Status | Body |
 | --- | --- | --- |
@@ -129,7 +121,7 @@ Quy tắc:
   - 422: validation.
   - 503: service ngoài lỗi.
 
-### A.5 Quyền sở hữu và transaction
+## A.5 Quyền sở hữu và transaction
 
 - **Phạm vi quyền:**
   - Mỗi domain có `owned(user_id) -> Select<Entity>` trong service. Mọi đọc và ghi bắt đầu từ đó.
@@ -150,7 +142,7 @@ Quy tắc:
 - **Không gọi HTTP ngoài trong transaction** (pronunciation, translation, AI). Kiểm tra quyền trước, gọi HTTP sau, rồi mở transaction mới nếu cần ghi.
 - **Việc tốn CPU hoặc IO đồng bộ** (decode ảnh, zip, đọc file) chạy trong `tokio::task::spawn_blocking`.
 
-### A.6 Hiệu năng
+## A.6 Hiệu năng
 
 - **Không truy vấn trong vòng lặp:**
   - Đọc nhiều bản ghi: `is_in(ids)`.
@@ -173,11 +165,11 @@ Quy tắc:
   - Ảnh và tệp theo `media_id` là bất biến (thay ảnh sẽ tạo ID mới), nên trả `private, max-age=31536000, immutable`.
   - Download stream file bằng `tokio_util::io::ReaderStream` thay vì đọc cả file vào RAM.
 
-### A.7 Test
+## A.7 Test
 
 - Mỗi endpoint có test HTTP trong `server/tests/api/<domain>.rs`, dùng helper dựng app chung.
 - Test thay đổi query hoặc index chạy trên PostgreSQL (`learning_helpers.rs`), không chạy trên SQLite dựng từ entity, vì SQLite bỏ qua migration và index.
-- Mỗi task trong Phần B phải qua:
+- Mỗi commit phải qua:
 
   ```sh
   cargo fmt --all --check
@@ -185,90 +177,11 @@ Quy tắc:
   cargo test --workspace
   ```
 
----
+## Thay đổi contract API
 
-## Phần B — Việc cần làm
+Ghi mỗi thay đổi response/request mà frontend thấy. Cột đầu là đợt hoặc commit.
 
-Thứ tự là bắt buộc. Mỗi task là một commit. Không gộp refactor với thay đổi hành vi trong cùng commit. Task đánh dấu **[contract]** thay đổi JSON mà frontend thấy, nên phải cập nhật bảng B.6.
-
-### B.1 Hạ tầng
-
-1. **Extractor và lỗi chung**
-   - Bật `axum` feature `macros`.
-   - Tạo `extract.rs` (A.3), thêm `AppError::MethodNotAllowed` và `AppError::ConflictWith`, gắn `method_not_allowed_fallback`.
-   - Thêm test: body JSON sai, query sai, path `abc` và method sai đều trả JSON đúng shape.
-2. **Helper phân trang và tìm kiếm**
-   - Thêm `PageMeta::new` và `like_contains` vào `pagination.rs`.
-   - Thay 7 đoạn escape LIKE chép tay: `places/service.rs:41`, `courses/service.rs:72`, `sessions/service.rs:99`, `sessions/search.rs:117`, `notes/service.rs:251`, `vocabulary/library.rs:179`, `vocabulary/flashcards/log.rs:104`.
-   - Thay 5 chỗ tự dựng `PageMeta`.
-3. **`ApiResponse.message`:** giữ field, thêm builder `with_message(self, message: impl Into<String>) -> Self` để handler có thể trả thông báo thành công, ví dụ `ApiResponse::ok(note).with_message("Đã lưu.")`. Field chỉ được serialize khi có giá trị, nên response hiện tại không đổi.
-4. **Middleware**
-   - Compression, timeout và request ID như A.6. Cấu hình pool đọc từ env, thêm biến vào `.env.example`.
-   - Upload media và import ra khỏi timeout 30 giây, hoặc đặt timeout riêng 120 giây.
-5. **Helper `places::service::write_tx`**
-   - Thay cặp begin + lock ở: `exercises/service.rs:18-28`, `media/service.rs:83-84`, `notes/service.rs:107-110` và `:183-185`, `vocabulary/flashcards/mod.rs` reveal/grade, update/delete của sessions và courses.
-
-### B.2 Đưa module về layout chuẩn
-
-Mỗi dòng dưới đây là một commit. Hành vi không đổi, test cũ phải qua mà không cần sửa assert.
-
-1. **`places`, `courses`, `sessions`:** đổi sang `AppJson`, `AppQuery` và `AppPath`. Việc này cũng làm mẫu cho các module sau.
-2. **`courses/library.rs`:** chuyển SQL vào `courses/service.rs`. Handler chỉ còn gọi service.
-3. **`sessions/search.rs`:** chuyển phần dựng query vào `sessions/service.rs` (hoặc `sessions/service/search.rs`), DTO vào `dto.rs`.
-4. **`notes`:**
-   - Tách `collaboration.rs` thành route người dùng (vào `handlers.rs`) và `internal.rs` (bridge, middleware `bridge_secret`). Phần ghi DB vào `service.rs`.
-   - 409 dùng `AppError::ConflictWith`, body giữ nguyên `{message, data}`.
-5. **`media`:** tạo `dto.rs`, chuyển `MediaResource` và `Kind` vào đó.
-6. **`enrichment`:** tạo `dto.rs` cho request và response, `service.rs` cho kiểm tra quyền và gọi client.
-7. **`exercises`, `ai_study`:** chuyển handler từ `mod.rs` sang `handlers.rs`, thay `json!` bằng struct.
-8. **`ipa`, `settings`:** tách `mod.rs` thành handlers, service và dto. **[contract]** IPA list thêm `meta.per_page`, IPA import trả `{data:{added,skipped}}`.
-9. **`vocabulary/library.rs`:**
-   - Tách handler và service, dùng `ListQuery::page_size` thay check riêng.
-   - **[contract]** `meta.page` đổi thành `meta.current_page`.
-10. **`vocabulary/reviews`:** chuyển handler từ `mod.rs` sang `handlers.rs`, thay `json!` bằng struct.
-11. **`vocabulary/flashcards`:** chuyển insert và transaction trong `mod.rs` (`:144-163`, `:216-305`), `log.rs` và `runs.rs` vào service. Handler chỉ còn gọi service.
-
-### B.3 Hiệu năng (sau B.2)
-
-1. **Migration index mới:**
-   - `ai_imports(session_id)`
-   - `ai_imports(user_id)`
-   - `exercises(user_id)`
-   - `flashcard_attempts(user_id, reviewed_at DESC)`
-
-   Test history và overview chạy trên PostgreSQL.
-2. **`shared-notes`, `notes::metadata`, `collaboration::config`:** chỉ select `session_id, saved_at` (và cột thật sự cần). Không load `content` hoặc `yjs_state`.
-3. **Lưu note** (`PUT /sessions/{id}/note`): chỉ còn hai lần kiểm tra quyền (ngoài và trong transaction) và một lần đọc note. Truyền model đã load giữa các hàm.
-4. **`POST /flashcards/next`:**
-   - Authorize một lần, đọc memory một lần.
-   - Gộp các COUNT/MIN theo direction thành một truy vấn `GROUP BY direction` với `COUNT(*) FILTER (...)`.
-   - Không tính lại cả overview cho mỗi thẻ. Response chỉ trả số đếm cần cho UI.
-   - Đo số truy vấn trước và sau (bật `sqlx_logging` khi test) và ghi kết quả vào commit message.
-5. **`GET /vocabulary`:** gộp 7 truy vấn thành tối đa 3 (page, total, stats bằng `FILTER`).
-6. **`GET /sessions/{id}/neighbors`:** lấy hai neighbor trong cùng truy vấn tìm ID, không gọi `get` lại.
-7. **`exercises/service.rs:108-121`:** thay insert từng câu bằng `insert_many`.
-8. **`vocabulary/reviews/answer.rs:53-59`:** load các place bằng `is_in`, khóa theo thứ tự ID tăng dần.
-9. **Media:**
-   - Download stream bằng `ReaderStream`.
-   - Đổi Cache-Control của ảnh và tệp như A.6. Cần `tokio-util` với feature `io`; kiểm tra xem crate đã có trong dependency tree chưa trước khi thêm.
-
-### B.4 Endpoint gộp để giảm request từ frontend
-
-1. **[contract] Tóm tắt khóa học**
-   - Mở rộng `GET /courses/{id}/library-stats` (hoặc `CourseResource` trong list theo place) với `session_count` và `latest_past_session: {id,title,starts_at} | null`.
-   - Mục tiêu: frontend bỏ hai lời gọi `/sessions/search?per_page=1` cho mỗi thẻ khóa học (`LibraryCourseCard.vue:23`).
-   - Chọn mở rộng list theo place nếu làm được trong một truy vấn (`LEFT JOIN LATERAL`). Nếu không, mở rộng library-stats.
-2. **[contract] Flashcard overview nhẹ**
-   - `GET /flashcards` hiện được ba màn hình gọi để lấy số đếm.
-   - Đảm bảo endpoint này chỉ đọc số đếm (không trả danh sách thẻ) và dùng chung truy vấn đã tối ưu ở B.3.4.
-
-### B.5 Không làm trong đợt này
-
-`pg_trgm`, cache Redis, tách crate, đổi framework hoặc ORM, đổi cơ chế auth, đổi schema note.
-
-### B.6 Thay đổi contract (frontend phải theo)
-
-| Task | Endpoint | Trước | Sau |
+| Đợt | Endpoint | Trước | Sau |
 | --- | --- | --- | --- |
 | B.1.1 | mọi route | Lỗi extractor là text thuần, 405 không có body | JSON `{message, errors?}`; path sai trả 404 |
 | B.2.8 | `GET /ipa-vocabulary`, `/ipa-pairs` | `meta` thiếu `per_page` | Đủ 4 field |
@@ -276,15 +189,6 @@ Mỗi dòng dưới đây là một commit. Hành vi không đổi, test cũ ph�
 | B.2.9 | `GET /vocabulary` | `meta.page` | `meta.current_page` |
 | B.3.4 / B.4.2 | `GET /flashcards`, `POST /flashcards/next` | Không có số từ/nghĩa; next tính lại ước lượng | Thêm `word_count`, `reviewable`; next giữ overview counts, `estimated_seconds: null` |
 | B.4.1 | `GET /courses/{id}/library-stats` | — | Thêm `session_count`, `latest_past_session: {id,title,starts_at} \| null`; lấy cùng truy vấn thống kê hiện có |
-| Sau chuẩn hóa: gộp Flashcard theo từ/loại từ | `GET /flashcards`, `POST /flashcards/next`, `POST /flashcards/{id}/reveal` | Đếm/lên lịch từng nghĩa nguồn; hiển thị một nghĩa | Đếm/lên lịch theo từ chuẩn hóa + locale + loại từ + chiều ôn; `front` Việt–Anh và `back.meaning` gom các nghĩa có quyền truy cập bằng `; `. JSON giữ shape. Frontend đổi nhãn `Nghĩa` thành `Mục ôn`. Chi tiết: `plans/flashcard-word-groups.md` |
+| Sau chuẩn hóa: gộp Flashcard theo từ/loại từ | `GET /flashcards`, `POST /flashcards/next`, `POST /flashcards/{id}/reveal` | Đếm/lên lịch từng nghĩa nguồn; hiển thị một nghĩa | Đếm/lên lịch theo từ chuẩn hóa + locale + loại từ + chiều ôn; `front` Việt–Anh và `back.meaning` gom các nghĩa có quyền truy cập bằng `; `. JSON giữ shape. Frontend đổi nhãn `Nghĩa` thành `Mục ôn`. Chi tiết: [features.md](features.md#flashcard-fsrs) |
 | Review 11 P1.2 | mọi route quá thời gian | HTTP 408 | HTTP 504, giữ message; upstream dịch 20s, web 28s, route 30s |
-
 | Review 11 P2.9 | `GET /flashcards/runs/{id}` và tổng kết lượt ôn | `unique_reviewed` đếm card nguồn + chiều | Đếm nhóm `study_key` + chiều; một nhóm ôn ở nhiều bài vẫn tính một mục. JSON giữ shape. |
-
-### Điều kiện hoàn thành
-
-- `rg "JsonRejection|QueryRejection" server/src/modules` chỉ còn trong các ngoại lệ có comment.
-- `rg "json!\(" server/src/modules` chỉ còn trong `notes/document`.
-- Không còn `.begin().await` đi liền `lock_for_write` ngoài `write_tx`.
-- Mọi module có `mod.rs` chỉ chứa khai báo và `routes()`.
-- Ba lệnh ở A.7 đều qua. Frontend đã cập nhật theo bảng B.6.
