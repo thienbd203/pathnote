@@ -164,3 +164,8 @@ pub struct StoredPair<'a> {
     pub left: &'a Entry,
     pub right: &'a Entry,
 }
+
+#[derive(Serialize)]
+pub struct Duplicates {
+    pub duplicates: Vec<String>,
+}

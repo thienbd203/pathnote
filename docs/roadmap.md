@@ -4,18 +4,15 @@ Cập nhật 17/10/2026. Đây là nơi duy nhất ghi việc chưa làm của t
 
 Khi bắt đầu một mục, ghi kế hoạch ngắn ngay dưới mục đó; khi xong, cập nhật `docs/features.md` (hoặc `docs/architecture.md`) và xóa mục khỏi đây.
 
-**Hiệu năng request frontend (làm tiếp theo)**
+**Xác minh bộ kiểm thử hiệu năng trên CI**
 
-Báo cáo đo tay ngày 17/10/2026 (frontend `8aaae7a`) cho thấy nhiều màn gọi API thừa, nhất là trên mobile. Phép đo đó không chạy lại được. Làm theo thứ tự: dựng bộ đo trước (R0), sau đó mỗi mục sửa (R1–R8) phải hạ ngân sách tương ứng trong cùng commit.
+R1–R8 đã triển khai, đo lại bằng Playwright và hạ ngân sách tương ứng. Hành vi hiện tại ở `docs/features.md`; ngân sách ở `pathnote-web/e2e/request-budgets.ts`. Còn bước xác minh GitHub CI dưới đây.
 
 - **R0 — Xác minh CI cho bộ kiểm thử tự động vừa triển khai**:
   - Bộ đo request, ảnh chuẩn desktop/mobile, schema PostgreSQL riêng và gate đúng cặp SHA đã có; hành vi ghi trong `docs/features.md`, cách chạy trong README web.
   - Chạy lần đầu trên GitHub với SHA frontend mới trong manifest; chỉ đánh dấu xong khi job request/visual và browser contract xanh. Không tự nâng ngân sách hoặc cập nhật ảnh để làm CI xanh.
-  - Sau khi xác minh, xóa mục này. R1–R8 giữ nguyên thứ tự bên dưới.
+  - Sau khi xác minh, xóa mục này.
 
-- **Sửa theo báo cáo**, mỗi mục một commit và hạ ngân sách tương ứng:
-  - Kế hoạch R8: không tải words khi đang xem pairs; chế độ tất cả từ vẫn cần pairs để giữ các từ nhập qua cặp âm. Preview import đối chiếu khóa của payload thay vì tải toàn bộ kho. Thêm lookup read-only, dùng chung validator/canonical keys với import.
-  - **R8** IPA chỉ tải bộ dữ liệu đang xem. Kiểm tra trùng khi import thì đối chiếu riêng các mục được nhập: `IpaView.vue:87`, `lib/api/ipa.ts:12`.
 
 **Phát hành**
 - Smoke trên staging, rồi deploy production lần đầu có migration `m20261016_*` theo checklist trong `deploy/README.md` (kiểm tra `lower('É')`, cờ `breaking_migration`, backup).

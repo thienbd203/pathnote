@@ -305,7 +305,7 @@ Code: `server/src/modules/ai_study/` (`service.rs`, `cleanup.rs`); web `lib/ai-s
 
 - Route web `/ipa`: bảng 44 âm, audio mẫu UK, giọng trình duyệt US/UK, minimal pairs, tìm kiếm, import JSON.
 - Kho IPA riêng theo user + locale; mỗi word/pair là một row JSONB, unique `(user_id, locale, kind, key)`. Không giới hạn tổng số mục.
-- GET trả trang 100 row; frontend tải hết các trang của user/locale vào memory để tìm kiếm local (chưa phù hợp kho cực lớn).
+- GET trả trang 100 row. Chế độ cặp âm chỉ tải pairs; Tất cả từ cần cả words và pairs để giữ các từ nhập qua cặp âm. Tìm kiếm local vẫn tải các trang của nguồn đang cần (chưa phù hợp kho cực lớn). Preview import không tải lại toàn bộ kho, chỉ lookup các khóa trong payload.
 - Import ≤256 KiB; pairs 1–50/request. Từ được trim + gom whitespace + lowercase để dedup; US/UK tách riêng. Entry/Sense/Example dùng chung enum locale/POS và validator với node từ vựng.
 - Cặp âm: hai âm thuộc bảng 44 âm; IPA hai từ khác đúng một phoneme ở cùng vị trí. Longest match cho âm ghép; alias US quy về âm tham chiếu. Cặp đảo chiều là cùng identity (lưu canonical). Một cặp sai → 422 cả batch.
 - Import khóa row user để tuần tự hóa, insert lô 100, unique DB chặn trùng. Chưa có API sửa/xóa kho IPA.
@@ -363,3 +363,5 @@ Code: web `e2e/`, `playwright*.config.ts`; Rust `server/tests/api/browser.rs`, `
 - Hiệu năng R6: tên chip ẩn/ghim dùng catalog/place-list sẵn có; chỉ bulk các ID thiếu (1–100/request) khi navigation cần, không đọc từng detail hoặc tải từ popover đóng. `places/bulk` và `courses/bulk` giữ đúng owner/parent đang hoạt động. Learn desktop 7 → 6, note desktop 11 → 10; mở drawer mobile 5 → 4 sau R5. Unit kiểm tra metadata ngoài trang đầu, bỏ ID thiếu và không tải khi picker đóng.
 
 - Hiệu năng R7: tab Lịch sử chỉ tải danh sách lịch sử, không overview/recent dashboard (3 → 1 API sau R2, hai kích thước). Quay lại Ôn tập bật lại query đúng lúc, dùng cache còn mới hoặc tải lại nếu cũ. Browser kiểm tra cả lịch sử cold và quay lại khi cache hết hạn.
+
+- Hiệu năng R8: trang IPA mặc định chỉ tải pairs (2 → 1 API sau R2; 4 → 1 từ baseline gốc). Chuyển Tất cả từ mới tải words; vẫn giữ từ phát sinh từ pairs. Hai endpoint `POST /ipa-vocabulary/duplicates` và `/ipa-pairs/duplicates` là lookup read-only, dùng chung validator/canonical keys với import, SELECT theo user/locale/kind và khóa payload, có kiểm tra trùng nội bộ. Import thật vẫn kiểm tra trong transaction và giữ idempotency. Browser thử kho ba trang xác nhận preview chỉ gọi một lookup; Rust thử từ ở trang hai, đảo cặp, trùng payload và user khác.

@@ -43,3 +43,25 @@ pub async fn import_pairs(
         service::import_pairs(&state.db, user.id, input).await?,
     ))
 }
+
+pub async fn words_duplicates(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    input: Result<AppJson<Words>, AppError>,
+) -> Result<ApiResponse<Duplicates>, AppError> {
+    let AppJson(input) = input.map_err(|_| invalid())?;
+    Ok(ApiResponse::ok(
+        service::words_duplicates(&state.db, user.id, input).await?,
+    ))
+}
+
+pub async fn pairs_duplicates(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    input: Result<AppJson<Pairs>, AppError>,
+) -> Result<ApiResponse<Duplicates>, AppError> {
+    let AppJson(input) = input.map_err(|_| invalid())?;
+    Ok(ApiResponse::ok(
+        service::pairs_duplicates(&state.db, user.id, input).await?,
+    ))
+}

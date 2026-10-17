@@ -55,6 +55,26 @@ async fn ipa_words_are_private_locale_scoped_paginated_trimmed_and_duplicate_imp
             .len(),
         31
     );
+    let preview = json!({"version":1,"locale":"en-US","entries":[entry(" WORD   130 ",""),entry("new word",""),entry("NEW WORD","")]});
+    for (token, expected) in [
+        (&app.owner_token, json!(["WORD   130", "NEW WORD"])),
+        (&app.other_token, json!(["NEW WORD"])),
+    ] {
+        let r = app
+            .api
+            .post("/api/v1/ipa-vocabulary/duplicates")
+            .add_header("authorization", format!("Bearer {token}"))
+            .json(&preview)
+            .await;
+        r.assert_status_ok();
+        assert_eq!(r.json::<Value>()["data"]["duplicates"], expected);
+    }
+    let unchanged = app
+        .api
+        .get("/api/v1/ipa-vocabulary?locale=en-US")
+        .add_header("authorization", &auth)
+        .await;
+    assert_eq!(unchanged.json::<Value>()["meta"]["total"], 131);
     let body = json!({"version":1,"locale":"en-US","entries":[entry("  WORD   0  ",""),entry("Word 0","")]});
     let (a, b) = tokio::join!(
         app.api
@@ -111,6 +131,25 @@ async fn ipa_pairs_validate_phonemes_reverse_orientation_and_reject_all_invalid_
     reverse["sounds"] = json!(["ɪ", "iː"]);
     reverse["pairs"][0] =
         json!({"left":body["pairs"][0]["right"],"right":body["pairs"][0]["left"]});
+    let preview = app
+        .api
+        .post("/api/v1/ipa-pairs/duplicates")
+        .add_header("authorization", &auth)
+        .json(&reverse)
+        .await;
+    preview.assert_status_ok();
+    assert_eq!(
+        preview.json::<Value>()["data"]["duplicates"],
+        json!(["ship ↔ sheep"])
+    );
+    let foreign = app
+        .api
+        .post("/api/v1/ipa-pairs/duplicates")
+        .add_header("authorization", format!("Bearer {}", app.other_token))
+        .json(&reverse)
+        .await;
+    foreign.assert_status_ok();
+    assert_eq!(foreign.json::<Value>()["data"]["duplicates"], json!([]));
     let r = app
         .api
         .post("/api/v1/ipa-pairs/import")

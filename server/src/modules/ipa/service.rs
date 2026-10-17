@@ -1,8 +1,10 @@
+mod duplicates;
 use super::{dto::*, phonemes};
 use crate::{
     entities::{ipa_library as library, users},
     AppError,
 };
+pub use duplicates::{pairs_duplicates, words_duplicates};
 use sea_orm::{
     sea_query::OnConflict, ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder,
     QuerySelect, Set, TransactionTrait,
@@ -142,8 +144,12 @@ async fn persist(
 pub async fn import_words(
     db: &sea_orm::DatabaseConnection,
     user: i64,
-    mut input: Words,
+    input: Words,
 ) -> Result<ImportResource, AppError> {
+    let (locale, entries) = prepare_words(input)?;
+    persist(db, user, &locale, "word", entries).await
+}
+fn prepare_words(mut input: Words) -> Result<(String, Vec<Prepared>), AppError> {
     if input.version != 1 || input.entries.is_empty() {
         return Err(invalid());
     }
@@ -156,13 +162,17 @@ pub async fn import_words(
             content: value(e)?,
         });
     }
-    persist(db, user, locale(&input.locale), "word", entries).await
+    Ok((locale(&input.locale).into(), entries))
 }
 pub async fn import_pairs(
     db: &sea_orm::DatabaseConnection,
     user: i64,
-    mut input: Pairs,
+    input: Pairs,
 ) -> Result<ImportResource, AppError> {
+    let (locale, entries) = prepare_pairs(input)?;
+    persist(db, user, &locale, "pair", entries).await
+}
+fn prepare_pairs(mut input: Pairs) -> Result<(String, Vec<Prepared>), AppError> {
     if input.version != 1
         || input.kind != "ipa-pairs"
         || !(1..=50).contains(&input.pairs.len())
@@ -201,5 +211,5 @@ pub async fn import_pairs(
             })?,
         });
     }
-    persist(db, user, locale(&input.locale), "pair", entries).await
+    Ok((locale(&input.locale).into(), entries))
 }

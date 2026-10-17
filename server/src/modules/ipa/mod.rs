@@ -10,6 +10,11 @@ use axum::{
 };
 pub fn routes() -> Router<AppState> {
     Router::new()
+        .route(
+            "/ipa-vocabulary/duplicates",
+            post(handlers::words_duplicates),
+        )
+        .route("/ipa-pairs/duplicates", post(handlers::pairs_duplicates))
         .route("/ipa-vocabulary", get(handlers::words))
         .route("/ipa-pairs", get(handlers::pairs))
         .route("/ipa-vocabulary/import", post(handlers::import_words))
