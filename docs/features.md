@@ -365,3 +365,29 @@ Code: web `e2e/`, `playwright*.config.ts`; Rust `server/tests/api/browser.rs`, `
 - Hiệu năng R7: tab Lịch sử chỉ tải danh sách lịch sử, không overview/recent dashboard (3 → 1 API sau R2, hai kích thước). Quay lại Ôn tập bật lại query đúng lúc, dùng cache còn mới hoặc tải lại nếu cũ. Browser kiểm tra cả lịch sử cold và quay lại khi cache hết hạn.
 
 - Hiệu năng R8: trang IPA mặc định chỉ tải pairs (2 → 1 API sau R2; 4 → 1 từ baseline gốc). Chuyển Tất cả từ mới tải words; vẫn giữ từ phát sinh từ pairs. Hai endpoint `POST /ipa-vocabulary/duplicates` và `/ipa-pairs/duplicates` là lookup read-only, dùng chung validator/canonical keys với import, SELECT theo user/locale/kind và khóa payload, có kiểm tra trùng nội bộ. Import thật vẫn kiểm tra trong transaction và giữ idempotency. Browser thử kho ba trang xác nhận preview chỉ gọi một lookup; Rust thử từ ở trang hai, đảo cặp, trùng payload và user khác.
+
+- Xác minh R0: coordinator run [39037695883](https://github.com/thienbd203/pathnote/actions/runs/39037695883) đã qua check, build, browser contract đúng cặp SHA và deploy. Bản tối ưu R1–R8 được kiểm tra local với cùng bộ test, cần chạy CI riêng sau khi push cặp SHA mới.
+
+
+### Số đo tổng thể sau R1–R8
+
+Bộ fixture cố định: 3 nơi, 6 khóa, 12 buổi, 5 buổi gần đây và note 24 bài tập;
+cache mới khi mở màn, không tính auth refresh. Đây là số request của kịch bản,
+không phải cam kết thời gian tải trên mạng production.
+
+| Màn/thao tác | Desktop trước → sau | Mobile trước → sau |
+| --- | --- | --- |
+| Sao chép prompt AI (cache cũ) | 24 → 1 | 24 → 1 |
+| Ghi chép / Learn | 12 → 6 | 9 → 2 |
+| Thư viện | 7 → 5 | 12 → 8 |
+| Note | 11 → 10 | 7 → 5 |
+| Lịch sử flashcard | 5 → 1 | 5 → 1 |
+| Mở lượt ôn | 6 → 2 | 6 → 2 |
+| Chấm rồi chuyển thẻ | 5 → 2 | 5 → 2 |
+| IPA mặc định | 4 → 1 | 4 → 1 |
+| Cài đặt | 3 → 1 | 3 → 1 |
+
+Kiểm tra bản ghép: 206 test frontend; 63 ca Playwright qua cả macOS và Linux,
+8 ca browser với Rust/PostgreSQL thật; 114 test Rust (109 API), fmt và Clippy
+không warning. Ảnh chuẩn giữ nguyên. Một ca Playwright chỉ dành cho mobile được
+skip có chủ đích trên desktop. Bản tối ưu cần xác minh CI sau push.
