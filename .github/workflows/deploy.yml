@@ -77,7 +77,9 @@ jobs:
           cargo test --workspace --locked
           cargo clippy --workspace --all-targets --locked -- -D warnings
           bash -n .github/deploy.sh
-          sudo -n python3 -m unittest discover -s deploy/tests -v
+          sudo apt-get update
+          sudo apt-get install -y nginx-light iproute2
+          sudo -n env PATHNOTE_NGINX_TEST=1 python3 -m unittest discover -s deploy/tests -v
 
   build-backend:
     name: Build backend
@@ -130,10 +132,11 @@ jobs:
           install -m 755 "target/$RUST_TARGET/release/server" artifact/server
           install -m 755 "target/$RUST_TARGET/release/migration" artifact/migration
           install -m 644 deploy/healthcheck.py artifact/healthcheck.py
+          install -m 644 deploy/blue-green.py artifact/blue-green.py
           printf '%s\n' "$GITHUB_SHA" > artifact/deploy-version.txt
           printf '%s\n' "$RUST_TARGET" > artifact/build-target.txt
           cd artifact
-          sha256sum server migration healthcheck.py deploy-version.txt build-target.txt > SHA256SUMS
+          sha256sum server migration healthcheck.py blue-green.py deploy-version.txt build-target.txt > SHA256SUMS
       - uses: actions/upload-artifact@v7
         with:
           name: pathnote-rust-release
@@ -275,6 +278,7 @@ jobs:
     env:
       DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/pathnote-rust' }}
       HEALTHCHECK_URL: ${{ vars.HEALTHCHECK_URL }}
+      DEPLOY_STRATEGY: ${{ vars.DEPLOY_STRATEGY || 'in-place' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -311,6 +315,7 @@ jobs:
           [[ "$SSH_PORT" =~ ^[0-9]+$ ]] || { echo '::error::SSH_PORT must contain only the numeric SSH port, without spaces.'; exit 1; }
           [[ "$DEPLOY_PATH" =~ ^/opt/[a-zA-Z0-9_-]+$ ]] || { echo '::error::DEPLOY_PATH must be /opt followed by one directory name, without spaces or a trailing slash.'; exit 1; }
           [[ "$HEALTHCHECK_URL" =~ ^https://[a-zA-Z0-9.-]+(:[0-9]+)?/health$ ]] || { echo '::error::HEALTHCHECK_URL must be https://YOUR_HOST/health without surrounding spaces, quotes or a trailing slash.'; exit 1; }
+          [[ "$DEPLOY_STRATEGY" == in-place || "$DEPLOY_STRATEGY" == blue-green ]]
           RELEASE_PATH="$DEPLOY_PATH/releases/$RELEASE"
           SSH=(ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -p "$SSH_PORT")
           printf -v CREATE_COMMAND 'mkdir -p %q' "$RELEASE_PATH"
@@ -318,7 +323,7 @@ jobs:
           rsync -az --delete --chmod=D750,F640 \
             -e "ssh -i $HOME/.ssh/id_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -p $SSH_PORT" \
             artifact/ "$SSH_USER@$SSH_HOST:$RELEASE_PATH/"
-          printf -v DEPLOY_COMMAND 'bash -s -- %q %q %q %q %q' "$DEPLOY_PATH" "$RELEASE" "$HEALTHCHECK_URL" "$GITHUB_SHA" "$BREAKING_MIGRATION"
+          printf -v DEPLOY_COMMAND 'bash -s -- %q %q %q %q %q %q' "$DEPLOY_PATH" "$RELEASE" "$HEALTHCHECK_URL" "$GITHUB_SHA" "$BREAKING_MIGRATION" "$DEPLOY_STRATEGY"
           "${SSH[@]}" "$SSH_USER@$SSH_HOST" "$DEPLOY_COMMAND" < .github/deploy.sh
       - name: Remove SSH credentials
         if: always()

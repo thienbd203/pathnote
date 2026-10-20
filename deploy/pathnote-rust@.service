@@ -1,0 +1,27 @@
+[Unit]
+Description=Pathnote Rust API (%i)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=pathnote
+Group=pathnote
+WorkingDirectory=/opt/pathnote-rust/slots/%i
+EnvironmentFile=/opt/pathnote-rust/shared/.env
+# Loaded last: overrides APP_BIND from shared .env for this slot.
+EnvironmentFile=/etc/pathnote-rust/%i.env
+ExecStart=/opt/pathnote-rust/slots/%i/server
+Restart=on-failure
+RestartSec=3
+KillSignal=SIGTERM
+TimeoutStopSec=150
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/pathnote-rust/shared/media
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

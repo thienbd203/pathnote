@@ -154,6 +154,15 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("github.event_name != 'pull_request'", guard)
         self.assertIn("github.ref == 'refs/heads/master'", guard)
 
+    def test_blue_green_is_opt_in_and_transferred_as_a_separate_argument(self):
+        job = self.jobs['deploy-backend']
+        self.assertEqual(job['env']['DEPLOY_STRATEGY'], "${{ vars.DEPLOY_STRATEGY || 'in-place' }}")
+        activation = next(step for step in job['steps'] if step.get('name') == 'Upload and activate release')
+        self.assertIn('"$DEPLOY_STRATEGY"', activation['run'])
+        build = '\n'.join(step.get('run', '') for step in self.jobs['build-backend']['steps'])
+        self.assertIn('deploy/blue-green.py artifact/blue-green.py', build)
+        self.assertIn('healthcheck.py blue-green.py deploy-version.txt', build)
+
     def test_standalone_frontend_workflow_has_no_production_activation(self):
         frontend = ROOT.parent / 'pathnote-web/.github/workflows/deploy.yml'
         if not frontend.exists():

@@ -6,6 +6,7 @@ RELEASE=${2:?Release required}
 HEALTHCHECK_URL=${3:?Public health URL required}
 COMMIT_SHA=${4:?Commit SHA required}
 BREAKING_MIGRATION=${5:?Breaking migration flag required}
+DEPLOY_STRATEGY=${6:-in-place}
 SERVICE=pathnote-rust.service
 APP_USER=pathnote
 
@@ -14,6 +15,21 @@ APP_USER=pathnote
 [[ "$HEALTHCHECK_URL" =~ ^https://[a-zA-Z0-9.-]+(:[0-9]+)?/health$ ]]
 [[ "$COMMIT_SHA" =~ ^[a-f0-9]{40}$ ]]
 [[ "$BREAKING_MIGRATION" == true || "$BREAKING_MIGRATION" == false ]]
+case "$DEPLOY_STRATEGY" in
+  blue-green)
+    cd "$DEPLOY_PATH/releases/$RELEASE"
+    sha256sum --check --strict SHA256SUMS
+    exec python3 ./blue-green.py "$DEPLOY_PATH" "$RELEASE" "$HEALTHCHECK_URL" "$COMMIT_SHA" "$BREAKING_MIGRATION"
+    ;;
+  in-place)
+    # Never restart the legacy unit on top of a configured blue-green pair.
+    if [[ -d "$DEPLOY_PATH/slots" ]]; then
+      echo 'Blue-green slots exist. Use DEPLOY_STRATEGY=blue-green; breaking changes need the documented maintenance procedure.' >&2
+      exit 1
+    fi
+    ;;
+  *) echo 'DEPLOY_STRATEGY must be in-place or blue-green' >&2; exit 1 ;;
+esac
 SHARED="$DEPLOY_PATH/shared"
 RELEASE_PATH="$DEPLOY_PATH/releases/$RELEASE"
 test -d "$RELEASE_PATH" && test ! -L "$RELEASE_PATH"

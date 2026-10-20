@@ -11,6 +11,8 @@
   bằng SSH vào `/opt/pathnote-rust/releases/<RELEASE>`, symlink `current`.
 - Database mới `pathnote_rust`; không chuyển dữ liệu Laravel, không đổi cấu hình
   Laravel đang chạy.
+- Blue–green là chế độ opt-in sau khi chuẩn bị VPS: đọc mục 7 trước khi đổi service
+  hoặc bật `DEPLOY_STRATEGY`. Các mục 2–4 giữ hướng dẫn mặc định in-place.
 
 | Thành phần | Nơi chạy | Cổng / URL |
 | --- | --- | --- |
@@ -448,3 +450,253 @@ Khi nâng bộ Playwright lần đầu, frontend SHA trong manifest phải chứ
 Nếu gate lỗi, xem `release-browser-diagnostics` và job summary; không tăng ngân sách
 hay ghi đè ảnh chuẩn chỉ để bỏ qua lỗi. OAuth thật, Safari iOS và realtime vẫn theo
 checklist smoke riêng.
+
+## 7. Blue–green trên VPS đang chạy
+
+Áp dụng cho **API Rust**, không triển khai thêm database hay collaboration instance.
+Nginx/systemd cung cấp reload và graceful stop; helper chỉ nối các bước kiểm tra,
+chuyển traffic và rollback. Không có thay đổi API/schema trong tính năng này.
+
+- `blue`: `127.0.0.1:3000`; `green`: `127.0.0.1:3001`.
+- Nginx public dùng upstream `pathnote_rust`. API nội bộ ổn định cho collaboration:
+  `http://127.0.0.1:3010` (chỉ loopback).
+- Mỗi slot trỏ tới một release qua `/opt/pathnote-rust/slots/blue|green`.
+  `current` vẫn chỉ phiên bản đã kiểm tra thành công.
+- `.env`, JWT key, media và PostgreSQL dùng chung. Giữ nguyên domain, OAuth,
+  cookie và secret; không tạo khóa mới. Dự trù kết nối DB cho hai process
+  (`DATABASE_MAX_CONNECTIONS` mặc định 10/process). FSRS đã dùng advisory lock;
+  cleanup import khóa bản ghi cha, cleanup media dùng file lease.
+- GitHub Variable `DEPLOY_STRATEGY=blue-green` bật luồng mới. Mặc định `in-place`
+  để không làm hỏng VPS chưa cài template/helper. Nếu thư mục `slots` đã tồn tại,
+  script từ chối in-place; không tự chuyển về service cũ.
+
+### 7.1 Đưa các file cấu hình lên VPS
+
+Không để workflow deploy chạy trong lúc chuyển cấu hình lần đầu. Các lệnh dưới dùng
+đường dẫn mặc định, chạy bằng **root** trên VPS hiện tại của anh. Không clone repo
+trên VPS; chỉ copy các file vận hành đã review. Từ thư mục `pathnote-rust` trên Mac:
+
+```sh
+ssh root@VPS_HOST 'install -d -m 700 /tmp/pathnote-bluegreen'
+scp deploy/pathnote-rust@.service deploy/upstream.py deploy/healthcheck.py \
+    deploy/nginx-upstream.conf.example root@VPS_HOST:/tmp/pathnote-bluegreen/
+```
+
+Thêm `-p SSH_PORT` cho ssh / `-P SSH_PORT` cho scp nếu không dùng cổng 22.
+Trên VPS (không ghi đè `.env` hoặc JWT key):
+
+```sh
+apt-get update
+apt-get install -y iproute2 python3 nginx
+ss -ltnp '( sport = :3001 or sport = :3010 )'
+# Hai cổng trên phải đang trống.
+install -d -o root -g root -m 755 /etc/pathnote-rust
+install -m 644 /tmp/pathnote-bluegreen/pathnote-rust@.service /etc/systemd/system/pathnote-rust@.service
+install -o root -g root -m 755 /tmp/pathnote-bluegreen/upstream.py /usr/local/sbin/pathnote-upstream
+printf 'APP_BIND=127.0.0.1:3000\n' > /etc/pathnote-rust/blue.env
+printf 'APP_BIND=127.0.0.1:3001\n' > /etc/pathnote-rust/green.env
+chmod 644 /etc/pathnote-rust/blue.env /etc/pathnote-rust/green.env
+systemctl daemon-reload
+```
+
+Hai file slot env được systemd nạp **sau** shared `.env`, nên override `APP_BIND`.
+Không cần sửa `APP_BIND` trong shared `.env`. Chỉ cài upstream example lần đầu;
+**không ghi đè upstream đang vận hành ở các release sau**.
+
+```sh
+test ! -e /etc/nginx/conf.d/pathnote-rust-upstream.conf && \
+  install -o root -g root -m 644 /tmp/pathnote-bluegreen/nginx-upstream.conf.example /etc/nginx/conf.d/pathnote-rust-upstream.conf
+```
+
+### 7.2 Đổi đúng site Nginx của Rust
+
+Mở file site API Rust đang chạy (không phải site frontend/Laravel):
+
+```sh
+nginx -T 2>&1 | rg 'configuration file|server_name|proxy_pass'
+# Nếu VPS không có rg, dùng grep -E thay thế.
+nano /etc/nginx/sites-available/pathnote-rust
+```
+
+Tên file có thể khác; lấy đúng file từ `nginx -T`. Giữ chứng chỉ TLS và các phần
+khác. Trong `location /` của domain API, thay upstream trực tiếp `127.0.0.1:3000`:
+
+```nginx
+location / {
+    proxy_pass http://pathnote_rust;
+    proxy_http_version 1.1;
+    proxy_set_header Connection close;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 120s;
+    proxy_send_timeout 120s;
+}
+```
+
+Giữ `client_max_body_size 20m` ở server như template hiện tại. Upstream file được
+include trong `http {}` qua `conf.d/*.conf` của Ubuntu mặc định; không include thêm
+lần nữa trong site. Nó tạo cả listener loopback `3010` cho collaboration.
+
+```sh
+nginx -t && systemctl reload nginx
+/usr/local/sbin/pathnote-upstream status
+curl -fsS http://127.0.0.1:3010/health
+curl -fsS https://API_DOMAIN/health
+```
+
+Lúc này status phải là `blue`, vẫn trỏ tới service cũ ở `3000`. Thay `API_DOMAIN`
+bằng domain Rust đang dùng, giống `HEALTHCHECK_URL`; không dùng domain Laravel cũ.
+
+### 7.3 Chuyển service cũ sang slot green, giữ nguyên code
+
+Chạy từng khối; nếu healthcheck lỗi thì **dừng ở bước đó**, không tắt service cũ.
+Thư mục gốc hiện tại theo hướng dẫn trước là owner `deploy`, group `pathnote`.
+Nếu SSH đang dùng root thì vẫn có thể giữ owner đó:
+
+```sh
+install -d -o root -g pathnote -m 2750 /opt/pathnote-rust/slots
+# Nếu SSH_USER=deploy thì thay -o root ở trên thành -o deploy.
+CURRENT_RELEASE=$(readlink -f /opt/pathnote-rust/current)
+CURRENT_SHA=$(cat "$CURRENT_RELEASE/deploy-version.txt")
+ln -s "$CURRENT_RELEASE" /opt/pathnote-rust/slots/blue
+ln -s "$CURRENT_RELEASE" /opt/pathnote-rust/slots/green
+systemctl enable --now pathnote-rust@green.service
+python3 /tmp/pathnote-bluegreen/healthcheck.py http://127.0.0.1:3001/health "$CURRENT_SHA"
+```
+
+Blue slot lúc này chưa chạy; cổng `3000` vẫn thuộc service legacy. Chuyển Nginx sang
+green **cùng code đang dùng** và kiểm tra cả đường nội bộ/public:
+
+```sh
+/usr/local/sbin/pathnote-upstream green "$CURRENT_SHA"
+python3 /tmp/pathnote-bluegreen/healthcheck.py http://127.0.0.1:3010/health "$CURRENT_SHA"
+python3 /tmp/pathnote-bluegreen/healthcheck.py https://API_DOMAIN/health "$CURRENT_SHA"
+```
+
+Nếu chưa đổi site đúng ở bước 7.2, public vẫn có thể đang gọi thẳng `3000` vì hai
+process cùng SHA; kiểm tra lại `proxy_pass http://pathnote_rust;` trước khi tắt legacy.
+
+### 7.4 Chuyển collaboration sang địa chỉ nội bộ ổn định
+
+Sửa `/var/www/pathnote-collaboration/shared/.env`:
+
+```ini
+COLLABORATION_API_URL=http://127.0.0.1:3010
+COLLABORATION_API_PREFIX=/api/v1
+```
+
+Giữ nguyên secret và các biến khác, rồi:
+
+```sh
+systemctl restart pathnote-collaboration.service
+curl -fsS https://pathnote-collab.aphorisms.cloud/up
+```
+
+Restart collaboration **một lần lúc cấu hình ban đầu** sẽ làm WebSocket kết nối lại;
+những lần deploy Rust blue–green sau không restart collaboration. Mở note hai cửa
+sổ, xác nhận sync/Đã lưu. Các client nội bộ khác cũng phải dùng `3010` hoặc domain
+API, không gọi trực tiếp slot `3000/3001`.
+
+Sau khi không còn kết nối tới legacy (`ss` dưới đây không có dòng), tắt legacy:
+
+```sh
+ss -Htn state established '( sport = :3000 )'
+# Chờ request cũ hoàn tất; chỉ chạy lệnh tiếp khi kết quả trống.
+systemctl disable --now pathnote-rust.service
+systemctl is-active pathnote-rust@green.service
+/usr/local/sbin/pathnote-upstream status
+curl -fsS https://API_DOMAIN/health
+```
+
+Không enable/start `pathnote-rust.service` trở lại khi đã dùng hai slot.
+
+### 7.5 Quyền CI và bật chế độ mới
+
+`SSH_USER=root` như VPS hiện tại: không cần thêm sudoers (giữ gói sudo sẵn có).
+Nếu sau này dùng user `deploy`, giữ quyền backup/migration/test đã có ở mục 2.3,
+thêm quyền đúng hai unit và helper root-owned:
+
+```sudoers
+Cmnd_Alias PATHNOTE_BG = /usr/bin/systemctl restart pathnote-rust@blue.service, /usr/bin/systemctl restart pathnote-rust@green.service, /usr/bin/systemctl stop pathnote-rust@blue.service, /usr/bin/systemctl stop pathnote-rust@green.service, /usr/bin/systemctl enable pathnote-rust@blue.service, /usr/bin/systemctl enable pathnote-rust@green.service, /usr/bin/systemctl disable pathnote-rust@blue.service, /usr/bin/systemctl disable pathnote-rust@green.service, /usr/bin/systemctl is-active pathnote-rust@blue.service, /usr/bin/systemctl is-active pathnote-rust@green.service, /usr/local/sbin/pathnote-upstream status, /usr/local/sbin/pathnote-upstream blue *, /usr/local/sbin/pathnote-upstream green *
+deploy ALL=(root) NOPASSWD: PATHNOTE_BG
+```
+
+Chạy `visudo -cf /etc/sudoers.d/pathnote-rust` sau khi sửa. Không cấp CI quyền viết
+`/etc/nginx`, `/etc/systemd`, slot env hoặc sửa helper root-owned; helper chỉ chấp
+nhận hai màu và SHA đủ 40 ký tự, tự kiểm tra target trước reload.
+
+Trong GitHub repo `thienbd203/pathnote` → Settings → Secrets and variables →
+Actions → **Variables**, thêm:
+
+```text
+DEPLOY_STRATEGY = blue-green
+```
+
+Giữ nguyên secrets, `HEALTHCHECK_URL`, `VITE_API_URL`, `WEB_SITE_URL` và các biến
+khác. Manifest `.github/release.json` phải có `breaking_migration: false` cho release
+không đổi schema hoặc chỉ có migration tương thích ngược. Code hiện tại không thêm
+migration và đã đặt false; không đặt false chỉ để vượt guard của migration breaking.
+Sau khi code này đã push, chạy **Pathnote coordinated release** trên master. Lần
+đầu sẽ dùng blue `3000`; lần tiếp theo green `3001`, cứ thế luân phiên.
+
+### 7.6 Theo dõi, rollback và giới hạn
+
+Luồng CI: checksum/kiến trúc → xác minh slot cũ → backup → migration tương thích →
+start slot mới → health đúng SHA → enable slot mới → switch/reload Nginx → health
+qua cả `3010` và HTTPS → đổi `current` → đợi kết nối cũ hết → stop/disable slot cũ.
+Build/check vẫn song song; frontend chỉ kích hoạt sau khi backend khỏe. Không đổi
+DNS, không restart Nginx. Slot cũ và release cũ được giữ để rollback, tối đa 3 release.
+
+```sh
+/usr/local/sbin/pathnote-upstream status
+systemctl status pathnote-rust@blue.service pathnote-rust@green.service --no-pager -l
+journalctl -u pathnote-rust@blue.service -u pathnote-rust@green.service -n 100 --no-pager
+cat /opt/pathnote-rust/current/deploy-version.txt
+curl -fsS http://127.0.0.1:3010/health
+```
+
+Health bản mới lỗi trước switch: traffic không đổi, dừng target. Sau switch nếu
+health public/internal lỗi: helper chuyển lại slot cũ, xác minh health rồi mới dừng
+target. Nếu rollback cũng lỗi: **giữ cả hai process**, inspect upstream/health và
+không deploy tiếp. Migration không được tự down/restore. Nếu sau 120 giây kết nối
+cũ vẫn còn, giữ slot cũ chạy và in warning; lần deploy sau từ chối tái dùng slot còn
+request. Stop bằng SIGTERM của Axum; systemd chờ tối đa 150 giây.
+
+Rollback thủ công sau một release đã thành công (ví dụ đang green, muốn về blue;
+chỉ khi schema và frontend hiện tại tương thích với bản cũ). Giữ một shell root,
+giữ khóa để không chạy đua với workflow:
+
+```sh
+exec 9>/opt/pathnote-rust/.deploy.lock
+flock -w 300 9
+ROLLBACK_SHA=$(cat /opt/pathnote-rust/slots/blue/deploy-version.txt)
+systemctl enable --now pathnote-rust@blue.service
+python3 /tmp/pathnote-bluegreen/healthcheck.py http://127.0.0.1:3000/health "$ROLLBACK_SHA"
+/usr/local/sbin/pathnote-upstream blue "$ROLLBACK_SHA"
+python3 /tmp/pathnote-bluegreen/healthcheck.py http://127.0.0.1:3010/health "$ROLLBACK_SHA"
+python3 /tmp/pathnote-bluegreen/healthcheck.py https://API_DOMAIN/health "$ROLLBACK_SHA"
+ln -sfn "$(readlink -f /opt/pathnote-rust/slots/blue)" /opt/pathnote-rust/.rollback-current
+mv -Tf /opt/pathnote-rust/.rollback-current /opt/pathnote-rust/current
+# Chờ ss cổng 3001 không còn kết nối rồi mới stop/disable green.
+flock -u 9
+```
+
+**Migration breaking:** blue–green từ chối trước backup/migration. Phải có đợt
+maintenance riêng: chặn traffic ghi, dừng collaboration và cả hai slot, backup,
+chạy migration, start một slot đúng code/schema, health, chuyển upstream/current,
+mở traffic và collaboration. Nếu migration đã bắt đầu rồi lỗi, giữ mọi writer dừng
+và dùng quy trình restore mục 4; không restart code cũ trên schema không còn tương
+thích. Không đổi `DEPLOY_STRATEGY=in-place` để vượt qua guard.
+
+Blue–green ở đây bảo vệ việc thay **API process** trên một VPS; không bảo vệ VPS,
+PostgreSQL hay Nginx bị tắt. API/schema phải tương thích trong thời gian hai bản
+cùng chạy, kể cả request từ tab frontend cũ. Frontend vẫn dùng symlink release hiện
+có; việc giữ tài nguyên JS/CSS cho tab mở qua nhiều lần deploy cần chính sách lưu
+asset riêng. WebSocket collaboration có quy trình deploy riêng.
+
+Nguồn: [Nginx reload](https://nginx.org/en/docs/control.html),
+[Axum graceful shutdown](https://docs.rs/axum/latest/axum/serve/struct.WithGracefulShutdown.html),
+[systemd service](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html),
+[AWS schema compatibility](https://docs.aws.amazon.com/whitepapers/latest/blue-green-deployments/best-practices-for-managing-data-synchronization-and-schema-changes.html).

@@ -392,3 +392,12 @@ Kiểm tra bản ghép: 206 test frontend; 63 ca Playwright qua cả macOS và L
 8 ca browser với Rust/PostgreSQL thật; 114 test Rust (109 API), fmt và Clippy
 không warning. Ảnh chuẩn giữ nguyên. Một ca Playwright chỉ dành cho mobile được
 skip có chủ đích trên desktop. Bản tối ưu cần xác minh CI sau push.
+
+## Triển khai API blue–green
+
+- CI hỗ trợ `DEPLOY_STRATEGY=blue-green` sau khi VPS cài hai systemd slot và helper Nginx root-owned. Mặc định vẫn in-place cho VPS chưa chuyển đổi; từ chối in-place khi đã có slots.
+- Slot blue/green lần lượt 3000/3001, địa chỉ nội bộ ổn định 3010 cho collaboration. Giữ chung PostgreSQL, JWT và media. Chỉ chuyển traffic sau health đúng commit SHA; xác minh nội bộ và public trước đổi current, drain rồi stop slot cũ.
+- Lỗi target giữ traffic cũ; lỗi sau switch tự rollback, nếu rollback không xác minh được thì giữ cả hai process. Giữ releases của cả hai slot; drain timeout giữ process cũ. Migration phải tương thích ngược, cờ breaking bị chặn, không tự rollback database.
+- Dùng graceful shutdown Axum hiện có, systemd và Nginx reload; helper không nhận đường dẫn tùy ý. Giới hạn: một VPS, không HA database/máy chủ, không thay quy trình collaboration hay chính sách asset frontend.
+
+Code: `.github/deploy.sh`, `deploy/{blue-green.py,upstream.py,pathnote-rust@.service}`. Hướng dẫn chuyển VPS, rollback và maintenance: `deploy/README.md` mục 7.
