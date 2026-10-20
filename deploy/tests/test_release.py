@@ -98,7 +98,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.jobs = self.workflow['jobs']
 
     def test_no_deployment_can_start_before_both_builds_succeed(self):
-        self.assertEqual(set(self.jobs['deploy-backend']['needs']), {'release', 'build-backend', 'build-frontend', 'browser-contract'})
+        self.assertEqual(set(self.jobs['deploy-backend']['needs']), {'release', 'check', 'build-backend', 'build-frontend', 'browser-contract'})
         self.assertEqual(set(self.jobs['deploy-frontend']['needs']), {'release', 'build-frontend', 'deploy-backend'})
         for name in ('deploy-backend', 'deploy-frontend'):
             job = self.jobs[name]
@@ -106,6 +106,8 @@ class ReleaseWorkflowTests(unittest.TestCase):
             self.assertEqual(job['environment'], 'production')
         # Frontend preparation can run while Rust checks/release compilation run.
         self.assertEqual(self.jobs['build-frontend']['needs'], 'release')
+        # Preparation runs in parallel; activation still waits for every gate.
+        self.assertEqual(self.jobs['build-backend']['needs'], 'release')
         self.assertFalse(self.workflow['concurrency']['cancel-in-progress'])
         backend = self.jobs['deploy-backend']
         activation = next(step for step in backend['steps'] if step.get('name') == 'Upload and activate release')
@@ -118,8 +120,8 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertFalse(checkout['persist-credentials'])
         self.assertEqual(self.jobs['deploy-frontend']['env']['FRONTEND_SHA'], checkout['ref'])
         browser = self.jobs['browser-contract']
-        self.assertNotIn('if', browser)  # Failed upstream checks must skip this gate.
-        self.assertEqual(set(browser['needs']), {'release', 'check'})
+        self.assertNotIn('if', browser)  # Failed release selection must skip this gate.
+        self.assertEqual(browser['needs'], 'release')
         checkouts = [step['with'] for step in browser['steps'] if step.get('uses', '').startswith('actions/checkout@')]
         self.assertEqual(checkouts[1]['repository'], checkout['repository'])
         self.assertEqual(checkouts[1]['ref'], checkout['ref'])

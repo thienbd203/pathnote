@@ -262,10 +262,13 @@ workflow điều phối (push này phát hành ngay cặp đã chốt).
 ```mermaid
 flowchart TD
     Pair[Chốt cặp phiên bản] --> Web[Test và build frontend]
-    Check[Test và lint backend] --> Rust[Build backend]
+    Pair --> Check[Test và lint backend]
     Pair --> Rust
+    Pair --> Browser[Test trình duyệt với cặp phiên bản]
+    Rust[Build backend] --> DeployRust[Triển khai backend]
+    Check --> DeployRust
+    Browser --> DeployRust
     Web --> DeployRust[Triển khai backend]
-    Rust --> DeployRust
     DeployRust --> Health[Kiểm tra đúng phiên bản backend và database]
     Health --> DeployWeb[Triển khai frontend đã build sẵn]
 ```
@@ -296,8 +299,9 @@ frontend mới nhất, không lấy artifact "lượt gần nhất", không buil
 2. Push frontend để chạy CI; production chưa đổi.
 3. Điền `frontend_sha`, `collaboration_sha` vào `.github/release.json` cùng thay
    đổi backend, review, push `master`.
-4. Workflow: check backend + build frontend song song; build backend sau check.
-   Chỉ khi **cả hai build** thành công mới triển khai backend.
+4. Workflow: check backend, build backend, build frontend và browser gate chạy
+   song song sau khi chọn release. Chỉ khi **tất cả kiểm tra và cả hai build**
+   thành công mới triển khai backend; kiểm tra lỗi thì production giữ bản cũ.
 5. `.github/deploy.sh` kiểm tra checksum, SHA, kiến trúc; backup; migration; đổi
    `current`; restart; health qua `http://127.0.0.1:3000/health` và
    `HEALTHCHECK_URL` phải `status`/`database` ok và `version` đúng SHA. Giữ 3
@@ -434,6 +438,9 @@ chọn code khớp schema rồi mới restart. Log và health: mục 4.5.
 
 Coordinator chạy bộ request/ảnh và browser contract với đúng frontend SHA trong
 `.github/release.json` và backend SHA của workflow, trước khi cho phép deploy.
+Browser gate và build release không chờ backend checks mới bắt đầu; job deploy
+phụ thuộc trực tiếp cả checks, builds và browser gate. Việc chạy song song rút ngắn
+thời gian chờ, không bỏ bước kiểm tra nào.
 Job dùng PostgreSQL 17 dùng một lần, không dùng database hay Google account production.
 `FRONTEND_READ_TOKEN` hiện có phải đọc được frontend revision đó; không cần secret mới.
 Bản web dành cho test dùng `127.0.0.1:4173`, tuyệt đối không dùng artifact test để deploy.

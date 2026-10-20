@@ -81,7 +81,7 @@ jobs:
 
   build-backend:
     name: Build backend
-    needs: [release, check]
+    needs: release
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
     # Choose ubuntu-24.04-arm for an ARM64 VPS. Build natively for that architecture.
     runs-on: ${{ vars.BUILD_RUNNER || 'ubuntu-24.04' }}
@@ -189,7 +189,7 @@ jobs:
 
   browser-contract:
     name: Browser contract for the pinned release pair
-    needs: [release, check]
+    needs: release
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
@@ -268,7 +268,7 @@ jobs:
 
   deploy-backend:
     name: Deploy backend after both builds
-    needs: [release, build-backend, build-frontend, browser-contract]
+    needs: [release, check, build-backend, build-frontend, browser-contract]
     runs-on: ubuntu-24.04
     environment: production
     timeout-minutes: 15
