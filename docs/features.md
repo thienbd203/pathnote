@@ -50,6 +50,7 @@ Code: `server/src/modules/{places,courses,sessions,bulk.rs}`; tìm ngày ở `se
 - Chống ghi đè: PUT gửi `base_revision`; khớp → revision +1; lệch → 409 kèm `data` là note hiện tại. Hai request cùng revision chỉ một thành công. Frontend giữ draft và cho giải quyết xung đột.
 - Reference (media, exercise, AI import) phải thuộc đúng buổi học, sai → 422 (kể cả khi người gọi sở hữu cả hai buổi).
 - Lưu note đồng bộ kho từ vựng và đánh dấu AI import attached trong cùng transaction.
+- Bảng từ vựng trong editor dùng ba cột Từ / Nghĩa / Ví dụ, loại từ nằm trong ô nghĩa; cuộn ngang trên mobile. Toggle IPA câu là lựa chọn hiển thị theo tài khoản, mặc định bật, lưu localStorage và áp dụng mọi bảng; khi sửa câu hoặc có lỗi IPA thì vẫn hiện. Nút sửa phụ xuất hiện theo hover/focus, luôn hiện trên thiết bị không có hover; bản chỉ đọc giữ nghe và toggle. Không đổi schema, API, luật merge JSON, enrichment hay presence.
 - HTTP PUT bị chặn khi realtime bật hoặc note đã có `yjs_state` (xem Realtime).
 - Quyền: owner đọc/sửa note + quản lý cộng tác viên. Collaborator đọc/sửa note, không sửa lịch, không quản lý chia sẻ.
 - Mời theo email (trim + lowercase) của tài khoản đã từng đăng nhập Google; không gửi email; không mời chính owner; mời lặp không tạo hàng thứ hai.
