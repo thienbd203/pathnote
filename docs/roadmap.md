@@ -12,7 +12,7 @@ R1–R8 đã triển khai, đo lại bằng Playwright và hạ ngân sách tư�
 - Không tăng ngân sách hoặc cập nhật ảnh chỉ để làm CI xanh. Khi bản tối ưu đã qua CI, xóa mục này.
 
 **Phát hành**
-- Chuyển VPS sang blue–green theo `deploy/README.md` mục 7; smoke một lượt deploy luân phiên, rollback tương thích và realtime qua listener nội bộ 3010. Test Linux/Nginx local đã qua, chưa xác minh cấu hình VPS.
+- Blue–green: thử rollback tương thích trên staging và smoke realtime hai cửa sổ qua listener 3010. Lượt production đầu đã qua CI và chuyển green → blue; bằng chứng ở `docs/features.md`.
 - Smoke trên staging, rồi deploy production lần đầu có migration `m20261016_*` theo checklist trong `deploy/README.md` (kiểm tra `lower('É')`, cờ `breaking_migration`, backup).
 - Thử đăng nhập Google thật end-to-end, và realtime hai người qua UI bằng tài khoản Google thật.
 

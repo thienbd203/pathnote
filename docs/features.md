@@ -50,6 +50,7 @@ Code: `server/src/modules/{places,courses,sessions,bulk.rs}`; tìm ngày ở `se
 - Chống ghi đè: PUT gửi `base_revision`; khớp → revision +1; lệch → 409 kèm `data` là note hiện tại. Hai request cùng revision chỉ một thành công. Frontend giữ draft và cho giải quyết xung đột.
 - Reference (media, exercise, AI import) phải thuộc đúng buổi học, sai → 422 (kể cả khi người gọi sở hữu cả hai buổi).
 - Lưu note đồng bộ kho từ vựng và đánh dấu AI import attached trong cùng transaction.
+- Mở ghi chép owned/shared: frontend tải metadata và cấu hình realtime song song, dùng chung query observer để không refetch khi mount note. Editor realtime tải module trong lúc socket đồng bộ, chỉ mount sau khi metadata thành công và Y.Doc đã sync; không đổi contract/lưu trữ hay bỏ xác thực.
 - Bảng từ vựng trong editor dùng ba cột Từ / Nghĩa / Ví dụ, loại từ nằm trong ô nghĩa; cuộn ngang trên mobile. Toggle IPA câu là lựa chọn hiển thị theo tài khoản, mặc định bật, lưu localStorage và áp dụng mọi bảng; khi sửa câu hoặc có lỗi IPA thì vẫn hiện. Nút sửa phụ xuất hiện theo hover/focus, luôn hiện trên thiết bị không có hover; bản chỉ đọc giữ nghe và toggle. Không đổi schema, API, luật merge JSON, enrichment hay presence.
 - HTTP PUT bị chặn khi realtime bật hoặc note đã có `yjs_state` (xem Realtime).
 - Quyền: owner đọc/sửa note + quản lý cộng tác viên. Collaborator đọc/sửa note, không sửa lịch, không quản lý chia sẻ.
@@ -399,5 +400,6 @@ skip có chủ đích trên desktop. Bản tối ưu cần xác minh CI sau push
 - Slot blue/green lần lượt 3000/3001, địa chỉ nội bộ ổn định 3010 cho collaboration. Giữ chung PostgreSQL, JWT và media. Chỉ chuyển traffic sau health đúng commit SHA; xác minh nội bộ và public trước đổi current, drain rồi stop slot cũ.
 - Lỗi target giữ traffic cũ; lỗi sau switch tự rollback, nếu rollback không xác minh được thì giữ cả hai process. Giữ releases của cả hai slot; drain timeout giữ process cũ. Migration phải tương thích ngược, cờ breaking bị chặn, không tự rollback database.
 - Dùng graceful shutdown Axum hiện có, systemd và Nginx reload; helper không nhận đường dẫn tùy ý. Giới hạn: một VPS, không HA database/máy chủ, không thay quy trình collaboration hay chính sách asset frontend.
+- Lượt production đầu [39366022269](https://github.com/thienbd203/pathnote/actions/runs/39366022269) đã qua và chuyển green → blue với backend `a51fdc0`. Theo dõi HTTPS health trong khoảng 159 giây: 71 mẫu bản cũ + 5 mẫu bản mới, không có lỗi; đây là lấy mẫu endpoint health, chưa phải kiểm chứng mọi request hay bài test rollback production.
 
 Code: `.github/deploy.sh`, `deploy/{blue-green.py,upstream.py,pathnote-rust@.service}`. Hướng dẫn chuyển VPS, rollback và maintenance: `deploy/README.md` mục 7.
