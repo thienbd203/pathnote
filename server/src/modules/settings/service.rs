@@ -19,30 +19,46 @@ pub async fn read(
 
 pub async fn save_learning(
     db: &sea_orm::DatabaseConnection,
-    user: i64,
+    user_id: i64,
     learning: LearningSettings,
 ) -> Result<PersonalSettings, AppError> {
+    // 1. Kiểm tra cài đặt trước khi ghi database.
     learning.validate()?;
-    user_settings::Entity::insert(user_settings::ActiveModel {
-        user_id: Set(user),
-        category: Set("learning".into()),
-        value: Set(serde_json::to_value(&learning)
-            .map_err(|_| AppError::Internal("Không lưu được cài đặt học tập.".into()))?),
-        updated_at: Set(chrono::Utc::now().fixed_offset()),
-    })
-    .on_conflict(
-        OnConflict::columns([
-            user_settings::Column::UserId,
-            user_settings::Column::Category,
-        ])
-        .update_columns([
-            user_settings::Column::Value,
-            user_settings::Column::UpdatedAt,
-        ])
-        .to_owned(),
-    )
-    .exec(db)
-    .await?;
+
+    // 2. Chuyển cài đặt sang JSON; trả lỗi nếu không chuyển được.
+    let learning_json = match serde_json::to_value(&learning) {
+        Ok(value) => value,
+        Err(_) => {
+            return Err(AppError::Internal(
+                "Không lưu được cài đặt học tập.".to_owned(),
+            ));
+        }
+    };
+
+    // 3. Chuẩn bị dữ liệu cho bản ghi mới.
+    let now = chrono::Utc::now().fixed_offset();
+    let settings = user_settings::ActiveModel {
+        user_id: Set(user_id),
+        category: Set("learning".to_owned()),
+        value: Set(learning_json),
+        updated_at: Set(now),
+    };
+
+    // 4. Nếu trùng (user_id, category), chỉ cập nhật giá trị và thời gian.
+    let conflict_policy = OnConflict::columns([
+        user_settings::Column::UserId,
+        user_settings::Column::Category,
+    ])
+    .update_columns([
+        user_settings::Column::Value,
+        user_settings::Column::UpdatedAt,
+    ])
+    .to_owned();
+
+    // 5. Thực thi một câu lệnh thêm hoặc cập nhật rồi trả cài đặt đã nhận.
+    let query = user_settings::Entity::insert(settings).on_conflict(conflict_policy);
+    query.exec(db).await?;
+
     Ok(PersonalSettings { learning })
 }
 pub async fn read_navigation(
