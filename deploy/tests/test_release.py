@@ -186,6 +186,12 @@ class ReleaseWorkflowTests(unittest.TestCase):
         commands = '\n'.join(step.get('run', '') for step in build['steps'])
         self.assertIn('npm test', commands)
         self.assertIn('sha256sum deploy.sh', commands)
+        # Missing npm dotfiles must fail the checksum, not be silently omitted
+        # from the artifact while still present in SHA256SUMS.
+        artifact = next(step['with'] for step in build['steps'] if step.get('uses', '').startswith('actions/upload-artifact@'))
+        self.assertTrue(artifact['include-hidden-files'])
+        self.assertEqual(artifact['path'], 'collaboration-release/')
+        self.assertIn('cp -a server node_modules package.json package-lock.json collaboration-release/app/', commands)
         job = self.jobs['deploy-collaboration']
         self.assertEqual(set(job['needs']), {'release', 'build-collaboration', 'deploy-backend'})
         self.assertEqual(job['env']['COLLABORATION_SHA'], checkout['ref'])

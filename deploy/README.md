@@ -307,6 +307,8 @@ Thứ tự kích hoạt production: **Rust → collaboration → frontend**. Bui
 2. Điền chính xác `frontend_sha`, `collaboration_sha` đã push vào `.github/release.json` cùng thay đổi Rust, review rồi push `master` ở repo Rust.
 3. Coordinator kiểm tra Rust, build ba artifact theo SHA cố định và chạy browser gate. Bất kỳ gate/build nào lỗi đều giữ production cũ.
 4. Deploy Rust bằng blue–green (hoặc in-place khi được cấu hình): checksum, backup/migration tương thích, health phải đúng SHA và database ok.
+Artifact collaboration bao gồm cả file ẩn của npm để khớp SHA256SUMS; chỉ upload thư mục release chứa server/dependencies/package files/script deploy, không đưa `.env` hay SSH credentials vào artifact.
+
 5. Job collaboration kiểm tra lại backend đúng SHA, kiểm checksum artifact; nếu `/up` đang khỏe và đúng SHA đã chốt thì bỏ qua upload/restart để giữ socket. Nếu khác, upload artifact, kiểm backend lần nữa, chạy deploy script từ chính artifact. Script xác minh local/public health và rollback collaboration nếu lỗi; frontend chưa được kích hoạt.
 6. Frontend chỉ chạy sau job collaboration thành công; kiểm tra lại cả Rust lẫn collaboration đúng SHA trước upload và ngay trước khi đổi symlink frontend.
 

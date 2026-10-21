@@ -230,6 +230,9 @@ jobs:
         with:
           name: pathnote-collaboration-release
           path: collaboration-release/
+          # npm dependencies contain dotfiles included in SHA256SUMS. This
+          # directory contains only the allowlisted release files, never .env.
+          include-hidden-files: true
           retention-days: 7
           if-no-files-found: error
 
