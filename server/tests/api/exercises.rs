@@ -85,7 +85,7 @@ async fn exercise_import_validates_all_questions_and_note_references_in_rest_and
     let ids = r.json::<Value>()["data"]["ids"].as_array().unwrap().clone();
     assert_eq!(ids.len(), 2);
     let doc = json!({"type":"doc","content":ids.iter().map(|id|json!({"type":"exercise","attrs":{"exerciseId":id}})).collect::<Vec<_>>()});
-    let payload = json!({"content":doc,"schema_version":3,"base_revision":0});
+    let payload = json!({"content":doc,"schema_version":4,"base_revision":0});
     app.api
         .put(&format!("/api/v1/sessions/{other}/note"))
         .add_header("authorization", auth(token))
@@ -280,7 +280,7 @@ async fn exercise_references_roundtrip_through_realtime_snapshot_and_reject_othe
             "x-collaboration-secret",
             "test-collaboration-secret-32-characters",
         )
-        .json(&json!({"content":doc,"state":"AAA=","base_revision":0}))
+        .json(&json!({"content":doc,"schema_version":4,"state":"AAA=","base_revision":0}))
         .await;
     r.assert_status_ok();
     assert_eq!(r.json::<Value>()["data"]["content"], doc);
@@ -290,7 +290,7 @@ async fn exercise_references_roundtrip_through_realtime_snapshot_and_reject_othe
             "x-collaboration-secret",
             "test-collaboration-secret-32-characters",
         )
-        .json(&json!({"content":doc,"state":"AAA=","base_revision":0}))
+        .json(&json!({"content":doc,"schema_version":4,"state":"AAA=","base_revision":0}))
         .await
         .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
     app.cleanup().await;

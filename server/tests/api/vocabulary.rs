@@ -29,7 +29,7 @@ pub(super) async fn save(app: &LearningApp, id: i64, content: &Value, revision: 
     app.api
         .put(&format!("/api/v1/sessions/{id}/note"))
         .add_header("authorization", auth(&app.owner_token))
-        .json(&json!({"content":content,"schema_version":3,"base_revision":revision}))
+        .json(&json!({"content":content,"schema_version":4,"base_revision":revision}))
         .await
         .assert_status_ok();
 }
@@ -103,7 +103,7 @@ async fn vocabulary_syncs_same_transaction_updates_without_duplicates_and_reacti
     app.api
         .put(&format!("/api/v1/sessions/{id}/note"))
         .add_header("authorization", auth(&app.owner_token))
-        .json(&json!({"content":empty,"schema_version":3,"base_revision":0}))
+        .json(&json!({"content":empty,"schema_version":4,"base_revision":0}))
         .await
         .assert_status(StatusCode::CONFLICT);
     assert_eq!(
@@ -219,7 +219,7 @@ async fn vocabulary_syncs_realtime_snapshots_and_backfills_old_notes_idempotentl
         library(&app, &app.owner_token, "").await["data"][0]["id"],
         initial["data"][0]["id"]
     );
-    app.api.put(&format!("/api/v1/internal/notes/{id}")).add_header("x-collaboration-secret","test-collaboration-secret-32-characters").json(&json!({"state":"AAA=","content":doc(vec![entry("chef","đầu bếp",&["Jobs"])]),"base_revision":1})).await.assert_status_ok();
+    app.api.put(&format!("/api/v1/internal/notes/{id}")).add_header("x-collaboration-secret","test-collaboration-secret-32-characters").json(&json!({"schema_version":4,"state":"AAA=","content":doc(vec![entry("chef","đầu bếp",&["Jobs"])]),"base_revision":1})).await.assert_status_ok();
     let updated = library(&app, &app.owner_token, "").await;
     assert_eq!(updated["meta"]["total"], 1);
     assert_eq!(updated["data"][0]["word"], "chef");

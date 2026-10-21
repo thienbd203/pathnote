@@ -52,7 +52,7 @@ async fn creation_initializes_notes_atomically_and_structure_does_not_copy_conte
     app.api
         .put(&format!("/api/v1/sessions/{source_id}/note"))
         .add_header("authorization", auth.clone())
-        .json(&json!({"content":content,"schema_version":3,"base_revision":1}))
+        .json(&json!({"content":content,"schema_version":4,"base_revision":1}))
         .await
         .assert_status_ok();
     input["initial_note"] = json!({"mode":"structure","session_id":source_id});

@@ -23,7 +23,7 @@ fn doc() -> Value {
     json!({"type":"doc","content":[{"type":"paragraph","attrs":{"textAlign":null,"indent":0},"content":[{"type":"text","text":"Hello Jobs","marks":[{"type":"bold"}]}]}]})
 }
 fn save(content: Value, revision: i32) -> Value {
-    json!({"content":content,"schema_version":3,"base_revision":revision})
+    json!({"content":content,"schema_version":4,"base_revision":revision})
 }
 #[tokio::test]
 async fn notes_roundtrip_jsonb_and_revision_conflict_preserves_original() {
@@ -349,7 +349,7 @@ async fn vocabulary_dual_accents_roundtrip_rest_and_collaboration_snapshots() {
             token(&app.owner_token)
         };
         let payload = if realtime {
-            json!({"content":content,"state":"AAA=","base_revision":0})
+            json!({"content":content,"schema_version":4,"state":"AAA=","base_revision":0})
         } else {
             save(content.clone(), 0)
         };
@@ -368,7 +368,7 @@ async fn vocabulary_dual_accents_roundtrip_rest_and_collaboration_snapshots() {
         assert_eq!(response.json::<Value>()["data"]["content"], content);
         content["content"][0]["content"][0]["attrs"]["ipaUK"] = json!("x".repeat(6001));
         let invalid = if realtime {
-            json!({"content":content,"state":"AQI=","base_revision":1})
+            json!({"content":content,"schema_version":4,"state":"AQI=","base_revision":1})
         } else {
             save(content, 1)
         };
@@ -380,4 +380,58 @@ async fn vocabulary_dual_accents_roundtrip_rest_and_collaboration_snapshots() {
             .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
         app.cleanup().await;
     }
+}
+
+#[tokio::test]
+async fn old_schema_save_cannot_erase_dual_accent_ipa() {
+    let app = LearningApp::spawn().await;
+    let id = lesson(&app).await;
+    let path = format!("/api/v1/sessions/{id}/note");
+    let auth = token(&app.owner_token);
+    let content = json!({"type":"doc","content":[{"type":"vocabulary","attrs":{"locale":"en-US"},"content":[{"type":"vocabularyEntry","attrs":{"id":"00000000-0000-0000-0000-000000000001","word":"history","ipa":"/US/","ipaUK":"/UK/","ipaUS":"/US/","topics":[]},"content":[{"type":"vocabularySense","attrs":{"id":"00000000-0000-0000-0000-000000000002","partOfSpeech":"noun","meaning":"lịch sử"},"content":[{"type":"vocabularyExample","attrs":{"id":"00000000-0000-0000-0000-000000000003","text":"I study history.","highlights":[],"ipaUK":"/UK sentence/","ipaUS":"/US sentence/"}}]}]}]}]});
+    app.api
+        .put(&path)
+        .add_header("authorization", &auth)
+        .json(&save(content.clone(), 0))
+        .await
+        .assert_status_ok();
+    // Already-deployed dual-IPA notes still have schema 3. A guard based only
+    // on the stored document version would miss this real rollout case.
+    use sea_orm::sea_query::Expr;
+    notes::Entity::update_many()
+        .col_expr(notes::Column::SchemaVersion, Expr::value(3))
+        .filter(notes::Column::SessionId.eq(id))
+        .exec(app.db.as_ref())
+        .await
+        .unwrap();
+    let mut stripped = content.clone();
+    fn strip(value: &mut Value) {
+        if let Some(attrs) = value.get_mut("attrs").and_then(Value::as_object_mut) {
+            attrs.remove("ipaUK");
+            attrs.remove("ipaUS");
+        }
+        if let Some(children) = value.get_mut("content").and_then(Value::as_array_mut) {
+            for child in children {
+                strip(child);
+            }
+        }
+    }
+    strip(&mut stripped);
+    let response = app
+        .api
+        .put(&path)
+        .add_header("authorization", &auth)
+        .json(&json!({"content":stripped,"schema_version":3,"base_revision":1}))
+        .await;
+    response.assert_status(StatusCode::CONFLICT);
+    assert_eq!(response.json::<Value>()["code"], "client_outdated");
+    let persisted = app
+        .api
+        .get(&path)
+        .add_header("authorization", &auth)
+        .await
+        .json::<Value>();
+    assert_eq!(persisted["data"]["content"], content);
+    assert_eq!(persisted["data"]["revision"], 1);
+    app.cleanup().await;
 }

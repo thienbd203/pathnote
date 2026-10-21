@@ -1,7 +1,7 @@
 use super::{dto, service};
 use crate::{
     access_token::CurrentUser,
-    extract::{AppJson, AppPath},
+    extract::{AppJson, AppPath, AppQuery},
     response::ApiResponse,
     state::AppState,
     AppError,
@@ -50,9 +50,10 @@ async fn authorize(
     State(s): State<AppState>,
     user: CurrentUser,
     AppPath(id): AppPath<i64>,
+    AppQuery(client): AppQuery<dto::ClientSchema>,
 ) -> Result<ApiResponse<dto::CollaborationUserResource>, AppError> {
     Ok(ApiResponse::ok(
-        service::collaboration::authorize(&s.db, user.id, id).await?,
+        service::collaboration::authorize(&s.db, user.id, id, client.schema_version).await?,
     ))
 }
 async fn fetch(

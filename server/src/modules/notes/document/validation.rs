@@ -337,7 +337,7 @@ fn unique_ids(nodes: &[Node]) -> bool {
     nodes.iter().all(|n| visit(n, &mut seen))
 }
 pub fn validate(content: &serde_json::Value, version: i32) -> Result<Vec<Reference>, AppError> {
-    if !(1..=3).contains(&version) {
+    if !(1..=super::super::schema::NOTE_SCHEMA_VERSION).contains(&version) {
         return Err(AppError::validation(
             "schema_version",
             "Phiên bản ghi chép chưa hỗ trợ.",

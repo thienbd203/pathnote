@@ -207,3 +207,17 @@ Ghi mỗi thay đổi response/request mà frontend thấy. Cột đầu là đ�
 | Hai giọng 21/10 | Note JSON qua REST + bridge | vocabularyEntry/vocabularyExample chỉ có `ipa`, giọng theo bảng `locale` | Nhận thêm `ipaUK?: string|null`, `ipaUS?: string|null` (mỗi trường tối đa 6000 ký tự). Giữ schema_version=3 và IPA/locale cũ cho tương thích. Frontend nhập JSON v1 hỗ trợ hai trường này và ánh xạ IPA cũ đúng locale; không cần migration DB. Deploy Rust và collaboration nhận schema mới trước web. |
 
 | Hai giọng · import IPA | `POST /ipa-vocabulary/{import,duplicates}`, `POST /ipa-pairs/{import,duplicates}` và library | Format từ chỉ có ipa | Chấp nhận và giữ ipaUK/ipaUS tùy chọn trong JSON v1 dùng chung; IPA chính chọn theo locale trước khi phân loại âm. Validation kiểm tra cả hai trường kể cả giọng không được chọn. |
+
+
+## Phiên bản schema ghi chú bắt buộc (D1)
+
+Mỗi lần thêm/bỏ/đổi attr hoặc node trong document ghi chú phải tăng `NOTE_SCHEMA_VERSION` cùng lúc ở Rust (`modules/notes/schema.rs`), frontend (`lib/note-schema.ts`) và bridge (`server/note-schema.mjs`). Đây là capability của bản code, không lấy số version từ document tải về để giả làm client mới. Schema hiện tại: **4**. Chỉnh CSS/layout không cần tăng version.
+
+Các document schema 1–3 vẫn đọc được; client hiện tại lưu bằng version 4. Mọi writer explicit version thấp hơn 4 nhận HTTP 409 với `code: client_outdated`, không đổi content/revision/Yjs state. Kiểm tra lại dưới khóa ghi ngăn race với lần nâng version; quyền truy cập luôn kiểm tra trước để không lộ note. Bridge gửi version khi bootstrap lẫn store; WebSocket xác minh capability trước khi sync, và Rust kiểm lại khi authorize/store.
+
+**Chuyển tiếp duy nhất ở release D1/schema 4:** trường version thiếu/null chỉ được nhận cho note legacy chưa nâng lên 4 và cả payload lẫn dữ liệu đang lưu không có ipaUK/ipaUS. Ghi nhận lại schema 3 cho trường hợp legacy này; không tự suy diễn là writer version 4. Không có grace cho realtime client thiếu capability, vì nó có thể nhận document mới sau đó. Điều kiện `NOTE_SCHEMA_VERSION == 4` tự tắt grace ở schema 5; release kế tiếp phải bỏ nhánh chuyển tiếp. Version explicit 3 không có grace.
+
+| Đợt | Endpoint | Trước | Sau |
+| --- | --- | --- | --- |
+| D1 | `PUT /sessions/{id}/note`, `PUT /internal/notes/{id}`, `POST /sessions/{id}/collaboration/authorize?schema_version=4` | Writer/bridge có thể ghi document thiếu attr mới; thiếu version ở bridge | `schema_version` là capability explicit của writer. Cũ → 409 `{message,code:"client_outdated"}`; version chưa hỗ trợ → 422. Nhánh thiếu version chỉ an toàn cho document legacy trong một release như mô tả trên. Frontend giữ bản nháp, khóa autosave/ghi đè, cho tải JSON bản nháp và tải lại trang. |
+| D3 | Collaboration `GET /up` | Chỉ status/version của process Node | Kiểm `{COLLABORATION_API_URL}/health`, timeout 2s, cache 10s, gộp probe đồng thời; Rust/status database lỗi → HTTP 503 `{status:"error",rust:"error",version}`; khỏe → 200 cùng `rust:"ok"`. Gate deploy bắt buộc rust ok. |

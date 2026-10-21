@@ -27,7 +27,7 @@ async fn collaboration_requires_bridge_secret_and_note_permission_and_rechecks_r
     let id = lesson(&app).await;
     let auth = format!("Bearer {}", app.owner_token);
     let guest = format!("Bearer {}", app.other_token);
-    let path = format!("/api/v1/sessions/{id}/collaboration/authorize");
+    let path = format!("/api/v1/sessions/{id}/collaboration/authorize?schema_version=4");
     app.api
         .post(&path)
         .add_header("authorization", &auth)
@@ -100,7 +100,7 @@ async fn collaboration_snapshots_are_private_atomic_validated_and_idempotent() {
     r.assert_status_ok();
     assert!(r.json::<Value>()["data"]["state"].is_null());
     // Binary interpretation belongs to Hocuspocus; the API checks size/base64 and validates the JSON.
-    let payload = json!({"content":doc(),"state":"AAA=","base_revision":0});
+    let payload = json!({"content":doc(),"schema_version":4,"state":"AAA=","base_revision":0});
     let r = app
         .api
         .put(&path)
@@ -121,7 +121,7 @@ async fn collaboration_snapshots_are_private_atomic_validated_and_idempotent() {
         .api
         .put(&path)
         .add_header("x-collaboration-secret", SECRET)
-        .json(&json!({"content":doc(),"state":"AQI=","base_revision":0}))
+        .json(&json!({"content":doc(),"schema_version":4,"state":"AQI=","base_revision":0}))
         .await;
     r.assert_status(StatusCode::CONFLICT);
     let r = app
@@ -142,14 +142,14 @@ async fn collaboration_snapshots_are_private_atomic_validated_and_idempotent() {
         app.api
             .put(&path)
             .add_header("x-collaboration-secret", SECRET)
-            .json(&json!({"content":content,"state":state,"base_revision":1}))
+            .json(&json!({"content":content,"schema_version":4,"state":state,"base_revision":1}))
             .await
             .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
     }
     app.api
         .put(&format!("/api/v1/sessions/{id}/note"))
         .add_header("authorization", format!("Bearer {}", app.owner_token))
-        .json(&json!({"content":doc(),"schema_version":3,"base_revision":1}))
+        .json(&json!({"content":doc(),"schema_version":4,"base_revision":1}))
         .await
         .assert_status(StatusCode::BAD_REQUEST);
     app.api
@@ -234,5 +234,75 @@ async fn hocuspocus_two_clients_save_to_rust_and_reload_from_postgres() {
         .unwrap();
     assert!(note.yjs_state.is_some());
     assert!(note.content.to_string().contains("B Original A"));
+    app.cleanup().await;
+}
+
+#[tokio::test]
+async fn schema_guard_rejects_old_bridge_and_old_realtime_clients_before_writing_or_syncing() {
+    let app = LearningApp::spawn_with_collaboration(true).await;
+    let id = lesson(&app).await;
+    let path = format!("/api/v1/internal/notes/{id}");
+    let versioned = json!({"content":doc(),"schema_version":4,"state":"AAA=","base_revision":0});
+    app.api
+        .put(&path)
+        .add_header("x-collaboration-secret", SECRET)
+        .json(&versioned)
+        .await
+        .assert_status_ok();
+    for input in [
+        json!({"content":doc(),"schema_version":3,"state":"AQI=","base_revision":1}),
+        json!({"content":doc(),"state":"AQI=","base_revision":1}),
+    ] {
+        let response = app
+            .api
+            .put(&path)
+            .add_header("x-collaboration-secret", SECRET)
+            .json(&input)
+            .await;
+        response.assert_status(StatusCode::CONFLICT);
+        assert_eq!(response.json::<Value>()["code"], "client_outdated");
+    }
+    let persisted = app
+        .api
+        .get(&path)
+        .add_header("x-collaboration-secret", SECRET)
+        .await
+        .json::<Value>();
+    assert_eq!(persisted["data"]["state"], "AAA=");
+    assert_eq!(persisted["data"]["schema_version"], 4);
+    assert_eq!(persisted["data"]["revision"], 1);
+    for query in ["", "?schema_version=3"] {
+        let response = app
+            .api
+            .post(&format!(
+                "/api/v1/sessions/{id}/collaboration/authorize{query}"
+            ))
+            .add_header("x-collaboration-secret", SECRET)
+            .add_header("authorization", format!("Bearer {}", app.owner_token))
+            .await;
+        response.assert_status(StatusCode::CONFLICT);
+        assert_eq!(response.json::<Value>()["code"], "client_outdated");
+    }
+    app.cleanup().await;
+}
+
+#[tokio::test]
+async fn schema_four_transition_accepts_missing_version_only_for_plain_legacy_notes() {
+    let app = LearningApp::spawn_with_collaboration(true).await;
+    let id = lesson(&app).await;
+    let path = format!("/api/v1/internal/notes/{id}");
+    app.api
+        .put(&path)
+        .add_header("x-collaboration-secret", SECRET)
+        .json(&json!({"content":doc(),"state":"AAA=","base_revision":0}))
+        .await
+        .assert_status_ok();
+    let response = app
+        .api
+        .get(&path)
+        .add_header("x-collaboration-secret", SECRET)
+        .await
+        .json::<Value>();
+    assert_eq!(response["data"]["schema_version"], 3);
     app.cleanup().await;
 }

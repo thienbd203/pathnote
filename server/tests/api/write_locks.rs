@@ -45,7 +45,7 @@ async fn invalid_document_courses_and_sessions_fail_without_waiting_for_place_lo
         .await
         .unwrap()
         .unwrap();
-    let note=tokio::time::timeout(Duration::from_secs(2),app.api.put(&format!("/api/v1/sessions/{id}/note")).add_header("authorization",auth(&app.owner_token)).json(&json!({"content":{"type":"doc","content":[{"type":"invalid"}]},"schema_version":3,"base_revision":0}))).await;
+    let note=tokio::time::timeout(Duration::from_secs(2),app.api.put(&format!("/api/v1/sessions/{id}/note")).add_header("authorization",auth(&app.owner_token)).json(&json!({"content":{"type":"doc","content":[{"type":"invalid"}]},"schema_version":4,"base_revision":0}))).await;
     let course = tokio::time::timeout(
         Duration::from_secs(2),
         app.api
@@ -92,7 +92,7 @@ async fn note_rechecks_media_references_after_waiting_on_parent_lock() {
         .await
         .unwrap()
         .unwrap();
-    let request=app.api.put(&format!("/api/v1/sessions/{id}/note")).add_header("authorization",auth(&app.owner_token)).json(&json!({"content":{"type":"doc","content":[{"type":"image","attrs":{"mediaId":m.id}}]},"schema_version":3,"base_revision":0}));
+    let request=app.api.put(&format!("/api/v1/sessions/{id}/note")).add_header("authorization",auth(&app.owner_token)).json(&json!({"content":{"type":"doc","content":[{"type":"image","attrs":{"mediaId":m.id}}]},"schema_version":4,"base_revision":0}));
     let pending = tokio::spawn(async move { request.await });
     tokio::time::sleep(Duration::from_millis(100)).await;
     assert!(!pending.is_finished());

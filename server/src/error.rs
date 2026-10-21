@@ -10,6 +10,8 @@ use serde::Serialize;
 struct ErrorBody {
     message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    code: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     errors: Option<std::collections::BTreeMap<String, Vec<String>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     data: Option<serde_json::Value>,
@@ -17,6 +19,7 @@ struct ErrorBody {
 
 #[derive(Debug)]
 pub enum AppError {
+    ClientOutdated,
     Unavailable(String),
     Conflict(String),
     ConflictWith {
@@ -37,7 +40,12 @@ impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let mut errors = None;
         let mut data = None;
+        let mut code = None;
         let (status, message) = match self {
+            AppError::ClientOutdated => {
+                code = Some("client_outdated");
+                (StatusCode::CONFLICT, "Có phiên bản mới, tải lại trang để lưu. Bản đang viết vẫn được giữ; hãy sao chép hoặc tải bản nháp trước khi tải lại.".into())
+            }
             AppError::Validation(fields) => {
                 errors = Some(fields);
                 (
@@ -80,6 +88,7 @@ impl IntoResponse for AppError {
 
         let body = ErrorBody {
             message,
+            code,
             errors,
             data,
         };

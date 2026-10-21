@@ -42,8 +42,10 @@ pub async fn authorize(
     db: &DatabaseConnection,
     user: i64,
     id: i64,
+    schema_version: Option<i32>,
 ) -> Result<CollaborationUserResource, AppError> {
     service::access(db, user, id, false).await?;
+    super::super::schema::check_client(schema_version.unwrap_or(0))?;
     let user = users::Entity::find_by_id(user)
         .one(db)
         .await?
@@ -93,7 +95,10 @@ pub async fn store(
             "Trạng thái đồng bộ quá lớn hoặc rỗng.",
         ));
     }
-    let version = service::note(db, id).await?.schema_version.max(3);
+    if let Some(version) = input.schema_version {
+        super::super::schema::check_client(version)?;
+    }
+    let version = input.schema_version.unwrap_or(3);
     let references = crate::modules::notes::document::validate(&input.content, version)?;
     let vocabulary = crate::modules::vocabulary::sync::prepare(&input.content)?;
     let place = crate::entities::places::Entity::find_by_id(session.place_id)
@@ -103,11 +108,8 @@ pub async fn store(
     let txn = places::write_tx(db, place.user_id, place.id).await?;
     active_session(&txn, id).await?;
     let current = service::note(&txn, id).await?;
-    if version != current.schema_version.max(3) {
-        return Err(AppError::Conflict(
-            "Phiên bản ghi chép đã thay đổi. Hãy thử lại.".into(),
-        ));
-    }
+    let version =
+        super::super::schema::write_version(input.schema_version, &current, &input.content)?;
     service::validate_references(&txn, id, &references).await?;
     let old = notes::Entity::find_by_id(id).one(&txn).await?;
     if old

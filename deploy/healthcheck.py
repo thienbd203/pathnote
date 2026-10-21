@@ -32,6 +32,8 @@ def check(url: str, expected_version: str, service: str = "backend") -> None:
     data = payload if service == "collaboration" else payload.get("data", {})
     if data.get("status") != "ok" or (service == "backend" and data.get("database") != "ok"):
         raise ValueError("API or database status is not healthy")
+    if service == "collaboration" and data.get("rust") != "ok":
+        raise ValueError("Collaboration cannot reach a healthy Rust backend")
     if data.get("version") != expected_version:
         raise ValueError("Running process version does not match the deployed commit")
 

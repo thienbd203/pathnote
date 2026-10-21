@@ -129,7 +129,7 @@ async fn repeated_words_share_memory_and_combine_meanings_across_lessons() {
     let private = lesson(&app, &app.other_token).await;
     app.api.put(&format!("/api/v1/sessions/{private}/note"))
         .add_header("authorization", auth(&app.other_token))
-        .json(&json!({"content":doc(vec![typed_entry("remember", "nghĩa riêng tư", "verb")]),"schema_version":3,"base_revision":0}))
+        .json(&json!({"content":doc(vec![typed_entry("remember", "nghĩa riêng tư", "verb")]),"schema_version":4,"base_revision":0}))
         .await.assert_status_ok();
     save(
         &app,

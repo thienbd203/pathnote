@@ -407,3 +407,11 @@ Code: `.github/deploy.sh`, `deploy/{blue-green.py,upstream.py,pathnote-rust@.ser
 ### Thứ tự phát hành ba dịch vụ (21/10/2026)
 
 Rust coordinator đóng gói ba revision bất biến; build/test song song, kích hoạt Rust → collaboration → frontend. Push repo web/collaboration chỉ chạy CI. Collaboration giữ nguyên socket nếu `/up` đã đúng SHA, chỉ restart khi thay revision; lỗi deploy/health chặn frontend. Frontend vẫn kiểm đúng SHA của cả hai dịch vụ trước kích hoạt. Hướng dẫn variables/quyền SSH và rollback ở `deploy/README.md` mục 3–4.
+
+### D1/D3: tab cũ và readiness realtime
+
+Đã tái hiện schema Tiptap cũ bỏ ipaUK/ipaUS khi serialize và backend cũ nhận bản thiếu. Schema ghi chú hiện tại 4; version là capability của code, không copy từ note. Writer cũ bị 409 client_outdated trước khi thay dữ liệu; note schema 3 đã có hai IPA cũng được bảo vệ. Bridge khai báo version khi authorize/bootstrap/store và chặn client WebSocket thiếu/version cũ trước khi sync Y.Doc. Frontend phân biệt lỗi này với conflict revision, giữ bản đang viết, khóa ghi đè/retry tự động, có tải JSON bản nháp và tải lại; không tự reload mất nội dung. Tab chạy JS trước D1 không thể có UI mới từ server: việc bảo vệ là chặn ghi; người dùng cần reload thủ công.
+
+Grace đúng một release schema 4 chỉ cho payload thiếu/null version trên note legacy chưa có attr hai giọng, chưa được nâng version; không áp dụng realtime client. Schema 5 tự tắt grace, cần bỏ nhánh ở release tiếp theo (xem architecture).
+
+Readiness collaboration `/up` kiểm Rust qua URL cấu hình (timeout 2s, cache 10s). Rust/DB lỗi làm HTTP 503 và rust:error, coordinator không cho frontend mới kích hoạt. Mẫu production/startup dùng listener 3010; local/in-place phải override 3000. `.env` production thực tế do người vận hành xác minh theo README collaboration; Codex chưa đọc hay sửa VPS trong lần fix này.

@@ -212,7 +212,7 @@ async fn note_media_refs_are_scoped_and_sharing_revocation_blocks_download() {
     let id = lesson(&app).await;
     let second = lesson(&app).await;
     let m = upload(&app, id, "image", "pic.png", png()).await;
-    let body = json!({"content":{"type":"doc","content":[{"type":"image","attrs":{"mediaId":m["id"],"alt":"Jobs","align":"center","width":200,"captionVisible":true},"content":[{"type":"text","text":"Caption"}]}]},"schema_version":3,"base_revision":0});
+    let body = json!({"content":{"type":"doc","content":[{"type":"image","attrs":{"mediaId":m["id"],"alt":"Jobs","align":"center","width":200,"captionVisible":true},"content":[{"type":"text","text":"Caption"}]}]},"schema_version":4,"base_revision":0});
     app.api
         .put(&format!("/api/v1/sessions/{id}/note"))
         .add_header("authorization", bearer(&app.owner_token))

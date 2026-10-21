@@ -106,8 +106,10 @@ async fn save(
     input: SaveNote,
     place: places::Model,
 ) -> Result<SaveOutcome, AppError> {
-    let references =
-        crate::modules::notes::document::validate(&input.content, input.schema_version)?;
+    let references = crate::modules::notes::document::validate(
+        &input.content,
+        input.schema_version.unwrap_or(3),
+    )?;
     let vocabulary = crate::modules::vocabulary::sync::prepare(&input.content)?;
     if !(0..i32::MAX).contains(&input.base_revision) {
         return Err(AppError::validation(
@@ -121,12 +123,8 @@ async fn save(
     let loaded = notes::Entity::find_by_id(id).one(&txn).await?;
     let has_realtime = loaded.as_ref().is_some_and(|n| n.yjs_state.is_some());
     let current = resource(id, loaded);
-    if input.schema_version < current.schema_version {
-        return Err(AppError::validation(
-            "schema_version",
-            "Editor đã cũ. Hãy tải lại trang.",
-        ));
-    }
+    let schema_version =
+        super::schema::write_version(input.schema_version, &current, &input.content)?;
     if current.revision != input.base_revision {
         return Ok(SaveOutcome::Conflict(current));
     }
@@ -139,7 +137,7 @@ async fn save(
         session_id: Set(id),
         content: Set(input.content),
         yjs_state: Set(None),
-        schema_version: Set(input.schema_version),
+        schema_version: Set(schema_version),
         revision: Set(current.revision + 1),
         saved_at: Set(chrono::Utc::now().fixed_offset()),
     };
@@ -210,12 +208,16 @@ pub async fn save_rest(
     realtime: bool,
 ) -> Result<NoteResource, AppError> {
     let (_, place) = access(db, user, id, false).await?;
+    let input = input?;
+    if let Some(version) = input.schema_version {
+        super::schema::check_client(version)?;
+    }
     if realtime {
         return Err(AppError::BadRequest(
             "Ghi chép đang dùng realtime. Hãy tải lại trang.".into(),
         ));
     }
-    match save(db, user, id, input?, place).await? {
+    match save(db, user, id, input, place).await? {
         SaveOutcome::Saved(note) => Ok(note),
         SaveOutcome::Conflict(note) => Err(AppError::ConflictWith {
             message: "Ghi chép đã thay đổi ở một tab khác. Bản đang viết của bạn vẫn được giữ."

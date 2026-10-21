@@ -50,16 +50,21 @@ class HealthcheckTests(unittest.TestCase):
             healthcheck.check('https://example.com/health', 'new')
 
     def test_collaboration_checks_top_level_status_and_exact_version(self):
-        with self.response({'status': 'ok', 'version': 'new'}):
+        with self.response({'status': 'ok', 'rust': 'ok', 'version': 'new'}):
             healthcheck.check('https://example.com/up', 'new', 'collaboration')
-        for body in ({'status': 'ok', 'version': 'old'}, {'status': 'error', 'version': 'new'}, {'data': {'status': 'ok', 'version': 'new'}}):
+        for body in ({'status': 'ok', 'version': 'old'}, {'status': 'error', 'version': 'new'}, {'data': {'status': 'ok', 'rust': 'ok', 'version': 'new'}}):
             with self.response(body), self.assertRaises(ValueError):
                 healthcheck.check('https://example.com/up', 'new', 'collaboration')
         with patch.object(healthcheck.urllib.request, 'urlopen') as request, self.assertRaises(ValueError):
             healthcheck.check('http://127.0.0.1/up', 'new', 'collaboration')
         request.assert_not_called()
 
+    def test_collaboration_without_verified_rust_readiness_is_rejected(self):
+        for rust in (None, 'error'):
+            with self.response({'status': 'ok', 'version': 'new', 'rust': rust}), self.assertRaisesRegex(ValueError, 'Rust backend'):
+                healthcheck.check('https://example.com/up', 'new', 'collaboration')
+
     def test_collaboration_gate_rejects_redirects_and_https_downgrades(self):
         for target in ('http://example.com/up', 'https://other.example/up'):
-            with self.response({'status': 'ok', 'version': 'new'}, target), self.assertRaisesRegex(ValueError, 'redirect'):
+            with self.response({'status': 'ok', 'rust': 'ok', 'version': 'new'}, target), self.assertRaisesRegex(ValueError, 'redirect'):
                 healthcheck.check('https://example.com/up', 'new', 'collaboration')

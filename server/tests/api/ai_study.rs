@@ -93,14 +93,14 @@ async fn ai_note_save_attaches_in_same_transaction_conflicts_do_not_attach_and_c
     let a = prepare(&app, s, &payload(used)).await;
     let b = prepare(&app, s, &payload(pending)).await;
     let note_path = format!("/api/v1/sessions/{s}/note");
-    let save = json!({"content":{"type":"doc","content":a["content"]},"schema_version":3,"base_revision":0});
+    let save = json!({"content":{"type":"doc","content":a["content"]},"schema_version":4,"base_revision":0});
     app.api
         .put(&note_path)
         .add_header("authorization", auth(&app))
         .json(&save)
         .await
         .assert_status_ok();
-    let failed = json!({"content":{"type":"doc","content":b["content"]},"schema_version":3,"base_revision":0});
+    let failed = json!({"content":{"type":"doc","content":b["content"]},"schema_version":4,"base_revision":0});
     app.api
         .put(&note_path)
         .add_header("authorization", auth(&app))
@@ -124,7 +124,7 @@ async fn ai_note_save_attaches_in_same_transaction_conflicts_do_not_attach_and_c
             .attached
     );
     // Removing the section must retain its resources for undo.
-    app.api.put(&note_path).add_header("authorization",auth(&app)).json(&json!({"content":{"type":"doc","content":[{"type":"paragraph"}]},"schema_version":3,"base_revision":1})).await.assert_status_ok();
+    app.api.put(&note_path).add_header("authorization",auth(&app)).json(&json!({"content":{"type":"doc","content":[{"type":"paragraph"}]},"schema_version":4,"base_revision":1})).await.assert_status_ok();
     for key in [used, pending] {
         let model = ai_imports::Entity::find_by_id(key)
             .one(app.db.as_ref())
@@ -170,7 +170,7 @@ async fn ai_note_save_attaches_in_same_transaction_conflicts_do_not_attach_and_c
     app.api
         .put(&note_path)
         .add_header("authorization", auth(&app))
-        .json(&json!({"content":save["content"],"schema_version":3,"base_revision":2}))
+        .json(&json!({"content":save["content"],"schema_version":4,"base_revision":2}))
         .await
         .assert_status_ok();
     app.cleanup().await;
@@ -182,8 +182,7 @@ async fn ai_realtime_snapshot_attaches_import_and_invalid_cross_lesson_marker_is
     let other = lesson(&app).await;
     let key = uuid::Uuid::new_v4();
     let a = prepare(&app, s, &payload(key)).await;
-    let body =
-        json!({"content":{"type":"doc","content":a["content"]},"state":"AAA=","base_revision":0});
+    let body = json!({"content":{"type":"doc","content":a["content"]},"schema_version":4,"state":"AAA=","base_revision":0});
     let secret = "test-collaboration-secret-32-characters";
     app.api
         .put(&format!("/api/v1/internal/notes/{other}"))

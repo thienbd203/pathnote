@@ -2,6 +2,7 @@ pub(in crate::modules) mod document;
 mod dto;
 mod handlers;
 mod internal;
+pub(crate) mod schema;
 pub(super) mod service;
 use crate::state::AppState;
 use axum::{

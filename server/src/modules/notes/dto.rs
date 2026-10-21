@@ -12,7 +12,8 @@ pub struct NoteResource {
 #[serde(deny_unknown_fields)]
 pub struct SaveNote {
     pub content: Value,
-    pub schema_version: i32,
+    #[serde(default)]
+    pub schema_version: Option<i32>,
     pub base_revision: i32,
 }
 #[derive(Deserialize)]
@@ -58,7 +59,16 @@ pub struct StateResource {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SaveState {
+    #[serde(default)]
+    pub schema_version: Option<i32>,
     pub state: String,
     pub content: Value,
     pub base_revision: i32,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ClientSchema {
+    #[serde(default)]
+    pub schema_version: Option<i32>,
 }

@@ -699,3 +699,11 @@ Nguồn: [Nginx reload](https://nginx.org/en/docs/control.html),
 [Axum graceful shutdown](https://docs.rs/axum/latest/axum/serve/struct.WithGracefulShutdown.html),
 [systemd service](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html),
 [AWS schema compatibility](https://docs.aws.amazon.com/whitepapers/latest/blue-green-deployments/best-practices-for-managing-data-synchronization-and-schema-changes.html).
+
+### D1/D3 · kiểm tra phiên bản ghi chú và upstream collaboration
+
+Release D1 tăng capability ghi chú lên schema 4 ở cả Rust, bridge và frontend; lưu document version cũ trả 409 client_outdated, client WebSocket cũ bị chặn trước khi sync. Deployment vẫn Rust → collaboration → frontend. Trong thời gian chuyển phiên bản, tab cũ có thể bị từ chối lưu; giữ nội dung local, tải bản nháp/copy trước khi tải lại. Không rollback xuống backend/bridge không hỗ trợ hai attr; D2/D6 trong roadmap vẫn chưa xử lý.
+
+Release schema 4 chỉ cho grace một release với writer thiếu version trên plain legacy notes chưa nâng cấp và không có attr hai giọng; không cho client WebSocket thiếu version. Khi chuyển sang schema 5, nhánh grace tự mất hiệu lực, phải xóa mã chuyển tiếp trong release đó.
+
+`/up` của collaboration giờ yêu cầu kết nối Rust và database khỏe, trả thêm rust:ok; probe timeout 2s, cache 10s. Job hiện tại không được bỏ kiểm checksum hay chấp nhận process Node sống khi Rust chết. Production `.env` phải dùng COLLABORATION_API_URL=http://127.0.0.1:3010 với blue–green; lệnh kiểm tra/sửa do người vận hành chạy ở README collaboration mục D3. Không có env/migration DB mới cho fix này; cần deploy cả ba phía cùng bộ version.
