@@ -328,3 +328,56 @@ async fn shared_note_search_filters_titles_and_preserves_membership_scope() {
     assert_eq!(response.json::<Value>()["meta"]["total"], 0);
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn vocabulary_dual_accents_roundtrip_rest_and_collaboration_snapshots() {
+    for realtime in [false, true] {
+        let app = LearningApp::spawn_with_collaboration(realtime).await;
+        let id = lesson(&app).await;
+        let mut content = json!({"type":"doc","content":[{"type":"vocabulary","attrs":{"locale":"en-US"},"content":[{"type":"vocabularyEntry","attrs":{"id":"00000000-0000-0000-0000-000000000001","word":"history","ipa":"/US/","ipaUK":"/UK/","ipaUS":"/US/","topics":[]},"content":[{"type":"vocabularySense","attrs":{"id":"00000000-0000-0000-0000-000000000002","partOfSpeech":"noun","meaning":"lịch sử"},"content":[{"type":"vocabularyExample","attrs":{"id":"00000000-0000-0000-0000-000000000003","text":"I study history.","highlights":[],"ipa":"/US sentence/","ipaUK":"/UK sentence/","ipaUS":"/US sentence/"}}]}]}]}]});
+        let public = format!("/api/v1/sessions/{id}/note");
+        let internal = format!("/api/v1/internal/notes/{id}");
+        let path = if realtime { &internal } else { &public };
+        let header = if realtime {
+            "x-collaboration-secret"
+        } else {
+            "authorization"
+        };
+        let auth = if realtime {
+            "test-collaboration-secret-32-characters".to_owned()
+        } else {
+            token(&app.owner_token)
+        };
+        let payload = if realtime {
+            json!({"content":content,"state":"AAA=","base_revision":0})
+        } else {
+            save(content.clone(), 0)
+        };
+        app.api
+            .put(path)
+            .add_header(header, &auth)
+            .json(&payload)
+            .await
+            .assert_status_ok();
+        let response = app
+            .api
+            .get(&public)
+            .add_header("authorization", token(&app.owner_token))
+            .await;
+        response.assert_status_ok();
+        assert_eq!(response.json::<Value>()["data"]["content"], content);
+        content["content"][0]["content"][0]["attrs"]["ipaUK"] = json!("x".repeat(6001));
+        let invalid = if realtime {
+            json!({"content":content,"state":"AQI=","base_revision":1})
+        } else {
+            save(content, 1)
+        };
+        app.api
+            .put(path)
+            .add_header(header, &auth)
+            .json(&invalid)
+            .await
+            .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+        app.cleanup().await;
+    }
+}

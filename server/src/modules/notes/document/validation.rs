@@ -177,6 +177,8 @@ impl Node {
                 uuid(&attrs.id)
                     && len(&attrs.word, 1000)
                     && len(&attrs.ipa, 6000)
+                    && attrs.ipa_uk.as_deref().is_none_or(|v| len(v, 6000))
+                    && attrs.ipa_us.as_deref().is_none_or(|v| len(v, 6000))
                     && strings(&attrs.topics, 60)
             }
             Self::VocabularySense { attrs, .. } => uuid(&attrs.id) && len(&attrs.meaning, 6000),
@@ -185,6 +187,8 @@ impl Node {
                     && len(&attrs.text, 1000)
                     && strings(&attrs.highlights, 200)
                     && attrs.ipa.as_deref().is_none_or(|v| len(v, 6000))
+                    && attrs.ipa_uk.as_deref().is_none_or(|v| len(v, 6000))
+                    && attrs.ipa_us.as_deref().is_none_or(|v| len(v, 6000))
                     && attrs.meaning.as_deref().is_none_or(|v| len(v, 6000))
                     && attrs
                         .meaning_highlights

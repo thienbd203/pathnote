@@ -203,3 +203,7 @@ Ghi mỗi thay đổi response/request mà frontend thấy. Cột đầu là đ�
 | R6 request | `GET /places/bulk?ids=…`, `GET /courses/bulk?ids=…` | — | Thêm `{data:[PlaceResource/CourseResource]}`; cùng validator 1–100 ID thô, giữ thứ tự sau loại trùng, chỉ owner/parent đang hoạt động, bỏ mục không truy cập được. Không mở rộng quyền đọc. |
 
 | R8 request | `POST /ipa-vocabulary/duplicates`, `POST /ipa-pairs/duplicates` | — | Lookup read-only nhận cùng JSON/validator import (giới hạn body 256 KiB), chỉ SELECT các khóa của payload theo user/locale/kind, trả `{data:{duplicates:string[]}}` gồm trùng kho và trong payload; không ghi dữ liệu, không đổi idempotency/khóa import. |
+
+| Hai giọng 21/10 | Note JSON qua REST + bridge | vocabularyEntry/vocabularyExample chỉ có `ipa`, giọng theo bảng `locale` | Nhận thêm `ipaUK?: string|null`, `ipaUS?: string|null` (mỗi trường tối đa 6000 ký tự). Giữ schema_version=3 và IPA/locale cũ cho tương thích. Frontend nhập JSON v1 hỗ trợ hai trường này và ánh xạ IPA cũ đúng locale; không cần migration DB. Deploy Rust và collaboration nhận schema mới trước web. |
+
+| Hai giọng · import IPA | `POST /ipa-vocabulary/{import,duplicates}`, `POST /ipa-pairs/{import,duplicates}` và library | Format từ chỉ có ipa | Chấp nhận và giữ ipaUK/ipaUS tùy chọn trong JSON v1 dùng chung; IPA chính chọn theo locale trước khi phân loại âm. Validation kiểm tra cả hai trường kể cả giọng không được chọn. |

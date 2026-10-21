@@ -98,9 +98,9 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.jobs = self.workflow['jobs']
 
     def test_no_deployment_can_start_before_both_builds_succeed(self):
-        self.assertEqual(set(self.jobs['deploy-backend']['needs']), {'release', 'check', 'build-backend', 'build-frontend', 'browser-contract'})
-        self.assertEqual(set(self.jobs['deploy-frontend']['needs']), {'release', 'build-frontend', 'deploy-backend'})
-        for name in ('deploy-backend', 'deploy-frontend'):
+        self.assertEqual(set(self.jobs['deploy-backend']['needs']), {'release', 'check', 'build-backend', 'build-frontend', 'build-collaboration', 'browser-contract'})
+        self.assertEqual(set(self.jobs['deploy-frontend']['needs']), {'release', 'build-frontend', 'deploy-backend', 'deploy-collaboration'})
+        for name in ('deploy-backend', 'deploy-collaboration', 'deploy-frontend'):
             job = self.jobs[name]
             self.assertNotIn('if', job)  # Preserve default success() gating; never use always().
             self.assertEqual(job['environment'], 'production')
@@ -148,7 +148,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertLess(activation.index('python3 deploy/healthcheck.py'), activation.index('< web-release/deploy.sh'))
         self.assertLess(activation.index('\"$COLLABORATION_SHA\" collaboration'), activation.index('< web-release/deploy.sh'))
         self.assertEqual(deploy['env']['COLLABORATION_SHA'], '${{ needs.release.outputs.collaboration_sha }}')
-        for name in ('check', 'build-backend', 'build-frontend', 'browser-contract'):
+        for name in ('check', 'build-backend', 'build-frontend', 'build-collaboration', 'browser-contract'):
             self.assertNotIn('SSH_PRIVATE_KEY', json.dumps(self.jobs[name]))
         guard = self.jobs['release']['if']
         self.assertIn("github.event_name != 'pull_request'", guard)
@@ -168,6 +168,43 @@ class ReleaseWorkflowTests(unittest.TestCase):
         if not frontend.exists():
             self.skipTest('Adjacent frontend checkout only available in the local paired workspace')
         workflow = self.load(frontend)
+        for job in workflow['jobs'].values():
+            self.assertNotIn('environment', job)
+            for step in job['steps']:
+                self.assertNotIn('SSH_PRIVATE_KEY', json.dumps(step))
+                self.assertNotIn('rsync ', step.get('run', ''))
+                self.assertNotIn('bash -s --', step.get('run', ''))
+
+
+    def test_collaboration_uses_the_pinned_artifact_after_healthy_backend(self):
+        build = self.jobs['build-collaboration']
+        self.assertEqual(build['needs'], 'release')
+        checkout = build['steps'][0]['with']
+        self.assertEqual(checkout['repository'], 'thienbd203/pathnote-collaboration')
+        self.assertEqual(checkout['ref'], '${{ needs.release.outputs.collaboration_sha }}')
+        self.assertFalse(checkout['persist-credentials'])
+        commands = '\n'.join(step.get('run', '') for step in build['steps'])
+        self.assertIn('npm test', commands)
+        self.assertIn('sha256sum deploy.sh', commands)
+        job = self.jobs['deploy-collaboration']
+        self.assertEqual(set(job['needs']), {'release', 'build-collaboration', 'deploy-backend'})
+        self.assertEqual(job['env']['COLLABORATION_SHA'], checkout['ref'])
+        steps = {step.get('name'): step for step in job['steps']}
+        guard = steps['Verify artifact and healthy Rust before collaboration']
+        self.assertIn('sha256sum --check --strict SHA256SUMS', guard['run'])
+        self.assertLess(guard['run'].index('"$BACKEND_SHA"'), guard['run'].index('"$COLLABORATION_SHA" collaboration'))
+        for name in ('Configure pinned collaboration SSH connection', 'Upload and activate verified collaboration'):
+            self.assertEqual(steps[name]['if'], "steps.running.outputs.current != 'true'")
+        activation = steps['Upload and activate verified collaboration']['run']
+        self.assertLess(activation.index('"$BACKEND_SHA"'), activation.index('< collaboration-release/deploy.sh'))
+        self.assertIn('"$COLLABORATION_SHA"', activation)
+        self.assertNotIn('if', steps['Confirm collaboration version after activation or reuse'])
+
+    def test_standalone_collaboration_workflow_cannot_activate_production(self):
+        path = ROOT.parent / 'pathnote-collaboration/.github/workflows/deploy.yml'
+        if not path.exists():
+            self.skipTest('Adjacent collaboration checkout only available locally')
+        workflow = self.load(path)
         for job in workflow['jobs'].values():
             self.assertNotIn('environment', job)
             for step in job['steps']:

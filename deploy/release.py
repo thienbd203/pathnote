@@ -44,7 +44,7 @@ def main() -> None:
         summary.write(f"- Frontend: `{release['frontend_sha']}`\n\n")
         summary.write(f"- Collaboration: `{release['collaboration_sha']}`\n\n")
         summary.write(f"- Breaking migration: `{release['breaking_migration']}`\n\n")
-        summary.write("Both builds must succeed before backend deployment. Frontend deployment also requires a healthy backend of this exact version.\n")
+        summary.write("All three builds must succeed before deployment. Activation order: healthy Rust, pinned collaboration, then frontend; both running services must match the selected revisions.\n")
 
 
 if __name__ == "__main__":

@@ -77,8 +77,8 @@ pub fn lesson_template() -> Value {
 }
 pub fn vocabulary_import(locale: &super::Locale, entry: Value) -> Value {
     let senses = entry["senses"].as_array().expect("Serialized IPA senses").iter().map(|sense| {
-        let examples = sense["examples"].as_array().expect("Serialized IPA examples").iter().map(|example| json!({"type":"vocabularyExample","attrs":{"id":uuid::Uuid::new_v4(),"text":example["text"],"ipa":example["ipa"],"meaning":example["meaning"],"highlights":example["highlights"],"meaningHighlights":example["meaningHighlights"]}})).collect::<Vec<_>>();
+        let examples = sense["examples"].as_array().expect("Serialized IPA examples").iter().map(|example| json!({"type":"vocabularyExample","attrs":{"id":uuid::Uuid::new_v4(),"text":example["text"],"ipa":example["ipa"],"ipaUK":example["ipaUK"],"ipaUS":example["ipaUS"],"meaning":example["meaning"],"highlights":example["highlights"],"meaningHighlights":example["meaningHighlights"]}})).collect::<Vec<_>>();
         json!({"type":"vocabularySense","attrs":{"id":uuid::Uuid::new_v4(),"partOfSpeech":sense["partOfSpeech"],"meaning":sense["meaning"]},"content":examples})
     }).collect::<Vec<_>>();
-    json!({"type":"doc","content":[{"type":"vocabulary","attrs":{"locale":locale},"content":[{"type":"vocabularyEntry","attrs":{"id":uuid::Uuid::new_v4(),"word":entry["word"],"ipa":entry["ipa"],"topics":entry["topics"]},"content":senses}]}]})
+    json!({"type":"doc","content":[{"type":"vocabulary","attrs":{"locale":locale},"content":[{"type":"vocabularyEntry","attrs":{"id":uuid::Uuid::new_v4(),"word":entry["word"],"ipa":entry["ipa"],"ipaUK":entry["ipaUK"],"ipaUS":entry["ipaUS"],"topics":entry["topics"]},"content":senses}]}]})
 }

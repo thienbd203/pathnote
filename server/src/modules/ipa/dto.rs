@@ -10,6 +10,10 @@ pub struct Entry {
     pub word: String,
     #[serde(default)]
     pub ipa: String,
+    #[serde(default, rename = "ipaUK", skip_serializing_if = "Option::is_none")]
+    pub ipa_uk: Option<String>,
+    #[serde(default, rename = "ipaUS", skip_serializing_if = "Option::is_none")]
+    pub ipa_us: Option<String>,
     #[serde(default)]
     pub topics: Vec<String>,
     pub senses: Vec<Sense>,
@@ -28,6 +32,10 @@ pub struct Example {
     pub text: String,
     #[serde(default)]
     pub ipa: String,
+    #[serde(default, rename = "ipaUK", skip_serializing_if = "Option::is_none")]
+    pub ipa_uk: Option<String>,
+    #[serde(default, rename = "ipaUS", skip_serializing_if = "Option::is_none")]
+    pub ipa_us: Option<String>,
     #[serde(default)]
     pub meaning: String,
     #[serde(default)]
@@ -35,10 +43,28 @@ pub struct Example {
     #[serde(default)]
     pub meaning_highlights: Vec<String>,
 }
+fn trim_accents(
+    ipa: &mut String,
+    uk: &mut Option<String>,
+    us: &mut Option<String>,
+    locale: &Locale,
+) {
+    for value in [&mut *uk, &mut *us].into_iter().flatten() {
+        *value = value.trim().into();
+    }
+    *ipa = match locale {
+        Locale::Gb => uk.as_deref(),
+        Locale::Us => us.as_deref(),
+    }
+    .filter(|v| !v.is_empty())
+    .unwrap_or(ipa)
+    .trim()
+    .into();
+}
 impl Entry {
     pub fn validate(&mut self, locale: &Locale) -> Result<(), AppError> {
         self.word = self.word.trim().into();
-        self.ipa = self.ipa.trim().into();
+        trim_accents(&mut self.ipa, &mut self.ipa_uk, &mut self.ipa_us, locale);
         for topic in &mut self.topics {
             *topic = topic.trim().into();
         }
@@ -49,7 +75,7 @@ impl Entry {
             sense.meaning = sense.meaning.trim().into();
             for e in &mut sense.examples {
                 e.text = e.text.trim().into();
-                e.ipa = e.ipa.trim().into();
+                trim_accents(&mut e.ipa, &mut e.ipa_uk, &mut e.ipa_us, locale);
                 e.meaning = e.meaning.trim().into();
                 for h in e
                     .highlights
@@ -168,4 +194,21 @@ pub struct StoredPair<'a> {
 #[derive(Serialize)]
 pub struct Duplicates {
     pub duplicates: Vec<String>,
+}
+
+#[cfg(test)]
+mod dual_accent_tests {
+    use super::*;
+    #[test]
+    fn shared_vocabulary_json_keeps_both_accents_and_validates_the_unused_one() {
+        let input = serde_json::json!({"word":"history","ipa":"/old/","ipaUK":" /UK/ ","ipaUS":" /US/ ","topics":[],"senses":[{"partOfSpeech":"noun","meaning":"lịch sử","examples":[{"text":"I study history.","ipaUK":"/UK sentence/","ipaUS":"/US sentence/"}]}]});
+        let mut entry: Entry = serde_json::from_value(input.clone()).unwrap();
+        entry.validate(&Locale::Us).unwrap();
+        assert_eq!(entry.ipa, "/US/");
+        assert_eq!(value(&entry).unwrap()["ipaUK"], "/UK/");
+        let mut invalid = input;
+        invalid["ipaUK"] = serde_json::json!("x".repeat(6001));
+        let mut invalid: Entry = serde_json::from_value(invalid).unwrap();
+        assert!(invalid.validate(&Locale::Us).is_err());
+    }
 }

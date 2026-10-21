@@ -68,6 +68,10 @@ pub struct EntryAttrs {
     pub id: String,
     pub word: String,
     pub ipa: String,
+    #[serde(default, rename = "ipaUK")]
+    pub ipa_uk: Option<String>,
+    #[serde(default, rename = "ipaUS")]
+    pub ipa_us: Option<String>,
     pub topics: Vec<String>,
 }
 #[derive(Deserialize, Serialize)]
@@ -98,6 +102,10 @@ pub struct ExampleAttrs {
     pub text: String,
     pub highlights: Vec<String>,
     pub ipa: Option<String>,
+    #[serde(default, rename = "ipaUK")]
+    pub ipa_uk: Option<String>,
+    #[serde(default, rename = "ipaUS")]
+    pub ipa_us: Option<String>,
     pub meaning: Option<String>,
     pub meaning_highlights: Option<Vec<String>>,
 }

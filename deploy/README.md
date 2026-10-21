@@ -3,7 +3,7 @@
 ## 1. Tổng quan
 
 - Repo điều phối: `thienbd203/pathnote` (local `pathnote-rust`). Frontend vẫn là
-  `thienbd203/pathnote-web`; collaboration (Hocuspocus) triển khai riêng.
+  `thienbd203/pathnote-web` và `thienbd203/pathnote-collaboration`; Rust điều phối cả ba phiên bản.
 - Workflow `.github/workflows/deploy.yml` (**Pathnote coordinated release**): pull
   request chỉ chạy check; push `master` hoặc chạy thủ công trên `master` phát hành
   cặp phiên bản trong `.github/release.json`.
@@ -216,6 +216,7 @@ Workflow không tự tạo/sửa secrets hay variables.
 | --- | --- |
 | Variable `VITE_API_URL` | Origin API production (bắt buộc cho build frontend) |
 | Variable `BUILD_RUNNER` | Mặc định `ubuntu-24.04` (x86_64); `ubuntu-24.04-arm` cho aarch64 |
+| Secret `COLLABORATION_READ_TOKEN` | Chỉ khi repo collaboration private và token frontend chưa đọc được repo đó: Contents: read. Workflow ưu tiên token này, rồi FRONTEND_READ_TOKEN, cuối cùng github.token cho repo public |
 | Secret `FRONTEND_READ_TOKEN` | Chỉ khi frontend private: token Contents: read cho repo frontend, không quyền ghi/Actions: write. Public thì dùng `github.token` mặc định |
 
 Token chỉ dùng checkout ở job build; không lưu vào cấu hình Git, không đưa token
@@ -234,6 +235,8 @@ hay SSH key vào artifact.
 | Variable `DEPLOY_PATH` | Mặc định `/opt/pathnote-rust`; đổi thì sửa service, env, sudoers, helper |
 | Variable `WEB_DEPLOY_PATH` | Mặc định `/var/www/pathnote-web` |
 | Variable `WEB_SITE_URL` | Mặc định `https://pathnote.aphorisms.cloud` |
+| Variable `COLLABORATION_DEPLOY_PATH` | Mặc định `/var/www/pathnote-collaboration` |
+| Secrets `COLLABORATION_SSH_HOST`, `COLLABORATION_SSH_USER`, `COLLABORATION_SSH_PORT`, `COLLABORATION_SSH_PRIVATE_KEY`, `COLLABORATION_SSH_KNOWN_HOSTS` | Chỉ khi host/user/key collaboration khác Rust. Mặc định dùng SSH_*; user phải có quyền chạy script deploy collaboration hiện có (VPS hiện dùng root) |
 | Variable `COLLABORATION_HEALTHCHECK_URL` | Mặc định `https://pathnote-collab.aphorisms.cloud/up`; chỉ HTTPS |
 | Secrets `WEB_SSH_HOST`, `WEB_SSH_USER`, `WEB_SSH_PORT`, `WEB_SSH_PRIVATE_KEY`, `WEB_SSH_KNOWN_HOSTS` | Chỉ khi host/user/key frontend khác backend |
 
@@ -253,10 +256,10 @@ fingerprint qua kênh tin cậy. Workflow bắt buộc host key khớp; không d
 `ssh-keyscan` để tin host key mới lúc phát hành.
 
 **Repo frontend:** đặt `VITE_API_URL` ở Repository variables. Workflow frontend chỉ
-test/format/build, không dùng SSH secrets, không tự triển khai.
+test/format/build, không dùng SSH secrets, không tự triển khai. **Repo collaboration:** push/PR/dispatch cũng chỉ chạy CI; không cần thêm secrets deploy ở repo này. Quyền kích hoạt production tập trung ở repo Rust.
 
-Khi bật luồng này lần đầu: cấu hình đủ bảng trên → push workflow frontend CI-only
-**trước** → kiểm tra SHA frontend trong manifest đã có trên GitHub → mới push
+Khi bật luồng này lần đầu: cấu hình đủ bảng trên → push workflow frontend và collaboration CI-only
+**trước** → kiểm tra cả hai SHA trong manifest đã có trên GitHub → mới push
 workflow điều phối (push này phát hành ngay cặp đã chốt).
 
 ## 4. Phát hành phối hợp
@@ -264,6 +267,7 @@ workflow điều phối (push này phát hành ngay cặp đã chốt).
 ```mermaid
 flowchart TD
     Pair[Chốt cặp phiên bản] --> Web[Test và build frontend]
+    Pair --> Collab[Test và đóng gói collaboration]
     Pair --> Check[Test và lint backend]
     Pair --> Rust
     Pair --> Browser[Test trình duyệt với cặp phiên bản]
@@ -271,8 +275,11 @@ flowchart TD
     Check --> DeployRust
     Browser --> DeployRust
     Web --> DeployRust[Triển khai backend]
+    Collab --> DeployRust
     DeployRust --> Health[Kiểm tra đúng phiên bản backend và database]
-    Health --> DeployWeb[Triển khai frontend đã build sẵn]
+    Health --> DeployCollab[Triển khai collaboration hoặc giữ nguyên nếu đúng SHA]
+    DeployCollab --> CollabHealth[Kiểm tra collaboration đúng SHA]
+    CollabHealth --> DeployWeb[Triển khai frontend đã build sẵn]
 ```
 
 ### 4.1 `.github/release.json`
@@ -294,28 +301,18 @@ frontend mới nhất, không lấy artifact "lượt gần nhất", không buil
 
 ### 4.2 Thứ tự
 
-Đổi schema Tiptap hoặc cần cả ba phía: **collaboration → backend → frontend**.
+Thứ tự kích hoạt production: **Rust → collaboration → frontend**. Build/test của cả ba vẫn chạy song song.
 
-1. Push collaboration đã tương thích, chờ `/up` trả đúng SHA (workflow Rust không
-   triển khai collaboration).
-2. Push frontend để chạy CI; production chưa đổi.
-3. Điền `frontend_sha`, `collaboration_sha` vào `.github/release.json` cùng thay
-   đổi backend, review, push `master`.
-4. Workflow: check backend, build backend, build frontend và browser gate chạy
-   song song sau khi chọn release. Chỉ khi **tất cả kiểm tra và cả hai build**
-   thành công mới triển khai backend; kiểm tra lỗi thì production giữ bản cũ.
-5. `.github/deploy.sh` kiểm tra checksum, SHA, kiến trúc; backup; migration; đổi
-   `current`; restart; health qua `http://127.0.0.1:3000/health` và
-   `HEALTHCHECK_URL` phải `status`/`database` ok và `version` đúng SHA. Giữ 3
-   release gần nhất.
-6. Job frontend tải artifact của chính lượt chạy, kiểm checksum và SHA frontend,
-   kiểm tra backend và collaboration đúng SHA trước upload và ngay trước kích hoạt.
+1. Push frontend và collaboration để chạy CI; hai repo này không tự triển khai production.
+2. Điền chính xác `frontend_sha`, `collaboration_sha` đã push vào `.github/release.json` cùng thay đổi Rust, review rồi push `master` ở repo Rust.
+3. Coordinator kiểm tra Rust, build ba artifact theo SHA cố định và chạy browser gate. Bất kỳ gate/build nào lỗi đều giữ production cũ.
+4. Deploy Rust bằng blue–green (hoặc in-place khi được cấu hình): checksum, backup/migration tương thích, health phải đúng SHA và database ok.
+5. Job collaboration kiểm tra lại backend đúng SHA, kiểm checksum artifact; nếu `/up` đang khỏe và đúng SHA đã chốt thì bỏ qua upload/restart để giữ socket. Nếu khác, upload artifact, kiểm backend lần nữa, chạy deploy script từ chính artifact. Script xác minh local/public health và rollback collaboration nếu lỗi; frontend chưa được kích hoạt.
+6. Frontend chỉ chạy sau job collaboration thành công; kiểm tra lại cả Rust lẫn collaboration đúng SHA trước upload và ngay trước khi đổi symlink frontend.
 
-Chỉ sửa frontend: cập nhật SHA trong manifest rồi phát hành qua backend. Chỉ sửa
-backend: giữ SHA frontend. Phát hành lại cặp đã chốt: chạy thủ công trên `master`.
-Lượt production tuần tự qua `concurrency`, không hủy lượt đang chạy; lượt đang xếp
-hàng có thể bị thay bằng lượt mới, nhưng mỗi lượt giữ nguyên cặp SHA của nó.
-Backend mới phải phục vụ được frontend cũ và các tab đang mở.
+Cập nhật collaboration thực sự sẽ restart một instance Hocuspocus và client kết nối lại; blue–green chỉ áp dụng cho API Rust. Không thay env hay systemd trên VPS cho luồng điều phối mới nếu dùng cùng host/user/key hiện có. Nếu SSH account khác, thêm bộ `COLLABORATION_SSH_*` ở coordinator; repo private cần token đọc theo bảng trên.
+
+Chỉ sửa frontend: cập nhật SHA frontend, giữ SHA collaboration để không restart WebSocket. Chỉ sửa Rust: giữ hai SHA còn lại. Phát hành lại: dispatch coordinator trên `master`. Concurrency không hủy lượt đang deploy; mỗi lượt giữ bộ SHA riêng. Rust mới phải phục vụ được frontend/collaboration cũ trong giai đoạn chuyển phiên bản.
 
 ### 4.3 `breaking_migration`
 
@@ -646,7 +643,7 @@ Sau khi code này đã push, chạy **Pathnote coordinated release** trên maste
 Luồng CI: checksum/kiến trúc → xác minh slot cũ → backup → migration tương thích →
 start slot mới → health đúng SHA → enable slot mới → switch/reload Nginx → health
 qua cả `3010` và HTTPS → đổi `current` → đợi kết nối cũ hết → stop/disable slot cũ.
-Build/check vẫn song song; frontend chỉ kích hoạt sau khi backend khỏe. Không đổi
+Build/check vẫn song song; frontend chỉ kích hoạt sau khi Rust và collaboration khỏe, đúng SHA. Không đổi
 DNS, không restart Nginx. Slot cũ và release cũ được giữ để rollback, tối đa 3 release.
 
 ```sh
@@ -694,7 +691,7 @@ Blue–green ở đây bảo vệ việc thay **API process** trên một VPS; k
 PostgreSQL hay Nginx bị tắt. API/schema phải tương thích trong thời gian hai bản
 cùng chạy, kể cả request từ tab frontend cũ. Frontend vẫn dùng symlink release hiện
 có; việc giữ tài nguyên JS/CSS cho tab mở qua nhiều lần deploy cần chính sách lưu
-asset riêng. WebSocket collaboration có quy trình deploy riêng.
+asset riêng. WebSocket collaboration dùng job deploy riêng trong cùng coordinator, sau Rust và trước frontend.
 
 Nguồn: [Nginx reload](https://nginx.org/en/docs/control.html),
 [Axum graceful shutdown](https://docs.rs/axum/latest/axum/serve/struct.WithGracefulShutdown.html),

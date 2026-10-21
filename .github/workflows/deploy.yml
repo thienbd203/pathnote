@@ -190,6 +190,49 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+  build-collaboration:
+    name: Build pinned collaboration
+    needs: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: thienbd203/pathnote-collaboration
+          ref: ${{ needs.release.outputs.collaboration_sha }}
+          token: ${{ secrets.COLLABORATION_READ_TOKEN || secrets.FRONTEND_READ_TOKEN || github.token }}
+          persist-credentials: false
+      - name: Verify checked-out collaboration revision
+        env:
+          EXPECTED_SHA: ${{ needs.release.outputs.collaboration_sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Test and assemble collaboration artifact
+        env:
+          COLLABORATION_SHA: ${{ needs.release.outputs.collaboration_sha }}
+        run: |
+          set -euo pipefail
+          npm ci
+          npm test
+          bash -n .github/deploy.sh
+          npm ci --omit=dev
+          mkdir -p collaboration-release/app
+          cp -a server node_modules package.json package-lock.json collaboration-release/app/
+          printf '%s\n' "$COLLABORATION_SHA" > collaboration-release/app/deploy-version.txt
+          install -m 644 .github/deploy.sh collaboration-release/deploy.sh
+          cd collaboration-release
+          find app -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+          sha256sum deploy.sh >> SHA256SUMS
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pathnote-collaboration-release
+          path: collaboration-release/
+          retention-days: 7
+          if-no-files-found: error
+
   browser-contract:
     name: Browser contract for the pinned release pair
     needs: release
@@ -270,8 +313,8 @@ jobs:
           retention-days: 7
 
   deploy-backend:
-    name: Deploy backend after both builds
-    needs: [release, check, build-backend, build-frontend, browser-contract]
+    name: Deploy Rust after all checks and builds
+    needs: [release, check, build-backend, build-frontend, build-collaboration, browser-contract]
     runs-on: ubuntu-24.04
     environment: production
     timeout-minutes: 15
@@ -329,9 +372,86 @@ jobs:
         if: always()
         run: rm -f ~/.ssh/id_ed25519 ~/.ssh/known_hosts
 
+  deploy-collaboration:
+    name: Deploy collaboration after healthy Rust
+    needs: [release, build-collaboration, deploy-backend]
+    runs-on: ubuntu-24.04
+    environment: production
+    timeout-minutes: 15
+    env:
+      DEPLOY_PATH: ${{ vars.COLLABORATION_DEPLOY_PATH || '/var/www/pathnote-collaboration' }}
+      HEALTHCHECK_URL: ${{ vars.HEALTHCHECK_URL }}
+      BACKEND_SHA: ${{ needs.release.outputs.backend_sha }}
+      COLLABORATION_SHA: ${{ needs.release.outputs.collaboration_sha }}
+      COLLABORATION_HEALTHCHECK_URL: ${{ vars.COLLABORATION_HEALTHCHECK_URL || 'https://pathnote-collab.aphorisms.cloud/up' }}
+      RELEASE: ${{ needs.release.outputs.release_id }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: pathnote-collaboration-release
+          path: collaboration-release
+      - name: Verify artifact and healthy Rust before collaboration
+        id: running
+        run: |
+          set -euo pipefail
+          (cd collaboration-release && sha256sum --check --strict SHA256SUMS)
+          test "$(cat collaboration-release/app/deploy-version.txt)" = "$COLLABORATION_SHA"
+          python3 deploy/healthcheck.py "$HEALTHCHECK_URL" "$BACKEND_SHA"
+          if python3 deploy/healthcheck.py "$COLLABORATION_HEALTHCHECK_URL" "$COLLABORATION_SHA" collaboration; then
+            echo 'current=true' >> "$GITHUB_OUTPUT"
+            echo 'Collaboration already serves the pinned version; keeping active sockets.'
+          else
+            echo 'current=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Configure pinned collaboration SSH connection
+        if: steps.running.outputs.current != 'true'
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.COLLABORATION_SSH_PRIVATE_KEY || secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.COLLABORATION_SSH_KNOWN_HOSTS || secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          : "${SSH_PRIVATE_KEY:?Missing collaboration SSH key}" "${SSH_KNOWN_HOSTS:?Missing verified collaboration SSH host keys}"
+          install -m 700 -d ~/.ssh
+          umask 077
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh-keygen -y -P '' -f ~/.ssh/id_ed25519 > /dev/null
+      - name: Upload and activate verified collaboration
+        if: steps.running.outputs.current != 'true'
+        env:
+          SSH_HOST: ${{ secrets.COLLABORATION_SSH_HOST || secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.COLLABORATION_SSH_USER || secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.COLLABORATION_SSH_PORT || secrets.SSH_PORT }}
+        run: |
+          set -euo pipefail
+          : "${SSH_HOST:?Missing collaboration SSH_HOST}" "${SSH_USER:?Missing collaboration SSH_USER}" "${SSH_PORT:?Missing collaboration SSH_PORT}"
+          [[ "$SSH_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]
+          [[ "$SSH_USER" =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$ ]]
+          [[ "$SSH_PORT" =~ ^[0-9]+$ ]]
+          [[ "$DEPLOY_PATH" =~ ^/var/www/[a-zA-Z0-9_-]+$ ]]
+          [[ "$COLLABORATION_HEALTHCHECK_URL" =~ ^https://[a-zA-Z0-9.-]+(:[0-9]+)?/up$ ]]
+          RELEASE_PATH="$DEPLOY_PATH/releases/$RELEASE"
+          SSH=(ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -p "$SSH_PORT")
+          printf -v CREATE_COMMAND 'mkdir -p %q' "$RELEASE_PATH"
+          "${SSH[@]}" "$SSH_USER@$SSH_HOST" "$CREATE_COMMAND"
+          rsync -az --delete \
+            -e "ssh -i $HOME/.ssh/id_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -p $SSH_PORT" \
+            collaboration-release/app/ "$SSH_USER@$SSH_HOST:$RELEASE_PATH/"
+          python3 deploy/healthcheck.py "$HEALTHCHECK_URL" "$BACKEND_SHA"
+          printf -v DEPLOY_COMMAND 'bash -s -- %q %q %q %q' "$DEPLOY_PATH" "$RELEASE" "$COLLABORATION_HEALTHCHECK_URL" "$COLLABORATION_SHA"
+          "${SSH[@]}" "$SSH_USER@$SSH_HOST" "$DEPLOY_COMMAND" < collaboration-release/deploy.sh
+      - name: Confirm collaboration version after activation or reuse
+        run: python3 deploy/healthcheck.py "$COLLABORATION_HEALTHCHECK_URL" "$COLLABORATION_SHA" collaboration
+      - name: Remove SSH credentials
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
   deploy-frontend:
-    name: Deploy frontend after healthy backend
-    needs: [release, build-frontend, deploy-backend]
+    name: Deploy frontend after healthy Rust and collaboration
+    needs: [release, build-frontend, deploy-backend, deploy-collaboration]
     runs-on: ubuntu-24.04
     environment: production
     timeout-minutes: 15
