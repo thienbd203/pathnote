@@ -20,6 +20,18 @@ struct Claims {
     token_use: String,
 }
 
+#[derive(Serialize, Deserialize)]
+pub(crate) struct PlaybackClaims {
+    pub user: i64,
+    pub session: i64,
+    pub media: i64,
+    pub exp: u64,
+    iss: String,
+    aud: String,
+    token_use: String,
+    sub: String,
+}
+
 pub struct AccessTokens {
     encoding: EncodingKey,
     decoding: DecodingKey,
@@ -104,6 +116,57 @@ impl AccessTokens {
             .ok()
             .filter(|id| *id > 0)
             .ok_or(AppError::Unauthenticated)
+    }
+
+    pub(crate) fn issue_playback(
+        &self,
+        user: i64,
+        session: i64,
+        media: i64,
+    ) -> Result<String, AppError> {
+        let claims = PlaybackClaims {
+            user,
+            session,
+            media,
+            exp: jsonwebtoken::get_current_timestamp() + 4 * 60 * 60,
+            iss: self.issuer.clone(),
+            aud: self.audience.clone(),
+            token_use: "playback".into(),
+            sub: user.to_string(),
+        };
+        let mut header = Header::new(Algorithm::RS256);
+        header.typ = Some("playback+jwt".into());
+        header.kid = Some(self.key_id.clone());
+        encode(&header, &claims, &self.encoding)
+            .map_err(|_| AppError::Internal("Cannot issue playback ticket".into()))
+    }
+    pub(crate) fn verify_playback(
+        &self,
+        token: &str,
+        session: i64,
+        media: i64,
+    ) -> Result<i64, AppError> {
+        if token.len() > 8192 {
+            return Err(AppError::Unauthenticated);
+        }
+        let header = decode_header(token).map_err(|_| AppError::Unauthenticated)?;
+        if header.typ.as_deref() != Some("playback+jwt")
+            || header.kid.as_deref() != Some(&self.key_id)
+        {
+            return Err(AppError::Unauthenticated);
+        }
+        let claims = decode::<PlaybackClaims>(token, &self.decoding, &self.validation)
+            .map_err(|_| AppError::Unauthenticated)?
+            .claims;
+        if claims.token_use != "playback"
+            || claims.user <= 0
+            || claims.session != session
+            || claims.media != media
+            || claims.exp <= jsonwebtoken::get_current_timestamp()
+        {
+            return Err(AppError::Unauthenticated);
+        }
+        Ok(claims.user)
     }
 
     pub fn jwks(&self) -> Value {

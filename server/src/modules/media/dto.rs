@@ -1,5 +1,6 @@
 use crate::entities::media;
-use serde::Serialize;
+use crate::AppError;
+use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     Image,
@@ -15,7 +16,7 @@ impl Kind {
     pub fn limit(self) -> usize {
         match self {
             Self::Image => 5 * 1024 * 1024,
-            Self::File => 10 * 1024 * 1024,
+            Self::File => 100 * 1024 * 1024,
         }
     }
 }
@@ -35,4 +36,29 @@ impl From<media::Model> for MediaResource {
             size: m.size,
         }
     }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RenameMedia {
+    pub name: String,
+}
+pub fn validate_name(name: String, original: &str) -> Result<String, AppError> {
+    let name = name.trim().to_owned();
+    let original_ext = original.rsplit_once('.').map(|(_, ext)| ext);
+    let new_parts = name.rsplit_once('.');
+    if name.chars().count() > 200
+        || name
+            .chars()
+            .any(|c| c.is_control() || ['/', '\\', '"'].contains(&c))
+        || new_parts.is_none_or(|(stem, ext)| {
+            stem.trim().is_empty() || !original_ext.is_some_and(|old| old.eq_ignore_ascii_case(ext))
+        })
+    {
+        return Err(AppError::validation(
+            "name",
+            "Tên file cần từ 1 đến 200 ký tự, giữ nguyên định dạng và không chứa ký tự đường dẫn.",
+        ));
+    }
+    Ok(name)
 }

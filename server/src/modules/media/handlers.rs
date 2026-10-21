@@ -1,10 +1,14 @@
 use super::{
-    dto::{Kind, MediaResource},
+    dto::{Kind, MediaResource, RenameMedia},
     service,
 };
 use crate::{
-    access_token::CurrentUser, extract::AppPath, modules::notes::service as notes,
-    response::ApiResponse, state::AppState, AppError,
+    access_token::CurrentUser,
+    extract::{AppJson, AppPath},
+    modules::notes::service as notes,
+    response::ApiResponse,
+    state::AppState,
+    AppError,
 };
 use axum::{
     body::Body,
@@ -141,4 +145,15 @@ pub async fn download(
     AppPath((id, m)): AppPath<(i64, i64)>,
 ) -> Result<Response, AppError> {
     content(s, u, id, m, Kind::File).await
+}
+
+pub async fn rename(
+    State(s): State<AppState>,
+    u: CurrentUser,
+    AppPath((id, m)): AppPath<(i64, i64)>,
+    AppJson(input): AppJson<RenameMedia>,
+) -> Result<ApiResponse<MediaResource>, AppError> {
+    Ok(ApiResponse::ok(
+        service::rename(&s, u.id, id, m, input).await?,
+    ))
 }

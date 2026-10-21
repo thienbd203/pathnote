@@ -9,7 +9,7 @@ use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 fn io(e: std::io::Error) -> AppError {
     AppError::Internal(format!("Private media storage: {e}"))
 }
-fn path(state: &AppState, key: &str) -> Result<std::path::PathBuf, AppError> {
+pub(super) fn path(state: &AppState, key: &str) -> Result<std::path::PathBuf, AppError> {
     uuid::Uuid::parse_str(key).map_err(|_| AppError::Internal("Invalid storage key".into()))?;
     Ok(std::path::Path::new(&state.config.media_root).join(key))
 }
@@ -126,4 +126,28 @@ pub async fn open(state: &AppState, model: &media::Model) -> Result<tokio::fs::F
                 io(e)
             }
         })
+}
+
+pub async fn rename(
+    state: &AppState,
+    user: i64,
+    session: i64,
+    id: i64,
+    input: super::dto::RenameMedia,
+) -> Result<MediaResource, AppError> {
+    let (_, place) = notes::access(state.db.as_ref(), user, session, false).await?;
+    let txn = places::write_tx(state.db.as_ref(), place.user_id, place.id).await?;
+    notes::access(&txn, user, session, false).await?;
+    let model = media::Entity::find_by_id(id)
+        .filter(media::Column::SessionId.eq(session))
+        .filter(media::Column::Kind.eq("file"))
+        .one(&txn)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Không tìm thấy tài liệu.".into()))?;
+    let name = super::dto::validate_name(input.name, &model.name)?;
+    let mut changes: media::ActiveModel = model.into();
+    changes.name = Set(name);
+    let updated = changes.update(&txn).await?;
+    txn.commit().await?;
+    Ok(updated.into())
 }

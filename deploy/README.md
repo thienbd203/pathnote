@@ -534,7 +534,7 @@ location / {
 }
 ```
 
-Giữ `client_max_body_size 20m` ở server như template hiện tại. Upstream file được
+Đặt `client_max_body_size 101m` ở server domain API để nhận MP3/MP4 tối đa 100 MiB cộng multipart. Listener 3010 dành cho collaboration giữ nguyên template 20m; không sửa thủ công file upstream vì helper kiểm tra nội dung chính xác. Frontend stream/upload qua domain API, không qua listener 3010. Backend vẫn giới hạn ảnh 5 MB, tài liệu 10 MB. Không tắt buffering Range bằng cache công khai; stream dùng vé riêng và `private, no-store`. Cấu hình access log theo `deploy/nginx.conf.example`: khai báo `log_format pathnote_api_no_query` ở context `http` rồi dùng format đó trong server domain API. Format chỉ ghi `$request_method $uri $server_protocol`, bỏ query/referrer để không ghi vé phát vào log. App tracing cũng chỉ ghi URI path. Kiểm tra `nginx -t` trước reload. Upstream file được
 include trong `http {}` qua `conf.d/*.conf` của Ubuntu mặc định; không include thêm
 lần nữa trong site. Nó tạo cả listener loopback `3010` cho collaboration.
 

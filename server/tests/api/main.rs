@@ -44,3 +44,5 @@ mod settings;
 mod initial_notes;
 
 mod browser;
+
+mod recordings;

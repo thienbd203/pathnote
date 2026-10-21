@@ -14,7 +14,7 @@ pub fn inspect(kind: Kind, name: &str, bytes: &[u8]) -> Result<String, AppError>
             if kind == Kind::Image {
                 "Ảnh tối đa 5 MB và không được rỗng."
             } else {
-                "Tài liệu tối đa 10 MB và không được rỗng."
+                "MP3/MP4 tối đa 100 MB; tài liệu tối đa 10 MB, không được rỗng."
             },
         ));
     }
@@ -37,6 +37,16 @@ pub fn inspect(kind: Kind, name: &str, bytes: &[u8]) -> Result<String, AppError>
         return Ok(mime.into());
     }
     let ext = name.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
+    if ["mp3", "mp4"].contains(&ext.as_str()) {
+        let detected = infer::get(bytes).ok_or_else(|| invalid(kind))?;
+        if detected.extension() != ext {
+            return Err(invalid(kind));
+        }
+        return Ok(detected.mime_type().into());
+    }
+    if bytes.len() > 10 * 1024 * 1024 {
+        return Err(AppError::validation("file", "Tài liệu tối đa 10 MB."));
+    }
     if ext == "txt" {
         let text = std::str::from_utf8(bytes).map_err(|_| invalid(kind))?;
         if text

@@ -94,9 +94,34 @@ Code: `server/src/modules/notes/` (`document/` cho node/attrs/marks/validation, 
 - `GET /sessions/{id}/images/{media_id}` — bytes.
 - `POST /sessions/{id}/files` — multipart field `file` → 201.
 - `GET /sessions/{id}/files/{media_id}` — metadata.
+- `PATCH /sessions/{id}/files/{media_id}` — `{name}` → metadata mới; tên tối đa 200 ký tự, không rỗng/ký tự điều khiển/đường dẫn/dấu nháy kép, giữ nguyên đuôi file.
 - `GET /sessions/{id}/files/{media_id}/download` — bytes (attachment).
 
 Code: `server/src/modules/media/` (`validation.rs`, `storage.rs`, `cleanup.rs`).
+
+## Block nghe và xem MP3/MP4 trong editor
+
+- Thiết kế **Gọn trong trang**: block ở giữa nội dung ghi chú, tên file/MIME/dung lượng, Phát/Tạm dừng, thanh tua/thời gian, tốc độ; không có dòng Tiếp tục từ. MP4 có video và fullscreen. Không tự phát sau upload/F5/undo. Slash `/mp3`, `/mp4`, `/nghe`, `/video`, menu + hoặc paste/drop file để chèn; có thể chọn lại tệp đã upload trong buổi. Khung chọn file hiện ngay tại đoạn gõ lệnh và không lưu vào JSON note; hủy khung giữ nội dung xung quanh. Không còn khung Nghe & xem riêng phía trên ghi chú.
+- Dùng node `file` atom đã có, chỉ lưu `{mediaId}` trong JSON/Y.Doc, không thêm schema/attribute. Vẫn schema_version 4; frontend cũ biết file nên giữ tham chiếu, có thể chỉ hiện dạng tải tệp. Metadata phải thuộc đúng buổi, backend kiểm khi lưu như mọi file khác. Byte file, tên và MIME nằm trong media/storage riêng tư, không lưu URL công khai/vé phát/duration/progress/rate vào document.
+- Menu Tải xuống lưu file gốc bằng tên hiện tại, dùng endpoint tải file có xác thực; người chỉ đọc vẫn tải được.
+- Menu Đổi tên file giữ nguyên đuôi; tên mới áp dụng mọi block tham chiếu cùng file. Không đổi storage key, bytes, MIME, tiến độ hoặc revision note. Người có quyền sửa buổi được đổi tên; tab khác cần tải lại metadata.
+- Thay file cập nhật mediaId, xóa chỉ xóa node; kéo/sắp xếp/nhân bản/undo/redo dùng cơ chế editor hiện có, giữ các đoạn xung quanh. Sau undo, click/chạm đoạn văn cập nhật con trỏ ngay để thao tác gõ nhanh trên mobile không ghi đè block vừa khôi phục. File không bị xóa vật lý nên undo/tab khác tiếp tục truy cập nếu còn quyền. File từng upload trong bản khung riêng vẫn chọn được qua thư viện buổi; không tự nhập vào note. Chưa có hard-delete media.
+- MP3/MP4 tối đa 100 MiB mỗi file, multipart field file qua endpoint upload hiện có. `infer` kiểm header và đối chiếu đuôi; MP4 cần codec trình duyệt hỗ trợ, chưa chuyển mã server. Ảnh giữ 5 MiB, tài liệu văn phòng/TXT/PDF giữ 10 MiB. Upload mới/thay file bị hủy khi editor/node bị tháo; vị trí chèn được map qua transaction và recheck khi request xong.
+- HTTP Range/HEAD do tower-http ServeFile cung cấp; không tải toàn bộ thành blob để phát/tua. Vé RSA có type riêng, scope user/session/media, hạn 4 giờ, không dùng làm API bearer. Mọi request stream kiểm lại quyền buổi đang hoạt động; thu hồi chia sẻ chặn request tiếp theo, không thu lại buffer đã tải.
+- Tiến độ nằm ở media_progress, khóa (user_id,media_id), không chia sẻ giữa người học. Player đọc tiến độ riêng từng file và metadata để khôi phục, không autoplay. Ghi định kỳ 5 giây khi phát, pause/tua/ended, ẩn/đóng trang và tháo block/rời bài. Nghe hết lưu 0 để nghe lại. Các write nối tiếp; lỗi lưu hiện thông báo và nút thử lại. Hai thiết bị hoặc hai block cùng file dùng lần ghi cuối, chưa merge tiến độ.
+- Tiến độ là trạng thái cá nhân, không làm đổi note revision, JSON hay Y.Doc. Source và load bị bỏ khi tài khoản/generation đổi. Trong cùng editor chỉ phát một block tại một thời điểm. Note chỉ đọc vẫn phát được, không hiện thao tác thay/xóa.
+- Gửi lúc đóng trang là best effort (keepalive); tắt máy/kill trình duyệt/mất mạng có thể mất phần sau lần lưu thành công gần nhất (thường tối đa 5 giây nếu mạng ổn định). Không cam kết lưu được khi offline hoặc request đang lỗi.
+- Migration `m20261021_034622_add_lesson_recordings` tạo bằng sea-orm-cli, chỉ thêm bảng tiến độ; block file dùng schema đã có, không cần migration bổ sung.
+
+API dưới `/api/v1`, cần bearer trừ stream dùng vé:
+
+- `GET /sessions/{id}/recordings` → `{data:[{id,name,mime_type,size,position_seconds}]}` cho thư viện chọn file trong buổi.
+- `POST /sessions/{id}/recordings/{media}/playback` → `{data:{ticket}}`.
+- `GET|HEAD /sessions/{id}/recordings/{media}/stream?ticket=…` → bytes 200/206, Range sai 416; không vé/khác scope 401, mất quyền 404; private/no-store, nosniff, inline.
+- `GET /sessions/{id}/recordings/{media}/progress` → `{data:{position_seconds}}`, mặc định 0 nếu chưa nghe, kiểm quyền + cùng buổi + MIME MP3/MP4.
+- `PUT /sessions/{id}/recordings/{media}/progress` body `{position_seconds}` → `{data:{position_seconds}}`, số hữu hạn 0..604800; lưu riêng người gọi, không sửa note.
+
+Kiểm thử: fixture tổng hợp MP3/MP4 bằng FFmpeg; API/PostgreSQL kiểm upload giả, giới hạn cũ, Range/416, scope/vé hết hạn, quyền/thu hồi, tiến độ riêng, file reference cùng buổi và note revision bất biến khi nghe. Browser desktop/mobile kiểm chèn giữa đoạn văn, F5, tua/rate không sửa document, thay MP4, xóa/undo và chọn lại file có sẵn; integration dùng backend thật. Unit kiểm retry/thứ tự write và node chỉ có mediaId.
 
 ## Realtime (Hocuspocus bridge)
 

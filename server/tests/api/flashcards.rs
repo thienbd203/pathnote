@@ -798,7 +798,13 @@ async fn meanings_index_migration_can_be_reversed_without_touching_schedules() {
     }
     assert!(exists(&app.db, "vocabulary_cards_word_locale_pos").await);
     assert!(!exists(&app.db, "flashcard_memory_identity").await);
-    Migrator::down(app.db.as_ref(), Some(1)).await.unwrap();
+    let steps = Migrator::migrations()
+        .into_iter()
+        .rev()
+        .position(|m| m.name() == "m20261016_030001_flashcard_meanings_index")
+        .expect("meanings index migration is registered") as u32
+        + 1;
+    Migrator::down(app.db.as_ref(), Some(steps)).await.unwrap();
     assert!(!exists(&app.db, "vocabulary_cards_word_locale_pos").await);
     assert!(exists(&app.db, "flashcard_memory_identity").await);
     Migrator::up(app.db.as_ref(), None).await.unwrap();

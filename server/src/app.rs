@@ -108,12 +108,18 @@ fn cors(frontend_url: &str) -> CorsLayer {
         .allow_origin(HeaderValue::from_str(frontend_url).expect("FRONTEND_URL không hợp lệ"))
         .allow_methods([
             Method::GET,
+            Method::HEAD,
             Method::POST,
             Method::PATCH,
             Method::PUT,
             Method::DELETE,
         ])
-        .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE, header::ACCEPT])
+        .allow_headers([
+            header::AUTHORIZATION,
+            header::CONTENT_TYPE,
+            header::ACCEPT,
+            header::RANGE,
+        ])
         .expose_headers([header::HeaderName::from_static("x-request-id")])
         .allow_credentials(true)
 }

@@ -183,6 +183,7 @@ Ghi mỗi thay đổi response/request mà frontend thấy. Cột đầu là đ�
 
 | Đợt | Endpoint | Trước | Sau |
 | --- | --- | --- | --- |
+| MP3/MP4 trong buổi học | `POST /sessions/{id}/files`; `/sessions/{id}/recordings*` | Tệp tài liệu tối đa 10 MiB, chưa có trình phát/tiến độ | Thêm MP3/MP4 thực tối đa 100 MiB; GET danh sách trả metadata + position_seconds riêng người gọi; POST playback trả vé phát scope một user/session/file hạn 4h; GET/HEAD stream hỗ trợ Range bằng ServeFile; GET progress trả position_seconds riêng user/file (mặc định 0); PUT progress nhận/trả số hữu hạn 0..604800. Editor dùng node file/mediaId đã có, không thêm node/attribute/schema_version; tab cũ giữ reference. Tua/playback không lưu note revision. Các endpoint thông thường vẫn dùng bearer, vé playback không thay bearer; stream kiểm quyền mỗi request. |
 | B.1.1 | mọi route | Lỗi extractor là text thuần, 405 không có body | JSON `{message, errors?}`; path sai trả 404 |
 | B.2.8 | `GET /ipa-vocabulary`, `/ipa-pairs` | `meta` thiếu `per_page` | Đủ 4 field |
 | B.2.8 | `POST /ipa-*/import` | `{meta:{added,skipped}}` | `{data:{added,skipped}}` |
@@ -221,3 +222,4 @@ Các document schema 1–3 vẫn đọc được; client hiện tại lưu bằn
 | --- | --- | --- | --- |
 | D1 | `PUT /sessions/{id}/note`, `PUT /internal/notes/{id}`, `POST /sessions/{id}/collaboration/authorize?schema_version=4` | Writer/bridge có thể ghi document thiếu attr mới; thiếu version ở bridge | `schema_version` là capability explicit của writer. Cũ → 409 `{message,code:"client_outdated"}`; version chưa hỗ trợ → 422. Nhánh thiếu version chỉ an toàn cho document legacy trong một release như mô tả trên. Frontend giữ bản nháp, khóa autosave/ghi đè, cho tải JSON bản nháp và tải lại trang. |
 | D3 | Collaboration `GET /up` | Chỉ status/version của process Node | Kiểm `{COLLABORATION_API_URL}/health`, timeout 2s, cache 10s, gộp probe đồng thời; Rust/status database lỗi → HTTP 503 `{status:"error",rust:"error",version}`; khỏe → 200 cùng `rust:"ok"`. Gate deploy bắt buộc rust ok. |
+| Đổi tên file | `PATCH /sessions/{id}/files/{media}` | Chỉ đọc metadata | Nhận `{name}`, trả `{data:{id,name,mime_type,size}}`; kiểm quyền sửa buổi dưới khóa ghi. Giữ nguyên đuôi file, chỉ cập nhật tên metadata; storage key, bytes, tiến độ và note revision không đổi. Không cần migration/schema note mới. |

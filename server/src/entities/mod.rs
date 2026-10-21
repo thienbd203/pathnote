@@ -31,3 +31,5 @@ pub mod flashcard_models;
 pub mod user_settings;
 
 pub mod flashcard_runs;
+
+pub mod media_progress;
