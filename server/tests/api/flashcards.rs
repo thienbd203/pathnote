@@ -954,3 +954,85 @@ async fn flashcard_command_summaries_are_user_scoped_idempotent_and_finish_with_
     assert!(data["run"]["finished_at"].is_string());
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn two_senses_in_one_entry_share_one_schedule_per_direction_without_repeating_after_good() {
+    use server::entities::notes;
+    let app = LearningApp::spawn().await;
+    let session = lesson(&app, &app.owner_token).await;
+    let meanings = [
+        "nhớ, ghi nhớ thông tin hoặc một người",
+        "nhớ phải làm điều gì, không quên thực hiện",
+    ];
+    let mut word = typed_entry("remember", meanings[0], "verb");
+    let other = typed_entry("remember", meanings[1], "verb");
+    word["content"]
+        .as_array_mut()
+        .unwrap()
+        .push(other["content"][0].clone());
+    let content = doc(vec![word]);
+    save(&app, session, &content, 0).await;
+    let before = notes::Entity::find_by_id(session)
+        .one(app.db.as_ref())
+        .await
+        .unwrap()
+        .unwrap();
+    let filter = json!({"session_id":session});
+    let first = next(&app, &app.owner_token, filter.clone()).await;
+    assert_eq!(first["overview"]["word_count"], 1);
+    assert_eq!(first["overview"]["reviewable"], 1);
+    assert_eq!(first["overview"]["new"], 1);
+    assert_eq!(first["card"]["direction"], "vi_en");
+    for meaning in meanings {
+        assert!(first["card"]["front"].as_str().unwrap().contains(meaning));
+    }
+    let ticket = first["card"]["id"].as_str().unwrap();
+    let back = reveal(&app, &app.owner_token, ticket).await;
+    for meaning in meanings {
+        assert!(back["back"]["meaning"].as_str().unwrap().contains(meaning));
+    }
+    grade(&app, ticket, 3).await;
+    let following = next(&app, &app.owner_token, filter.clone()).await;
+    assert!(following["card"].is_null());
+    assert_eq!(following["overview"]["new"], 0);
+    assert_eq!(following["overview"]["due"], 0);
+    assert_eq!(
+        memory::Entity::find()
+            .filter(memory::Column::UserId.eq(app.owner_id))
+            .all(app.db.as_ref())
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+
+    // The opposite direction is an intentional separate schedule, not a second sense.
+    let both = settings(&app, filter.clone(), "both", 0.9).await;
+    assert_eq!(both["new"], 1);
+    assert_eq!(both["reviewable"], 1);
+    let reverse = next(&app, &app.owner_token, filter.clone()).await;
+    assert_eq!(reverse["card"]["direction"], "en_vi");
+    assert_eq!(reverse["card"]["front"], "remember");
+    let ticket = reverse["card"]["id"].as_str().unwrap();
+    reveal(&app, &app.owner_token, ticket).await;
+    grade(&app, ticket, 3).await;
+    assert!(next(&app, &app.owner_token, filter).await["card"].is_null());
+    assert_eq!(
+        memory::Entity::find()
+            .filter(memory::Column::UserId.eq(app.owner_id))
+            .all(app.db.as_ref())
+            .await
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(
+        notes::Entity::find_by_id(session)
+            .one(app.db.as_ref())
+            .await
+            .unwrap()
+            .unwrap(),
+        before
+    );
+    app.cleanup().await;
+}
