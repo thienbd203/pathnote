@@ -34,6 +34,45 @@ async fn ticket(app: &LearningApp, session: i64, media: i64, token: &str) -> Str
         .into()
 }
 #[tokio::test]
+async fn m4a_upload_streams_as_audio_and_restores_progress() {
+    let app = LearningApp::spawn().await;
+    let session = lesson(&app).await;
+    let bytes = include_bytes!("../fixtures/lesson.m4a");
+    let id = upload(&app, session, "Voice.M4A", bytes).await;
+    let base = format!("/api/v1/sessions/{session}/recordings");
+    let list = app
+        .api
+        .get(&base)
+        .add_header("authorization", bearer(&app.owner_token))
+        .await;
+    list.assert_status_ok();
+    assert_eq!(list.json::<Value>()["data"][0]["mime_type"], "audio/mp4");
+    let token = ticket(&app, session, id, &app.owner_token).await;
+    let stream = app
+        .api
+        .get(&format!("{base}/{id}/stream?ticket={token}"))
+        .add_header("range", "bytes=10-29")
+        .await;
+    stream.assert_status(StatusCode::PARTIAL_CONTENT);
+    assert_eq!(stream.header("content-type"), "audio/mp4");
+    assert_eq!(stream.as_bytes(), &bytes[10..30]);
+    let progress = format!("{base}/{id}/progress");
+    app.api
+        .put(&progress)
+        .add_header("authorization", bearer(&app.owner_token))
+        .json(&json!({"position_seconds":1.25}))
+        .await
+        .assert_status_ok();
+    let restored = app
+        .api
+        .get(&progress)
+        .add_header("authorization", bearer(&app.owner_token))
+        .await;
+    restored.assert_status_ok();
+    assert_eq!(restored.json::<Value>()["data"]["position_seconds"], 1.25);
+    app.cleanup().await;
+}
+#[tokio::test]
 async fn recordings_stream_ranges_and_restore_personal_progress_without_note_writes() {
     let app = LearningApp::spawn().await;
     let session = lesson(&app).await;
@@ -210,6 +249,15 @@ async fn recording_upload_rejects_disguised_files_and_retains_document_limit() {
     let session = lesson(&app).await;
     for (name, bytes) in [
         ("fake.mp3", b"<html>not audio</html>".to_vec()),
+        ("fake.m4a", b"<html>not audio</html>".to_vec()),
+        (
+            "renamed.m4a",
+            include_bytes!("../fixtures/lesson.mp3").to_vec(),
+        ),
+        (
+            "renamed.mp4",
+            include_bytes!("../fixtures/lesson.m4a").to_vec(),
+        ),
         (
             "fake.mp4",
             include_bytes!("../fixtures/lesson.mp3").to_vec(),

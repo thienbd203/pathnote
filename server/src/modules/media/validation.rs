@@ -14,7 +14,7 @@ pub fn inspect(kind: Kind, name: &str, bytes: &[u8]) -> Result<String, AppError>
             if kind == Kind::Image {
                 "Ảnh tối đa 5 MB và không được rỗng."
             } else {
-                "MP3/MP4 tối đa 100 MB; tài liệu tối đa 10 MB, không được rỗng."
+                "MP3/M4A/MP4 tối đa 100 MB; tài liệu tối đa 10 MB, không được rỗng."
             },
         ));
     }
@@ -37,12 +37,19 @@ pub fn inspect(kind: Kind, name: &str, bytes: &[u8]) -> Result<String, AppError>
         return Ok(mime.into());
     }
     let ext = name.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
-    if ["mp3", "mp4"].contains(&ext.as_str()) {
+    if ["mp3", "m4a", "mp4"].contains(&ext.as_str()) {
         let detected = infer::get(bytes).ok_or_else(|| invalid(kind))?;
         if detected.extension() != ext {
             return Err(invalid(kind));
         }
-        return Ok(detected.mime_type().into());
+        // infer identifies the M4A brand as audio/m4a. Serve the standard MP4
+        // audio media type so browsers use the audio player for this container.
+        return Ok(if ext == "m4a" {
+            "audio/mp4"
+        } else {
+            detected.mime_type()
+        }
+        .into());
     }
     if bytes.len() > 10 * 1024 * 1024 {
         return Err(AppError::validation("file", "Tài liệu tối đa 10 MB."));

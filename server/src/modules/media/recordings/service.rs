@@ -7,7 +7,7 @@ use crate::{
 };
 use sea_orm::{sea_query::OnConflict, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set};
 use std::collections::HashMap;
-const TYPES: [&str; 2] = ["audio/mpeg", "video/mp4"];
+const TYPES: [&str; 3] = ["audio/mpeg", "audio/mp4", "video/mp4"];
 async fn get(state: &AppState, user: i64, session: i64, id: i64) -> Result<media::Model, AppError> {
     let model =
         super::super::service::get(state, user, session, super::super::dto::Kind::File, id).await?;
