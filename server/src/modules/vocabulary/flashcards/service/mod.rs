@@ -1,6 +1,8 @@
 mod cards;
 mod log;
 mod review;
+mod statistics;
+pub(super) use statistics::{record_time, statistics};
 pub(super) mod runs;
 use super::{dto, queue};
 use crate::AppError;

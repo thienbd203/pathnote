@@ -23,6 +23,8 @@ pub fn routes() -> Router<AppState> {
         .route("/flashcards/runs/{id}", get(handlers::show_run))
         .route("/flashcards/runs/{id}/finish", post(handlers::finish_run))
         .route("/flashcards/history", get(handlers::history))
+        .route("/flashcards/statistics", get(handlers::statistics))
+        .route("/flashcards/runs/{id}/time", post(handlers::record_time))
         .route("/flashcards/optimization", get(handlers::optimization))
         .route("/flashcards/{id}/reveal", post(handlers::reveal))
         .route("/flashcards/{id}/grade", post(handlers::grade))

@@ -38,6 +38,7 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
+        // Raw SQL: SeaQuery cannot express an index on lower(email).
         manager
             .get_connection()
             .execute_unprepared("CREATE UNIQUE INDEX users_email_unique ON users (lower(email))")

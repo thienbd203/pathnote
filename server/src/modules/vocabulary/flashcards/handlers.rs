@@ -103,3 +103,23 @@ pub async fn optimization(
 ) -> Result<ApiResponse<dto::Optimization>, AppError> {
     Ok(ApiResponse::ok(optimizer::status(&s.db, user.id).await?))
 }
+
+pub async fn statistics(
+    State(s): State<AppState>,
+    user: CurrentUser,
+    AppQuery(input): AppQuery<dto::StatisticsInput>,
+) -> Result<ApiResponse<dto::StudyStatistics>, AppError> {
+    Ok(ApiResponse::ok(
+        service::statistics(&s.db, user.id, input).await?,
+    ))
+}
+pub async fn record_time(
+    State(s): State<AppState>,
+    user: CurrentUser,
+    AppPath(id): AppPath<Uuid>,
+    AppJson(input): AppJson<dto::StudyTimeInput>,
+) -> Result<ApiResponse<dto::StudyTimeRecorded>, AppError> {
+    Ok(ApiResponse::ok(
+        service::record_time(&s.db, user.id, id, input).await?,
+    ))
+}

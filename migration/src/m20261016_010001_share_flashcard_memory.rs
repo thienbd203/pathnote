@@ -6,6 +6,7 @@ pub struct Migration;
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        // Raw SQL: the DO block drops foreign keys found in pg_constraint.
         // Existing duplicate memories may have different schedules. Keep the
         // most recently reviewed schedule; every attempt remains in history.
         manager.get_connection().execute_unprepared(r#"

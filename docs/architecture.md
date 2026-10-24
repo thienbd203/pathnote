@@ -177,6 +177,24 @@ Quy tắc:
   cargo test --workspace
   ```
 
+## A.8 Migration
+
+- **Mặc định dùng SeaQuery:** `Table::create/alter`, `ColumnDef`, `ForeignKey`, `Index::create`, `.check(...)`, `.default(...)`. Nếu SeaQuery thiếu đúng một biểu thức (ví dụ `INTERVAL '15 seconds'`), dùng `Expr::cust` cho riêng biểu thức đó, không viết cả câu lệnh bằng SQL. Mẫu tham khảo: `m20261015_010001_create_flashcard_runs.rs`.
+- **Data migration** (backfill, gộp hoặc xóa dữ liệu) ưu tiên một trong hai cách:
+  - Dùng statement SeaQuery `Query::select/update/insert/delete`.
+  - Đọc dữ liệu ra Rust, xử lý, rồi ghi lại. Cách này hợp khi logic phải trùng với code app, ví dụ dùng chung hàm chuẩn hóa hoặc hash để không lệch collation giữa Postgres và Rust.
+
+  Khai báo enum `DeriveIden` riêng trong file migration. **Không dùng entity của app** (`server/src/entities`), vì entity thay đổi theo thời gian còn migration thì không được đổi.
+- **SQL thô (`execute_unprepared`) chỉ dùng khi:**
+  - thao tác hàng loạt trên bảng lớn, khi đọc ra rồi ghi lại quá chậm;
+  - cần đụng tới catalog Postgres hoặc dùng khối `DO $$`;
+  - cần tính năng Postgres mà SeaQuery không biểu diễn được, ví dụ index trên biểu thức `lower(email)`.
+- **Mỗi chỗ dùng SQL thô** có comment một dòng ngay phía trên, ghi lý do không dùng được SeaQuery.
+- **Không sửa migration đã chạy ở production.** Khi buộc phải sửa (đổi cách viết mà giữ nguyên kết quả), phải chứng minh schema không đổi: chạy cả bản cũ và bản mới trên hai database trống, so `pg_dump --schema-only`, và thử `down` rồi `up` nếu migration có `down`.
+- **Tên constraint:** để Postgres tự đặt tên (`<table>_<col>_fkey`, `<table>_<col>_check`), trừ khi `ALTER TABLE` bắt buộc phải có tên. Khi đó đặt đúng theo quy ước này.
+
+Kiểm chứng chuyển cách viết 24/10/2026: ba migration `create_flashcard_runs`, `add_learning_query_indexes`, `flashcard_meanings_index` được so với bản `35abeb2` trên hai database PostgreSQL 17 trống riêng. Toàn bộ `pg_dump --schema-only --no-owner --no-privileges` giống nhau (chỉ bỏ token ngẫu nhiên `\restrict`/`\unrestrict` của pg_dump). Mỗi migration đổi cách viết được chạy `up → down → up` trước migration kế tiếp; migration thời gian ôn mới cũng qua `down/up`. Không áp lại migration cũ trên production.
+
 ## Thay đổi contract API
 
 Ghi mỗi thay đổi response/request mà frontend thấy. Cột đầu là đợt hoặc commit.
@@ -225,3 +243,5 @@ Các document schema 1–3 vẫn đọc được; client hiện tại lưu bằn
 | Đổi tên file | `PATCH /sessions/{id}/files/{media}` | Chỉ đọc metadata | Nhận `{name}`, trả `{data:{id,name,mime_type,size}}`; kiểm quyền sửa buổi dưới khóa ghi. Giữ nguyên đuôi file, chỉ cập nhật tên metadata; storage key, bytes, tiến độ và note revision không đổi. Không cần migration/schema note mới. |
 | M4A (23/10) | `POST /sessions/{id}/files`; `/sessions/{id}/recordings*` | Chỉ MP3/MP4 là recording | Nhận thêm M4A thực tối đa 100 MiB, kiểm header và đuôi bằng infer; metadata/stream chuẩn hóa MIME `audio/mp4`. Danh sách, vé phát và tiến độ áp dụng như MP3. Không đổi schema note/migration. |
 | Tiến độ ghi nhớ (24/10) | `GET /flashcards`, `PUT /flashcards` | Chỉ thống kê hàng đợi | Thêm `memory_progress:{remembered,forgotten,unseen,total,as_of}`. remembered/forgotten là số từ kỳ vọng dạng số thực, unseen/total là số nguyên; summed probabilities từ FSRS theo chiều đang chọn, dedupe word_key và lấy min trong các lịch đã học. Chưa học = không có memory reviews > 0 trong chiều chọn. GET/PUT overview mới có trường này; next giữ đường đếm nhẹ và không trả trường. Trường bổ sung, không migration, không thay lịch ôn. |
+
+| Thời gian ôn (24/10) | `GET /flashcards/statistics`; `POST /flashcards/runs/{id}/time` | Chỉ elapsed từ mở/đóng run | Thêm ghi các khoảng hoạt động idempotent theo UUID, và thống kê riêng `{period,start_date,end_date,today,today_seconds,total_seconds,buckets:[{date,seconds}],as_of}`. Tổng hợp theo timezone, union khoảng trùng trước khi cộng; week/month theo ngày, year theo tháng, có ngày 0. Không đổi contract grade/next/overview, không suy diễn/backfill thời gian run cũ; migration chỉ thêm bảng/index. |

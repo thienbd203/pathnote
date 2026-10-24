@@ -6,6 +6,7 @@ pub struct Migration;
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        // Raw SQL predates rule A.8 and already ran in production; keep as-is.
         manager.get_connection().execute_unprepared(r#"
             ALTER TABLE flashcard_attempts ADD COLUMN content_key VARCHAR(64);
             ALTER TABLE flashcard_attempts ADD COLUMN memory_card_id BIGINT;

@@ -225,6 +225,17 @@ Code: `server/src/modules/vocabulary/reviews/`, `server/src/modules/enrichment/`
 - Xóa một nguồn không xóa memory/lịch sử (từ có thể còn ở bài khác); xóa user thì cascade.
 - Phím: Space/Enter lật, 1–4 = Quên/Khó/Nhớ/Dễ; chấm xong tự sang thẻ. Nhãn thống kê là "Mục ôn".
 
+### Thống kê thời gian ôn (24/10)
+
+- Flashcard có hai mục **Ôn tập** / **Thống kê** (`/flashcards?view=statistics`). Thống kê hiển thị **Đã ôn hôm nay**, tổng thời gian của khoảng đang xem và biểu đồ cột Tuần/Tháng/Năm. Tuần bắt đầu thứ Hai; tuần/tháng có cột theo ngày, năm có 12 cột theo tháng. Có chuyển khoảng trước/sau và về hiện tại, không chuyển vượt khoảng hiện tại.
+- Chỉ ghi khi có thẻ đang hiển thị, tab đang hiện, không chờ request/lỗi/chấm xong và không mở lịch sử. Không thao tác trong 60 giây (chạm/phím/cuộn) thì tạm dừng; thao tác tiếp sẽ tiếp tục. Không cộng bù khoảng máy ngủ, event loop bị treo hoặc đồng hồ quay lùi.
+- Client gom khoảng ngắn, flush khoảng 10 giây hoặc khi tạm dừng/rời trang. Mỗi khoảng có UUID bất biến; retry giữ UUID. Lỗi lưu thời gian không chặn lật/chấm thẻ; hiện cảnh báo và nút thử lại. Backlog chỉ nằm trong bộ nhớ, tối đa 360 khoảng; đầy thì dừng ghi cho đến khi gửi được. Đóng/crash trình duyệt hoặc mất mạng rồi tải lại có thể mất phần chưa gửi, không giả là đã lưu.
+- Server kiểm run thuộc người gọi và đã phát thẻ; tối đa 12 khoảng/request, mỗi khoảng >0 và ≤15 giây, không quá 24h cũ, không quá 5 giây tương lai. Kẹp theo lúc bắt đầu/kết thúc run và giờ server. Chỉ ghi `flashcard_study_time`, không sửa note, attempt, FSRS hoặc lịch ôn.
+- Retry cùng UUID không thêm bản ghi. Tổng thời gian là **hợp các khoảng thời gian** của chính user, nên hai tab/thiết bị ôn trùng thời điểm chỉ tính một lần. Dùng `range_agg`/multirange sẵn có của [PostgreSQL](https://www.postgresql.org/docs/17/functions-aggregate.html), không tự viết phép gộp khoảng.
+- API tổng hợp tại DB; chia theo lịch của IANA timezone (ngày 23/25 giờ cũng đúng), kể cả khoảng vượt nửa đêm. Ngày/tháng trống trả 0; tổng năm là tổng 12 tháng; hôm nay luôn là hôm nay ngay cả khi đang xem năm trước. Không suy ra thời gian từ `started_at/finished_at` của run cũ. `RunSummary.elapsed_seconds` hiện có vẫn là thời gian từ mở đến kết thúc run, khác với thời gian hoạt động của thống kê này.
+- UI có trạng thái tải/lỗi/thử lại/trống, làm mới mỗi phút khi đang mở Thống kê, query được làm stale sau khi ghi thời gian. Chạm trên vùng biểu đồ để chọn cột; bàn phím trái/phải/Home/End cũng chọn được. Hỗ trợ 320px trở lên, không thêm thư viện chart hoặc request thống kê khi chỉ xem Ôn tập.
+- Migration bổ sung `m20261024_010001_flashcard_study_time`, chỉ tạo bảng/index mới (PostgreSQL ≥14); deploy migration + Rust trước frontend, không cần cấu hình VPS mới. Không sửa dữ liệu lịch sử hoặc nội dung bài.
+
 ### Tự tối ưu tham số
 
 - Worker kiểm tra mỗi phút; không có nút/POST. Advisory lock PostgreSQL đảm bảo một optimizer trên một DB; huấn luyện chạy `spawn_blocking`, không giữ transaction/row lock.
@@ -264,6 +275,8 @@ Tiến độ ghi nhớ trên dashboard (24/10): tổng hợp xác suất nhớ h
 - `GET /flashcards/runs/{id}`; `POST /flashcards/runs/{id}/finish` — kết thúc sớm (`completed=false`).
 - `GET /flashcards/history` — phân trang mới nhất trước; lọc `session_id`, `course_id`, `topic`, `q`, `run_id`, `card_id`, `rating`, `date` hoặc `from`/`to` + `timezone`.
 - `GET /flashcards/optimization` — trạng thái, số mẫu, ngưỡng, thời điểm cập nhật.
+- `GET /flashcards/statistics?period=week|month|year&date=YYYY-MM-DD&timezone=Asia/Ho_Chi_Minh` — `{period,start_date,end_date,today,today_seconds,total_seconds,buckets:[{date,seconds}],as_of}`; date mặc định ngày hiện tại trong timezone (mặc định UTC), nhận năm 2000–2100. Ngày cuối là inclusive. Seconds có thể có phần thập phân; bucket của năm dùng ngày đầu tháng.
+- `POST /flashcards/runs/{id}/time` — `{segments:[{id:UUID,started_at:RFC3339,ended_at:RFC3339}]}` → `{data:{recorded:true}}`; kiểm quyền run, validation cả batch trước khi ghi, idempotent, không trả dữ liệu run người khác.
 
 Code: `server/src/modules/vocabulary/flashcards/` (`queue.rs` chọn/đếm/gom nhóm, `scheduler.rs` gọi `fsrs`, `optimization.rs`, `history.rs`, `personal.rs` tham số theo người, `service/` next/reveal/grade/runs/log).
 

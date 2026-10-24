@@ -241,3 +241,52 @@ pub struct Optimization {
     pub trained_reviews: i32,
     pub optimized_at: Option<DateTime<FixedOffset>>,
 }
+
+#[derive(Clone, Copy, Default, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StatisticsPeriod {
+    #[default]
+    Week,
+    Month,
+    Year,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StatisticsInput {
+    #[serde(default)]
+    pub period: StatisticsPeriod,
+    pub date: Option<NaiveDate>,
+    pub timezone: Option<String>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StudyTimeSegment {
+    pub id: Uuid,
+    pub started_at: DateTime<FixedOffset>,
+    pub ended_at: DateTime<FixedOffset>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StudyTimeInput {
+    pub segments: Vec<StudyTimeSegment>,
+}
+#[derive(Serialize)]
+pub struct StudyTimeRecorded {
+    pub recorded: bool,
+}
+#[derive(Serialize)]
+pub struct StudyTimeBucket {
+    pub date: NaiveDate,
+    pub seconds: f64,
+}
+#[derive(Serialize)]
+pub struct StudyStatistics {
+    pub period: StatisticsPeriod,
+    pub start_date: NaiveDate,
+    pub end_date: NaiveDate,
+    pub today: NaiveDate,
+    pub today_seconds: f64,
+    pub total_seconds: f64,
+    pub buckets: Vec<StudyTimeBucket>,
+    pub as_of: DateTime<FixedOffset>,
+}
