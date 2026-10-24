@@ -281,6 +281,7 @@ pub struct StudyTimeBucket {
 }
 #[derive(Serialize)]
 pub struct StudyStatistics {
+    pub performance: ReviewPerformance,
     pub period: StatisticsPeriod,
     pub start_date: NaiveDate,
     pub end_date: NaiveDate,
@@ -289,4 +290,19 @@ pub struct StudyStatistics {
     pub total_seconds: f64,
     pub buckets: Vec<StudyTimeBucket>,
     pub as_of: DateTime<FixedOffset>,
+}
+
+#[derive(Serialize)]
+pub struct ReviewPerformanceBucket {
+    pub date: NaiveDate,
+    /// Rating order: Again, Hard, Good, Easy.
+    pub ratings: [u64; 4],
+}
+#[derive(Serialize)]
+pub struct ReviewPerformance {
+    pub total: u64,
+    pub ratings: [u64; 4],
+    /// None when no graded attempts exist; otherwise a fraction in 0..=1.
+    pub remembered_rate: Option<f64>,
+    pub buckets: Vec<ReviewPerformanceBucket>,
 }

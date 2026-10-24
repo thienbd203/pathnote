@@ -144,7 +144,18 @@ pub async fn statistics(
         *buckets.entry(key).or_default() += daily.get(&date).copied().unwrap_or_default();
         date = date.succ_opt().unwrap();
     }
+    let performance = performance(
+        db,
+        user,
+        start,
+        end,
+        timezone,
+        input.period,
+        now.fixed_offset(),
+    )
+    .await?;
     Ok(dto::StudyStatistics {
+        performance,
         period: input.period,
         start_date: start,
         end_date: end.pred_opt().unwrap(),
@@ -156,5 +167,79 @@ pub async fn statistics(
             .map(|(date, seconds)| dto::StudyTimeBucket { date, seconds })
             .collect(),
         as_of: now.fixed_offset(),
+    })
+}
+
+/// Personal graded-attempt counts, independent of current source wording/access.
+/// Only aggregate counts leave this function; no note, answer or other user's data.
+async fn performance(
+    db: &DatabaseConnection,
+    user: i64,
+    start: NaiveDate,
+    end: NaiveDate,
+    timezone: &str,
+    period: dto::StatisticsPeriod,
+    now: chrono::DateTime<chrono::FixedOffset>,
+) -> Result<dto::ReviewPerformance, AppError> {
+    // Uses the existing (user_id, reviewed_at DESC) index. No attempt bodies/N+1 queries.
+    let rows = db
+        .query_all(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            r#"
+        SELECT (reviewed_at AT TIME ZONE $4)::date AS day,
+            COUNT(*) FILTER (WHERE rating=1) AS again,
+            COUNT(*) FILTER (WHERE rating=2) AS hard,
+            COUNT(*) FILTER (WHERE rating=3) AS good,
+            COUNT(*) FILTER (WHERE rating=4) AS easy
+        FROM flashcard_attempts
+        WHERE user_id=$1 AND rating IN (1,2,3,4)
+            AND reviewed_at >= ($2::date::timestamp AT TIME ZONE $4)
+            AND reviewed_at < ($3::date::timestamp AT TIME ZONE $4)
+            AND reviewed_at <= $5
+        GROUP BY day ORDER BY day
+    "#,
+            [
+                user.into(),
+                start.into(),
+                end.into(),
+                timezone.into(),
+                now.into(),
+            ],
+        ))
+        .await?;
+    let mut buckets: BTreeMap<NaiveDate, [u64; 4]> = BTreeMap::new();
+    let key = |date: NaiveDate| {
+        if matches!(period, dto::StatisticsPeriod::Year) {
+            date.with_day(1).unwrap()
+        } else {
+            date
+        }
+    };
+    let mut date = start;
+    while date < end {
+        buckets.entry(key(date)).or_default();
+        date = date.succ_opt().unwrap();
+    }
+    let mut ratings = [0u64; 4];
+    for row in rows {
+        let day: NaiveDate = row.try_get("", "day")?;
+        let counts = buckets
+            .get_mut(&key(day))
+            .expect("Query is bounded to the requested period");
+        for (i, name) in ["again", "hard", "good", "easy"].iter().enumerate() {
+            let count = row.try_get::<i64>("", name)? as u64;
+            counts[i] += count;
+            ratings[i] += count;
+        }
+    }
+    let total: u64 = ratings.iter().sum();
+    Ok(dto::ReviewPerformance {
+        total,
+        ratings,
+        remembered_rate: (total > 0).then(|| (ratings[2] + ratings[3]) as f64 / total as f64),
+        buckets: buckets
+            .into_iter()
+            .map(|(date, ratings)| dto::ReviewPerformanceBucket { date, ratings })
+            .collect(),
     })
 }

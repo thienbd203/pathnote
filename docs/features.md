@@ -236,6 +236,15 @@ Code: `server/src/modules/vocabulary/reviews/`, `server/src/modules/enrichment/`
 - UI có trạng thái tải/lỗi/thử lại/trống, làm mới mỗi phút khi đang mở Thống kê, query được làm stale sau khi ghi thời gian. Chạm trên vùng biểu đồ để chọn cột; bàn phím trái/phải/Home/End cũng chọn được. Hỗ trợ 320px trở lên, không thêm thư viện chart hoặc request thống kê khi chỉ xem Ôn tập.
 - Migration bổ sung `m20261024_010001_flashcard_study_time`, chỉ tạo bảng/index mới (PostgreSQL ≥14); deploy migration + Rust trước frontend, không cần cấu hình VPS mới. Không sửa dữ liệu lịch sử hoặc nội dung bài.
 
+### Hiệu suất ôn tập (24/10)
+
+- Trong Thống kê, bên dưới thời gian ôn có **cột chồng Quên/Khó/Nhớ/Dễ**, dùng cùng Tuần/Tháng/Năm, khoảng trước/sau và timezone. Trục dọc là số **lượt chấm**, không phải số từ duy nhất; một từ được ôn nhiều lần có nhiều lượt. Màu theo controls chấm thẻ và lịch sử: đỏ/vàng/xanh lá/xanh dương, có nhãn và số đếm.
+- **Tỷ lệ Nhớ / Dễ** = `(rating 3 + rating 4) / tổng rating 1..4`. Khó được thống kê riêng. Tỷ lệ cả khoảng tính từ tổng số lượt, không trung bình các tỷ lệ ngày. Chưa có lượt chấm → `remembered_rate: null`, UI hiện `—`; có lượt chấm nhưng không chọn Nhớ/Dễ → `0%`.
+- Chỉ đếm attempt của user đang đăng nhập, có rating 1–4 và `reviewed_at` trong khoảng yêu cầu, không ở tương lai. Retry grade vẫn cùng row nên tính một lần; attempt mới/lật nhưng chưa chấm không tính. Dùng thời điểm chấm, không dùng thời điểm mở run hay tạo attempt. Chia theo ngày địa phương; tháng 28–31 ngày, năm 12 tháng, ngày rỗng có `[0,0,0,0]`.
+- Là thống kê hoạt động cá nhân: giữ các lượt cũ, kể cả thiếu snapshot/run, từ bị sửa/gỡ hoặc nguồn mất quyền sau đó. Chỉ trả số lượng tổng hợp, không trả nội dung/thông tin nguồn ghi chú. Đây là kết quả khi ôn; thanh Ghi nhớ hiện tại vẫn dùng FSRS riêng. Không ghi DB, thay lịch, tạo migration hay backfill.
+- `GET /flashcards/statistics` bổ sung `performance:{total,ratings:[again,hard,good,easy],remembered_rate:number|null,buckets:[{date,ratings:[again,hard,good,easy]}]}`. Rate là phân số 0..1. Hai biểu đồ dùng cùng một request; thêm một aggregate DB trên index `flashcard_attempts(user_id, reviewed_at DESC)`, không tải attempt body hay truy vấn vòng lặp. Client ẩn biểu đồ hiệu suất khi backend cũ chưa trả trường này.
+- Chạm hoặc dùng trái/phải/Home/End để xem số lượt và tỷ lệ từng cột. Hai biểu đồ đổi cùng khoảng, response cũ trả chậm không thay dữ liệu khoảng mới. Layout hỗ trợ 320px; không thay nút lật/chấm thẻ, cấu hình, lịch sử hay thanh ghi nhớ hiện tại.
+
 ### Tự tối ưu tham số
 
 - Worker kiểm tra mỗi phút; không có nút/POST. Advisory lock PostgreSQL đảm bảo một optimizer trên một DB; huấn luyện chạy `spawn_blocking`, không giữ transaction/row lock.

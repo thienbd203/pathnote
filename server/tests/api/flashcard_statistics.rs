@@ -240,3 +240,182 @@ async fn validates_batches_dates_and_clips_late_reports_to_run_finish() {
     );
     app.cleanup().await;
 }
+
+async fn seed_rating(
+    app: &LearningApp,
+    template: &server::entities::flashcard_attempts::Model,
+    user: i64,
+    instant: &str,
+    rating: Option<i32>,
+) {
+    use sea_orm::{ActiveModelTrait, Set};
+    use server::entities::flashcard_attempts as attempts;
+    let mut row: attempts::ActiveModel = template.clone().into();
+    row.id = Set(Uuid::new_v4());
+    row.user_id = Set(user);
+    row.run_id = Set(None); // Legacy reviews without a run or snapshot count too.
+    row.revealed = Set(true);
+    row.reviewed_at = Set(Some(chrono::DateTime::parse_from_rfc3339(instant).unwrap()));
+    row.rating = Set(rating);
+    row.insert(app.db.as_ref()).await.unwrap();
+}
+#[tokio::test]
+async fn performance_aggregates_personal_graded_history_and_weights_rate_by_attempts() {
+    use sea_orm::EntityTrait;
+    use server::entities::flashcard_attempts as attempts;
+    let app = LearningApp::spawn().await;
+    let (_, ticket) = run(&app).await;
+    let template = attempts::Entity::find_by_id(Uuid::parse_str(&ticket).unwrap())
+        .one(app.db.as_ref())
+        .await
+        .unwrap()
+        .unwrap();
+    for (at, rating) in [
+        ("2025-10-24T16:59:59Z", Some(1)),
+        ("2025-10-24T17:00:00Z", Some(2)),
+        ("2025-10-25T03:00:00Z", Some(3)),
+        ("2025-10-25T04:00:00Z", Some(4)),
+        ("2025-10-25T05:00:00Z", Some(3)),
+        ("2025-10-25T06:00:00Z", None),
+        ("2025-10-27T01:00:00Z", Some(2)),
+    ] {
+        seed_rating(&app, &template, app.owner_id, at, rating).await;
+    }
+    let other = app
+        .api
+        .get("/api/v1/auth/me")
+        .add_header("authorization", auth(&app.other_token))
+        .await
+        .json::<Value>()["data"]["id"]
+        .as_i64()
+        .unwrap();
+    seed_rating(&app, &template, other, "2025-10-25T03:00:00Z", Some(1)).await;
+    let week = stats(
+        &app,
+        &app.owner_token,
+        "period=week&date=2025-10-24&timezone=Asia%2FHo_Chi_Minh",
+    )
+    .await;
+    let p = &week["performance"];
+    assert_eq!(p["total"], 5);
+    assert_eq!(p["ratings"], json!([1, 1, 2, 1]));
+    assert_eq!(p["remembered_rate"], 0.6); // NOT the mean of daily percentages (0% and 75%).
+    assert_eq!(p["buckets"].as_array().unwrap().len(), 7);
+    assert_eq!(
+        p["buckets"][4],
+        json!({"date":"2025-10-24","ratings":[1,0,0,0]})
+    );
+    assert_eq!(
+        p["buckets"][5],
+        json!({"date":"2025-10-25","ratings":[0,1,2,1]})
+    );
+    assert_eq!(week["total_seconds"], 0.0); // Old review results do not invent old study time.
+    for period in ["month", "year"] {
+        let data = stats(
+            &app,
+            &app.owner_token,
+            &format!("period={period}&date=2025-10-24&timezone=Asia%2FHo_Chi_Minh"),
+        )
+        .await;
+        assert_eq!(data["performance"]["total"], 6);
+        assert_eq!(data["performance"]["ratings"], json!([1, 2, 2, 1]));
+        assert_eq!(data["performance"]["remembered_rate"], 0.5);
+        if period == "year" {
+            assert_eq!(data["performance"]["buckets"].as_array().unwrap().len(), 12);
+            assert_eq!(
+                data["performance"]["buckets"][9]["ratings"],
+                json!([1, 2, 2, 1])
+            );
+        }
+    }
+    let other_data = stats(
+        &app,
+        &app.other_token,
+        "period=week&date=2025-10-24&timezone=Asia%2FHo_Chi_Minh",
+    )
+    .await;
+    assert_eq!(other_data["performance"]["total"], 1);
+    assert_eq!(other_data["performance"]["remembered_rate"], 0.0);
+    let empty = stats(
+        &app,
+        &app.owner_token,
+        "period=month&date=2024-02-15&timezone=UTC",
+    )
+    .await;
+    assert_eq!(empty["performance"]["total"], 0);
+    assert!(empty["performance"]["remembered_rate"].is_null());
+    assert_eq!(
+        empty["performance"]["buckets"].as_array().unwrap().len(),
+        29
+    );
+    app.api
+        .get("/api/v1/flashcards/statistics")
+        .await
+        .assert_status(StatusCode::UNAUTHORIZED);
+    app.cleanup().await;
+}
+#[tokio::test]
+async fn performance_uses_review_time_handles_repeated_dst_hour_and_ignores_ungraded_attempts() {
+    use sea_orm::EntityTrait;
+    use server::entities::flashcard_attempts as attempts;
+    let app = LearningApp::spawn().await;
+    let (_, ticket) = run(&app).await;
+    let template = attempts::Entity::find_by_id(Uuid::parse_str(&ticket).unwrap())
+        .one(app.db.as_ref())
+        .await
+        .unwrap()
+        .unwrap();
+    for at in [
+        "2025-11-02T03:59:59Z",
+        "2025-11-02T04:00:00Z",
+        "2025-11-02T05:30:00Z",
+        "2025-11-02T06:30:00Z",
+        "2025-11-03T04:59:59Z",
+        "2025-11-03T05:00:00Z",
+    ] {
+        seed_rating(&app, &template, app.owner_id, at, Some(3)).await;
+    }
+    let data = stats(
+        &app,
+        &app.owner_token,
+        "period=month&date=2025-11-01&timezone=America%2FNew_York",
+    )
+    .await;
+    let p = &data["performance"];
+    assert_eq!(p["buckets"][0]["ratings"], json!([0, 0, 1, 0]));
+    assert_eq!(p["buckets"][1]["ratings"], json!([0, 0, 4, 0]));
+    assert_eq!(p["buckets"][2]["ratings"], json!([0, 0, 1, 0]));
+    assert_eq!(p["total"], 6);
+    assert_eq!(p["remembered_rate"], 1.0);
+    app.cleanup().await;
+}
+#[tokio::test]
+async fn performance_counts_grade_retries_once_and_never_changes_the_schedule() {
+    use sea_orm::EntityTrait;
+    use server::entities::flashcard_memory as memory;
+    let app = LearningApp::spawn().await;
+    let (_, ticket) = run(&app).await;
+    app.api
+        .post(&format!("/api/v1/flashcards/{ticket}/reveal"))
+        .add_header("authorization", auth(&app.owner_token))
+        .await
+        .assert_status_ok();
+    for _ in 0..2 {
+        app.api
+            .post(&format!("/api/v1/flashcards/{ticket}/grade"))
+            .add_header("authorization", auth(&app.owner_token))
+            .json(&json!({"rating":4}))
+            .await
+            .assert_status_ok();
+    }
+    let before = memory::Entity::find().all(app.db.as_ref()).await.unwrap();
+    let data = stats(&app, &app.owner_token, "period=week&timezone=UTC").await;
+    assert_eq!(data["performance"]["total"], 1);
+    assert_eq!(data["performance"]["ratings"], json!([0, 0, 0, 1]));
+    assert_eq!(data["performance"]["remembered_rate"], 1.0);
+    assert_eq!(
+        memory::Entity::find().all(app.db.as_ref()).await.unwrap(),
+        before
+    );
+    app.cleanup().await;
+}
