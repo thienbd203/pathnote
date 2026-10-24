@@ -251,7 +251,9 @@ Code: `server/src/modules/vocabulary/reviews/`, `server/src/modules/enrichment/`
 
 ### API
 
-- `GET /flashcards?session_id=&course_id=&topic=&q=&new_only=` — settings, `word_count`, `reviewable`, `new`, `due`, `learning`, thời điểm đến hạn gần nhất (đếm theo nhóm).
+Tiến độ ghi nhớ trên dashboard (24/10): tổng hợp xác suất nhớ hiện tại từ `fsrs::current_retrievability`, dựa trên stability, thời gian từ lần ôn cuối và decay của mô hình cá nhân (phục hồi memory cũ theo cùng logic scheduler). Ba phần: **Còn nhớ ≈ ΣP**, **Đã quên ≈ số từ đã học − ΣP**, **Chưa ôn**; phần trăm là ΣP/tổng từ. Đây là giá trị kỳ vọng, không khẳng định một từ cụ thể đã quên. Theo bộ lọc/quyền và chiều ôn hiện tại; gom word_key, từ nhiều nguồn/nghĩa/POS/locale/chiều chỉ đếm một lần, lấy xác suất thấp nhất trong các lịch đã học. Một từ chưa có lịch đã học trong chiều đang chọn thuộc Chưa ôn; lịch chưa học của biến thể khác không làm hạ xác suất của từ đã học. Không dùng due_at để suy ra quên, không ghi DB/đổi lịch. Mục tiêu nhớ trong cấu hình vẫn là tham số lập lịch riêng. UI làm mới khi mở/focus và mỗi 5 phút khi ở dashboard.
+
+- `GET /flashcards?session_id=&course_id=&topic=&q=&new_only=` — settings, `word_count`, `memory_progress`, `reviewable`, `new`, `due`, `learning`, thời điểm đến hạn gần nhất (đếm theo nhóm).
 - `PUT /flashcards` — filters + `direction` (`vi_en|en_vi|both`) + `retention` (0,70–0,97).
 - `POST /flashcards/next` — filters (+ `run_id`); trả mặt trước + UUID attempt, hoặc `card:null` kèm overview.
 - `POST /flashcards/{uuid}/reveal` — đáp án (nghĩa có thể nối `; `) + khoảng ôn dự kiến cho 4 rating.

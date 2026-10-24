@@ -3,6 +3,7 @@ mod handlers;
 mod history;
 pub(crate) mod optimization;
 mod personal;
+mod progress;
 mod queue;
 mod scheduler;
 mod service;

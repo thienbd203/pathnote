@@ -145,6 +145,8 @@ pub async fn overview_with_settings<C: ConnectionTrait>(
     let mut overview = counts(db, user, f, (direction, retention)).await?;
     let average = db.query_one(sea_orm::Statement::from_sql_and_values(sea_orm::DbBackend::Postgres,
         "SELECT AVG(seconds)::double precision AS average FROM (SELECT EXTRACT(EPOCH FROM (reviewed_at-created_at)) AS seconds FROM flashcard_attempts WHERE user_id=$1 AND reviewed_at IS NOT NULL ORDER BY reviewed_at DESC LIMIT 100) recent WHERE seconds BETWEEN 1 AND 120 HAVING COUNT(*) >= 10",[user.into()])).await?.and_then(|row|row.try_get::<Option<f64>>("","average").ok().flatten());
+    overview.memory_progress =
+        Some(super::progress::estimate(db, user, f, direction, overview.word_count).await?);
     overview.estimated_seconds = average.map(|seconds| {
         (seconds * (overview.new + if f.new_only { 0 } else { overview.due }) as f64).round() as u64
     });
@@ -219,6 +221,7 @@ pub async fn counts<C: ConnectionTrait>(
         algorithm: "FSRS-6",
         reviewable: 0,
         word_count: 0,
+        memory_progress: None,
     };
     for row in rows {
         result.new += row.try_get::<i64>("", "new_count")? as u64;

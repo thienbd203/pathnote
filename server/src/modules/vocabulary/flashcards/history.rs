@@ -138,6 +138,10 @@ pub async fn current<C: ConnectionTrait>(
         .order_by_asc(attempts::Column::Id)
         .all(db)
         .await?;
+    current_item(rows, reviews)
+}
+/// Shared replay validation for the scheduler and batched dashboard estimates.
+pub(super) fn current_item(rows: Vec<attempts::Model>, reviews: i32) -> Result<FSRSItem, AppError> {
     let start = rows
         .iter()
         .rposition(|r| r.version == 0)

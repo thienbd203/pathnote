@@ -1036,3 +1036,163 @@ async fn two_senses_in_one_entry_share_one_schedule_per_direction_without_repeat
     );
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn memory_progress_estimates_recall_without_duplicates_or_schedule_writes() {
+    let app = LearningApp::spawn().await;
+    let first = lesson(&app, &app.owner_token).await;
+    let second = lesson(&app, &app.owner_token).await;
+    save(
+        &app,
+        first,
+        &doc(vec![
+            typed_entry("remember", "nhớ", "verb"),
+            typed_entry("learn", "học", "verb"),
+        ]),
+        0,
+    )
+    .await;
+    save(
+        &app,
+        second,
+        &doc(vec![
+            typed_entry("remember", "ghi nhớ", "verb"),
+            typed_entry("remember", "ký ức", "noun"),
+        ]),
+        0,
+    )
+    .await;
+    async fn overview(app: &LearningApp, token: &str, query: &str) -> Value {
+        let response = app
+            .api
+            .get(&format!("/api/v1/flashcards{query}"))
+            .add_header("authorization", auth(token))
+            .await;
+        response.assert_status_ok();
+        response.json::<Value>()["data"]["memory_progress"].clone()
+    }
+    let empty = overview(&app, &app.other_token, "").await;
+    assert_eq!(empty["total"], 0);
+    let before = overview(&app, &app.owner_token, "").await;
+    assert_eq!(before["total"], 2);
+    assert_eq!(before["unseen"], 2);
+    assert_eq!(before["remembered"], 0.0);
+    let card = next(
+        &app,
+        &app.owner_token,
+        json!({"session_id":first,"q":"remember"}),
+    )
+    .await;
+    let ticket = card["card"]["id"].as_str().unwrap();
+    reveal(&app, &app.owner_token, ticket).await;
+    assert_eq!(overview(&app, &app.owner_token, "").await["unseen"], 2);
+    grade(&app, ticket, 3).await;
+    let immediate = overview(&app, &app.owner_token, "").await;
+    assert_eq!(immediate["unseen"], 1);
+    assert!(immediate["remembered"].as_f64().unwrap() > 0.99);
+    assert!(immediate["remembered"].as_f64().unwrap() <= 1.0);
+    // Use a known memory age/stability. Due time itself is not proof of forgetting.
+    let original = memory::Entity::find()
+        .one(app.db.as_ref())
+        .await
+        .unwrap()
+        .unwrap();
+    let mut aged: memory::ActiveModel = original.into();
+    aged.stability = Set(10.0);
+    aged.reviewed_at = Set(Utc::now().fixed_offset() - Duration::days(10));
+    aged.due_at = Set(Utc::now().fixed_offset() - Duration::days(2));
+    let aged = aged.update(app.db.as_ref()).await.unwrap();
+    let now = overview(&app, &app.owner_token, "").await;
+    let remembered = now["remembered"].as_f64().unwrap();
+    assert!((remembered - 0.9).abs() < 0.001);
+    assert!((now["forgotten"].as_f64().unwrap() - 0.1).abs() < 0.001);
+    assert_eq!(now["unseen"], 1);
+    assert_eq!(now["total"], 2);
+    // Duplicates and another POS in a different lesson never multiply a word.
+    let scoped = overview(&app, &app.owner_token, &format!("?session_id={second}")).await;
+    assert_eq!(scoped["total"], 1);
+    assert_eq!(scoped["unseen"], 0);
+    assert!((scoped["remembered"].as_f64().unwrap() - 0.9).abs() < 0.001);
+    assert_eq!(
+        overview(&app, &app.owner_token, "?q=learn").await["unseen"],
+        1
+    );
+    let other = server::entities::users::Entity::find()
+        .filter(server::entities::users::Column::Email.eq("other@example.test"))
+        .one(app.db.as_ref())
+        .await
+        .unwrap()
+        .unwrap();
+    server::entities::note_collaborators::ActiveModel {
+        session_id: Set(second),
+        user_id: Set(other.id),
+    }
+    .insert(app.db.as_ref())
+    .await
+    .unwrap();
+    let shared = overview(&app, &app.other_token, "").await;
+    assert_eq!(shared["total"], 1);
+    assert_eq!(shared["remembered"], 0.0);
+    assert_eq!(shared["unseen"], 1);
+    let persisted = memory::Entity::find()
+        .one(app.db.as_ref())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(persisted, aged);
+    settings(&app, json!({}), "en_vi", 0.9).await;
+    assert_eq!(overview(&app, &app.owner_token, "").await["unseen"], 2);
+    settings(&app, json!({}), "both", 0.9).await;
+    let both = overview(&app, &app.owner_token, "").await;
+    assert_eq!(both["unseen"], 1);
+    assert!((both["remembered"].as_f64().unwrap() - 0.9).abs() < 0.001);
+    settings(&app, json!({"session_id":first}), "both", 0.9).await;
+    let reverse = next(
+        &app,
+        &app.owner_token,
+        json!({"new_only":true,"q":"remember","session_id":first}),
+    )
+    .await;
+    let ticket = reverse["card"]["id"].as_str().unwrap();
+    reveal(&app, &app.owner_token, ticket).await;
+    grade(&app, ticket, 4).await;
+    let both = overview(&app, &app.owner_token, "").await;
+    assert_eq!(both["total"], 2);
+    // Weakest studied schedule wins instead of adding two directions together.
+    assert!((both["remembered"].as_f64().unwrap() - 0.9).abs() < 0.001);
+    server::entities::flashcard_models::ActiveModel {
+        user_id: Set(app.owner_id),
+        parameters: Set(json!(fsrs::DEFAULT_PARAMETERS)),
+        version: Set(1),
+        trained_reviews: Set(2),
+        training_samples: Set(2),
+        baseline_loss: Set(0.5),
+        fitted_loss: Set(0.4),
+        optimized_at: Set(Some(Utc::now().fixed_offset())),
+        checked_at: Set(Utc::now().fixed_offset()),
+    }
+    .insert(app.db.as_ref())
+    .await
+    .unwrap();
+    let schedules_before = memory::Entity::find().all(app.db.as_ref()).await.unwrap();
+    let refreshed = overview(&app, &app.owner_token, "").await;
+    let replay = fsrs::FSRS::new(&fsrs::DEFAULT_PARAMETERS)
+        .unwrap()
+        .memory_state(
+            fsrs::FSRSItem {
+                reviews: vec![fsrs::FSRSReview {
+                    rating: 3,
+                    delta_t: 0,
+                }],
+            },
+            None,
+        )
+        .unwrap();
+    let expected = fsrs::current_retrievability(replay, 10.0, fsrs::DEFAULT_PARAMETERS[20]) as f64;
+    assert!((refreshed["remembered"].as_f64().unwrap() - expected).abs() < 0.001);
+    assert_eq!(
+        memory::Entity::find().all(app.db.as_ref()).await.unwrap(),
+        schedules_before
+    );
+    app.cleanup().await;
+}

@@ -120,8 +120,18 @@ pub struct Configuration {
     pub retention: f32,
 }
 #[derive(Serialize)]
+pub struct MemoryProgress {
+    pub remembered: f64,
+    pub forgotten: f64,
+    pub unseen: u64,
+    pub total: u64,
+    pub as_of: DateTime<FixedOffset>,
+}
+#[derive(Serialize)]
 pub struct Overview {
     pub word_count: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_progress: Option<MemoryProgress>,
     pub reviewable: u64,
     pub estimated_seconds: Option<u64>,
     pub settings: Configuration,
