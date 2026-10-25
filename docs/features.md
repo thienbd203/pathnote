@@ -240,8 +240,10 @@ Code: `server/src/modules/vocabulary/reviews/`, `server/src/modules/enrichment/`
 - Server kiểm run thuộc người gọi và đã phát thẻ; tối đa 12 khoảng/request, mỗi khoảng >0 và ≤15 giây, không quá 24h cũ, không quá 5 giây tương lai. Kẹp theo lúc bắt đầu/kết thúc run và giờ server. Chỉ ghi `flashcard_study_time`, không sửa note, attempt, FSRS hoặc lịch ôn.
 - Retry cùng UUID không thêm bản ghi. Tổng thời gian là **hợp các khoảng thời gian** của chính user, nên hai tab/thiết bị ôn trùng thời điểm chỉ tính một lần. Dùng `range_agg`/multirange sẵn có của [PostgreSQL](https://www.postgresql.org/docs/17/functions-aggregate.html), không tự viết phép gộp khoảng.
 - API tổng hợp tại DB; chia theo lịch của IANA timezone (ngày 23/25 giờ cũng đúng), kể cả khoảng vượt nửa đêm. Ngày/tháng trống trả 0; tổng năm là tổng 12 tháng; hôm nay luôn là hôm nay ngay cả khi đang xem năm trước. Không suy ra thời gian từ `started_at/finished_at` của run cũ. `RunSummary.elapsed_seconds` hiện có vẫn là thời gian từ mở đến kết thúc run, khác với thời gian hoạt động của thống kê này.
-- UI có trạng thái tải/lỗi/thử lại/trống, làm mới mỗi phút khi đang mở Thống kê, query được làm stale sau khi ghi thời gian. Chạm trên vùng biểu đồ để chọn cột; bàn phím trái/phải/Home/End cũng chọn được. Hỗ trợ 320px trở lên, không thêm thư viện chart hoặc request thống kê khi chỉ xem Ôn tập.
+- UI có trạng thái tải/lỗi/thử lại/trống, làm mới mỗi phút khi đang mở Thống kê, query được làm stale sau khi ghi thời gian. Chạm trên vùng biểu đồ để chọn cột; bàn phím trái/phải/Home/End cũng chọn được. Hỗ trợ 320px trở lên, không gửi request thống kê khi chỉ xem Ôn tập.
 - Migration bổ sung `m20261024_010001_flashcard_study_time`, chỉ tạo bảng/index mới (PostgreSQL ≥14); deploy migration + Rust trước frontend, không cần cấu hình VPS mới. Không sửa dữ liệu lịch sử hoặc nội dung bài.
+
+Từ 25/10, hai biểu đồ dùng Chart của shadcn-vue trên Unovis thay phần cột CSS tự dựng. Có tooltip theo theme, dùng chung component vẽ, tải thư viện riêng khi vào Thống kê; giữ API, tổng thời gian và công thức tỷ lệ.
 
 ### Hiệu suất ôn tập (24/10)
 
