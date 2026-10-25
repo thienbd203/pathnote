@@ -141,7 +141,7 @@ pub async fn next(
             new: memory.is_none(),
             audio: (direction == "en_vi").then_some(dto::Audio {
                 text: card.word,
-                locale: card.locale,
+                locale: crate::modules::vocabulary::pronunciation::DEFAULT_LOCALE.into(),
             }),
         }),
         overview: queue::counts(db, user, &f, (configured_direction, retention)).await?,

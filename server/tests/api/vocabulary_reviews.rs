@@ -11,11 +11,17 @@ fn auth(token: &str) -> String {
 }
 async fn seed(app: &LearningApp) -> (i64, Value) {
     let id = lesson(app, &app.owner_token).await;
-    let content = doc(vec![
+    let mut content = doc(vec![
         entry("teacher", "giáo viên", &["Jobs"]),
         entry("chef", "đầu bếp", &["Jobs"]),
         entry("doctor", "bác sĩ", &["Jobs"]),
     ]);
+    for word in content["content"][0]["content"][0]["content"]
+        .as_array_mut()
+        .unwrap()
+    {
+        word["attrs"]["ipaUK"] = json!("/UK fixture/");
+    }
     save(app, id, &content, 0).await;
     (id, content)
 }
@@ -176,7 +182,7 @@ async fn changed_word_blocks_pending_review_and_reset_progress_but_ipa_edits_do_
     let app = LearningApp::spawn().await;
     let (id, mut content) = seed(&app).await;
     let (first, _) = start(&app, &app.owner_token, "typing", "teacher").await;
-    content["content"][0]["content"][0]["content"][0]["attrs"]["ipa"] = json!("/new-ipa/");
+    content["content"][0]["content"][0]["content"][0]["attrs"]["ipaUK"] = json!("/new-ipa/");
     save(&app, id, &content, 1).await;
     let result = answer(&app, &app.owner_token, first, "teacher", 0).await;
     assert_eq!(result["result"]["card"]["ipa"], "/new-ipa/");

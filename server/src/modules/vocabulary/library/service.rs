@@ -113,16 +113,18 @@ pub async fn list(
             } else {
                 Progress::default()
             };
+            let ipa = super::super::pronunciation::ipa(&card);
+            let examples = super::super::pronunciation::examples(&card);
             Ok::<_, sea_orm::DbErr>(Card {
                 id: card.id,
                 word: card.word,
                 word_key: card.word_key,
-                ipa: card.ipa,
-                locale: card.locale,
+                ipa,
+                locale: super::super::pronunciation::DEFAULT_LOCALE.into(),
                 part_of_speech: card.part_of_speech,
                 meaning: card.meaning,
                 topics: card.topics,
-                examples: card.examples,
+                examples,
                 source: Source {
                     id: row.try_get("", "source_id")?,
                     title: row.try_get("", "source_title")?,

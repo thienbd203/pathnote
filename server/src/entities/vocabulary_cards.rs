@@ -11,6 +11,7 @@ pub struct Model {
     pub word_key: String,
     pub locale: String,
     pub ipa: String,
+    pub ipa_uk: String,
     pub part_of_speech: String,
     pub meaning: String,
     pub topics: Json,

@@ -1,5 +1,6 @@
 pub(crate) mod flashcards;
 mod library;
+mod pronunciation;
 mod rebuild;
 mod reviews;
 pub(in crate::modules) mod sync;

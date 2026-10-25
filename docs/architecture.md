@@ -201,6 +201,7 @@ Ghi mỗi thay đổi response/request mà frontend thấy. Cột đầu là đ�
 
 | Đợt | Endpoint | Trước | Sau |
 | --- | --- | --- | --- |
+| UK mặc định (25/10) | `GET /vocabulary`; tạo `/vocabulary-reviews`; `/flashcards/next`, `/{id}/reveal` | IPA/locale phát âm lấy theo locale nguồn | Phần phát âm trả `locale: en-GB`, IPA ưu tiên UK (legacy chỉ dự phòng nếu nguồn GB), câu ví dụ giữ thêm `ipaUK`/`ipaUS`. Thiếu UK từ nguồn US trả IPA rỗng. Nguồn/identity, lịch FSRS và snapshot lịch sử không đổi; migration chỉ backfill projection. |
 | MP3/MP4 trong buổi học | `POST /sessions/{id}/files`; `/sessions/{id}/recordings*` | Tệp tài liệu tối đa 10 MiB, chưa có trình phát/tiến độ | Thêm MP3/MP4 thực tối đa 100 MiB; GET danh sách trả metadata + position_seconds riêng người gọi; POST playback trả vé phát scope một user/session/file hạn 4h; GET/HEAD stream hỗ trợ Range bằng ServeFile; GET progress trả position_seconds riêng user/file (mặc định 0); PUT progress nhận/trả số hữu hạn 0..604800. Editor dùng node file/mediaId đã có, không thêm node/attribute/schema_version; tab cũ giữ reference. Tua/playback không lưu note revision. Các endpoint thông thường vẫn dùng bearer, vé playback không thay bearer; stream kiểm quyền mỗi request. |
 | B.1.1 | mọi route | Lỗi extractor là text thuần, 405 không có body | JSON `{message, errors?}`; path sai trả 404 |
 | B.2.8 | `GET /ipa-vocabulary`, `/ipa-pairs` | `meta` thiếu `per_page` | Đủ 4 field |

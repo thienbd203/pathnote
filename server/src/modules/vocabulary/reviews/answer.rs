@@ -82,7 +82,12 @@ pub async fn answer(
         .questions
         .get_mut(input.position)
         .ok_or_else(conflict)?;
-    question.card.ipa = current.ipa.clone();
+    question.card.ipa = if question.card.locale == super::super::pronunciation::DEFAULT_LOCALE {
+        super::super::pronunciation::ipa(&current)
+    } else {
+        // Reviews created before the UK default retain their original pronunciation locale.
+        current.ipa.clone()
+    };
     if review.mode == Mode::Choice && !question.options.contains(&input.answer) {
         return Err(AppError::validation(
             "answer",

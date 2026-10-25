@@ -9,6 +9,7 @@ pub struct ExtractedSense {
     pub word: String,
     pub locale: String,
     pub ipa: String,
+    pub ipa_uk: String,
     pub part_of_speech: String,
     pub meaning: String,
     pub topics: Value,
@@ -64,7 +65,7 @@ fn collect(node: &Node, cards: &mut Vec<ExtractedSense>) {
                     continue;
                 };
                 let examples: Vec<_> = examples.iter().filter_map(|e| match e {
-                    Node::VocabularyExample { attrs, .. } => Some(serde_json::json!({"id":attrs.id,"text":attrs.text.trim(),"ipa":attrs.ipa.as_deref().unwrap_or("").trim(),"meaning":attrs.meaning.as_deref().unwrap_or("").trim(),"highlights":attrs.highlights,"meaningHighlights":attrs.meaning_highlights.as_deref().unwrap_or_default()})),
+                    Node::VocabularyExample { attrs, .. } => Some(serde_json::json!({"id":attrs.id,"text":attrs.text.trim(),"ipa":attrs.ipa.as_deref().unwrap_or("").trim(),"ipaUK":attrs.ipa_uk.as_deref().unwrap_or("").trim(),"ipaUS":attrs.ipa_us.as_deref().unwrap_or("").trim(),"meaning":attrs.meaning.as_deref().unwrap_or("").trim(),"highlights":attrs.highlights,"meaningHighlights":attrs.meaning_highlights.as_deref().unwrap_or_default()})),
                     _ => None,
                 }).collect();
                 cards.push(ExtractedSense {
@@ -73,6 +74,7 @@ fn collect(node: &Node, cards: &mut Vec<ExtractedSense>) {
                     word: word.into(),
                     locale: label(&table.locale),
                     ipa: attrs.ipa.trim().into(),
+                    ipa_uk: attrs.ipa_uk.as_deref().unwrap_or("").trim().into(),
                     part_of_speech: label(&sense.part_of_speech),
                     meaning: sense.meaning.trim().into(),
                     topics: serde_json::json!(topics),

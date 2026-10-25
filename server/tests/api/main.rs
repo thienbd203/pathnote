@@ -47,4 +47,5 @@ mod browser;
 
 mod recordings;
 
+mod british_pronunciation;
 mod flashcard_statistics;

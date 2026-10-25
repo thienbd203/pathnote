@@ -26,6 +26,7 @@ fn unchanged(old: &cards::Model, new: &ExtractedSense) -> bool {
         && old.word == new.word
         && old.locale == new.locale
         && old.ipa == new.ipa
+        && old.ipa_uk == new.ipa_uk
         && old.part_of_speech == new.part_of_speech
         && old.meaning == new.meaning
         && old.topics == new.topics
@@ -73,6 +74,7 @@ pub(in crate::modules) async fn sync<C: ConnectionTrait>(
             word_key: Set(word_key),
             locale: Set(sense.locale),
             ipa: Set(sense.ipa),
+            ipa_uk: Set(sense.ipa_uk),
             part_of_speech: Set(sense.part_of_speech),
             meaning: Set(sense.meaning),
             topics: Set(sense.topics),
@@ -93,6 +95,7 @@ pub(in crate::modules) async fn sync<C: ConnectionTrait>(
                         cards::Column::WordKey,
                         cards::Column::Locale,
                         cards::Column::Ipa,
+                        cards::Column::IpaUk,
                         cards::Column::PartOfSpeech,
                         cards::Column::Meaning,
                         cards::Column::Topics,

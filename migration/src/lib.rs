@@ -30,6 +30,7 @@ mod m20261016_020001_group_flashcards_by_word;
 mod m20261016_030001_flashcard_meanings_index;
 mod m20261021_034622_add_lesson_recordings;
 mod m20261024_010001_flashcard_study_time;
+mod m20261025_010001_british_pronunciation;
 pub struct Migrator;
 
 #[async_trait::async_trait]
@@ -59,6 +60,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261016_030001_flashcard_meanings_index::Migration),
             Box::new(m20261021_034622_add_lesson_recordings::Migration),
             Box::new(m20261024_010001_flashcard_study_time::Migration),
+            Box::new(m20261025_010001_british_pronunciation::Migration),
         ]
     }
 }

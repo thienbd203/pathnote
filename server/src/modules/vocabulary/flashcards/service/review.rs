@@ -78,17 +78,19 @@ pub async fn reveal(
         chrono::Utc::now().fixed_offset(),
     )?;
     let meaning = queue::meanings(&txn, user, &c).await?;
+    let ipa = crate::modules::vocabulary::pronunciation::ipa(&c);
+    let examples = crate::modules::vocabulary::pronunciation::examples(&c);
     let mut model: attempts::ActiveModel = t.into();
     model.revealed = Set(true);
     model.snapshot = Set(Some(
         serde_json::to_value(dto::Snapshot {
             word: c.word.clone(),
             meaning: meaning.clone(),
-            ipa: c.ipa.clone(),
-            locale: c.locale.clone(),
+            ipa: ipa.clone(),
+            locale: crate::modules::vocabulary::pronunciation::DEFAULT_LOCALE.into(),
             part_of_speech: c.part_of_speech.clone(),
             topics: c.topics.clone(),
-            examples: c.examples.clone(),
+            examples: examples.clone(),
         })
         .map_err(|e| AppError::Internal(e.to_string()))?,
     ));
@@ -98,10 +100,10 @@ pub async fn reveal(
         back: dto::Back {
             word: c.word,
             meaning,
-            ipa: c.ipa,
-            locale: c.locale,
+            ipa,
+            locale: crate::modules::vocabulary::pronunciation::DEFAULT_LOCALE.into(),
             part_of_speech: c.part_of_speech,
-            examples: c.examples,
+            examples,
         },
         options,
     })
@@ -200,6 +202,8 @@ pub async fn grade(
     )
     .exec(&txn)
     .await?;
+    let ipa = crate::modules::vocabulary::pronunciation::ipa(&c);
+    let examples = crate::modules::vocabulary::pronunciation::examples(&c);
     let snapshot = t.snapshot.clone();
     let mut saved: attempts::ActiveModel = t.into();
     saved.delta_days =
@@ -211,11 +215,11 @@ pub async fn grade(
         None => serde_json::to_value(dto::Snapshot {
             word: c.word,
             meaning: c.meaning,
-            ipa: c.ipa,
-            locale: c.locale,
+            ipa,
+            locale: crate::modules::vocabulary::pronunciation::DEFAULT_LOCALE.into(),
             part_of_speech: c.part_of_speech,
             topics: c.topics,
-            examples: c.examples,
+            examples,
         })
         .map_err(|e| AppError::Internal(e.to_string()))?,
     }));

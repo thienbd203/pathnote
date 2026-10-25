@@ -33,7 +33,7 @@ pub fn structure(node: &Value) -> Option<Value> {
         }
         "paragraph" => Some(paragraph()),
         "vocabulary" => Some(vocabulary(
-            node["attrs"]["locale"].as_str().unwrap_or("en-US"),
+            node["attrs"]["locale"].as_str().unwrap_or("en-GB"),
         )),
         "codeBlock" => Some(json!({"type":"codeBlock"})),
         "horizontalRule" => Some(json!({"type":"horizontalRule"})),
@@ -71,7 +71,7 @@ pub fn lesson_template() -> Value {
         heading("Ghi chú"),
         paragraph(),
         heading("Từ vựng"),
-        vocabulary("en-US"),
+        vocabulary("en-GB"),
         paragraph(),
     ])
 }

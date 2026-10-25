@@ -146,8 +146,9 @@ pub async fn create(db: &DatabaseConnection, user: i64, input: Create) -> Result
                     letters.swap(0, i);
                 }
             }
-            let examples: Vec<_> = card
-                .examples
+            let ipa = super::super::pronunciation::ipa(&card);
+            let british_examples = super::super::pronunciation::examples(&card);
+            let examples: Vec<_> = british_examples
                 .as_array()
                 .into_iter()
                 .flatten()
@@ -162,8 +163,8 @@ pub async fn create(db: &DatabaseConnection, user: i64, input: Create) -> Result
                 card: Card {
                     word: card.word,
                     meaning: card.meaning,
-                    ipa: card.ipa,
-                    locale: card.locale,
+                    ipa,
+                    locale: super::super::pronunciation::DEFAULT_LOCALE.into(),
                     part_of_speech: card.part_of_speech,
                     topics: card.topics,
                     examples: serde_json::Value::Array(examples),

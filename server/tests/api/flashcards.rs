@@ -23,6 +23,13 @@ async fn grouping_migration_preserves_latest_schedule_and_reconstructs_its_origi
     use server::entities::vocabulary_cards as vocabulary;
     use sha2::{Digest, Sha256};
     let app = LearningApp::spawn_before_flashcard_grouping().await;
+    // Current handlers need the later projection column while this test seeds the old grouping schema.
+    app.db
+        .execute_unprepared(
+            "ALTER TABLE vocabulary_cards ADD COLUMN ipa_uk TEXT NOT NULL DEFAULT ''",
+        )
+        .await
+        .unwrap();
     let a = lesson(&app, &app.owner_token).await;
     let b = lesson(&app, &app.owner_token).await;
     save(
@@ -92,6 +99,10 @@ async fn grouping_migration_preserves_latest_schedule_and_reconstructs_its_origi
         .one(app.db.as_ref())
         .await
         .unwrap()
+        .unwrap();
+    app.db
+        .execute_unprepared("ALTER TABLE vocabulary_cards DROP COLUMN ipa_uk")
+        .await
         .unwrap();
     Migrator::up(app.db.as_ref(), None).await.unwrap();
     let rows = memory::Entity::find().all(app.db.as_ref()).await.unwrap();
@@ -475,7 +486,7 @@ async fn edits_and_revoked_access_cannot_reveal_or_grade_old_cards() {
     let (id, mut content) = seed(&app).await;
     let first = next(&app, &app.owner_token, json!({})).await;
     let t = first["card"]["id"].as_str().unwrap();
-    content["content"][0]["content"][0]["content"][0]["attrs"]["ipa"] = json!("/new/");
+    content["content"][0]["content"][0]["content"][0]["attrs"]["ipaUK"] = json!("/new/");
     save(&app, id, &content, 1).await;
     assert_eq!(
         reveal(&app, &app.owner_token, t).await["back"]["ipa"],

@@ -225,6 +225,13 @@ Code: `server/src/modules/vocabulary/reviews/`, `server/src/modules/enrichment/`
 - Xóa một nguồn không xóa memory/lịch sử (từ có thể còn ở bài khác); xóa user thì cascade.
 - Phím: Space/Enter lật, 1–4 = Quên/Khó/Nhớ/Dễ; chấm xong tự sang thẻ. Nhãn thống kê là "Mục ôn".
 
+### Phát âm mặc định UK (25/10)
+
+- Block phát âm/bảng từ vựng mới, mẫu bài mới, JSON mẫu và giọng đọc mặc định dùng `en-GB`. Bảng từ vựng vẫn giữ hai nút UK/US để nghe đối chiếu; locale được ghi rõ trong note/import cũ được bảo toàn.
+- Thư viện từ vựng, lượt ôn gõ/chọn mới và mặt trước/đáp án flashcard dùng giọng UK. IPA từ/câu lấy từ `ipaUK`; chỉ dùng `ipa` cũ làm dự phòng khi nguồn vốn là `en-GB`. Dữ liệu chỉ có IPA Mỹ thì phần IPA UK để trống, không đổi nhãn thành UK. Giọng UK phải có trên thiết bị; không tự chọn giọng Mỹ khi thiếu giọng UK.
+- Migration `m20261025_010001_british_pronunciation` thêm `vocabulary_cards.ipa_uk`, lấy UK và IPA câu từ note hiện có, kể cả block lồng nhau. Khi lưu note tiếp, projection cập nhật cả IPA UK/US của câu. Không sửa nội dung/revision/Yjs của note, không thay `locale` nguồn, khóa nhóm, memory, due date hoặc lịch sử FSRS. Snapshot/lượt ôn đã tạo trước release giữ phát âm lịch sử của chúng; lượt mới dùng UK.
+- `locale` trong dữ liệu trả cho thư viện/ôn mới là locale phát âm; locale nguồn dùng nội bộ để giữ identity cũ. Không thêm query theo từng từ, không gọi dịch vụ IPA hàng loạt trong migration. Triển khai migration + Rust trước collaboration/frontend như workflow hiện có; không cần cấu hình VPS mới.
+
 ### Thống kê thời gian ôn (24/10)
 
 - Flashcard có hai mục **Ôn tập** / **Thống kê** (`/flashcards?view=statistics`). Thống kê hiển thị **Đã ôn hôm nay**, tổng thời gian của khoảng đang xem và biểu đồ cột Tuần/Tháng/Năm. Tuần bắt đầu thứ Hai; tuần/tháng có cột theo ngày, năm có 12 cột theo tháng. Có chuyển khoảng trước/sau và về hiện tại, không chuyển vượt khoảng hiện tại.
