@@ -42,6 +42,12 @@ Thứ tự kích hoạt Rust → collaboration → frontend là đúng: backend 
   - **Câu hỏi:** collaboration bản cũ tải Yjs state có `ipaUK/ipaUS` thì báo lỗi `node.check`, hay bỏ attr rồi lưu đè (mất dữ liệu)?
   - **Việc:** ghi kết quả vào `deploy/README.md`. Nếu bị lưu đè thì quy tắc floor ở D2 cũng áp dụng cho `collaboration_sha`.
 
+**Animation lật thẻ flashcard — còn thử tay trên Safari** (code xong 26/10/2026, chưa commit)
+
+Đã làm trong `pathnote-web`: `src/components/FlashcardFlip.vue` dùng `motion-v`, nối vào `VocabularyFlashcardsView.vue`; thông số ghi ở `docs/ui.md` mục "Chuyển động khi lật thẻ Flashcard"; test `e2e/flashcard-motion.spec.ts`. Unit test, build, format và toàn bộ e2e đều qua (136 passed).
+
+- Còn lại: thử tay trên Safari macOS và iOS (lật 3D, `backface-visibility`, nghiêng theo chuột, chế độ giảm chuyển động), rồi commit và xóa mục này.
+
 **Phát hành**
 - Blue–green: thử rollback tương thích trên staging và smoke realtime hai cửa sổ qua listener 3010. Lượt production đầu đã qua CI và chuyển green → blue; bằng chứng ở `docs/features.md`.
 - Smoke trên staging, rồi deploy production lần đầu có migration `m20261016_*` theo checklist trong `deploy/README.md` (kiểm tra `lower('É')`, cờ `breaking_migration`, backup).
