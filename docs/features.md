@@ -232,6 +232,12 @@ Code: `server/src/modules/vocabulary/reviews/`, `server/src/modules/enrichment/`
 - Migration `m20261025_010001_british_pronunciation` thêm `vocabulary_cards.ipa_uk`, lấy UK và IPA câu từ note hiện có, kể cả block lồng nhau. Khi lưu note tiếp, projection cập nhật cả IPA UK/US của câu. Không sửa nội dung/revision/Yjs của note, không thay `locale` nguồn, khóa nhóm, memory, due date hoặc lịch sử FSRS. Snapshot/lượt ôn đã tạo trước release giữ phát âm lịch sử của chúng; lượt mới dùng UK.
 - `locale` trong dữ liệu trả cho thư viện/ôn mới là locale phát âm; locale nguồn dùng nội bộ để giữ identity cũ. Không thêm query theo từng từ, không gọi dịch vụ IPA hàng loạt trong migration. Triển khai migration + Rust trước collaboration/frontend như workflow hiện có; không cần cấu hình VPS mới.
 
+### Lật thẻ (26/10)
+
+Màn ôn dùng WAAPI: chỉ lật sau khi API reveal trả về, đổi mặt ở góc 90°, khóa lật/chấm lặp trong chuyển động. Chấm thành công mới chạy chuyển thẻ; lỗi chấm giữ đáp án, lỗi tải thẻ tiếp cho phép tải lại mà không chấm lại. Khung thẻ giữ chiều cao theo màn hình; vùng nút và dòng đếm lượt ôn được dành chỗ trước để tránh nhảy khi lật/chấm. Nội dung dài cuộn riêng trong mỗi mặt thẻ, nút chấm ở ngoài vùng cuộn. Rời màn giữa lúc lật hủy animation an toàn, không chạy tiếp trên DOM đã bị gỡ. Không đổi API hay dữ liệu FSRS.
+
+Kiểm tra 26/10: 231 unit test; build/format qua; Chromium desktop/mobile 156 passed, 2 skipped; WebKit desktop/iPhone giả lập 32 passed. Regression đo khung thẻ trước/sau lật ở 1440px, 390px và 320px (sai số tối đa 1px). Test thời gian ôn dừng đồng hồ giả trước navigation, chờ chu kỳ gửi cuối sau idle và đúng phản hồi 503 khi retry; bộ đếm production giữ nguyên.
+
 ### Thống kê thời gian ôn (24/10)
 
 - Flashcard có hai mục **Ôn tập** / **Thống kê** (`/flashcards?view=statistics`). Thống kê hiển thị **Đã ôn hôm nay**, tổng thời gian của khoảng đang xem và biểu đồ cột Tuần/Tháng/Năm. Tuần bắt đầu thứ Hai; tuần/tháng có cột theo ngày, năm có 12 cột theo tháng. Có chuyển khoảng trước/sau và về hiện tại, không chuyển vượt khoảng hiện tại.
