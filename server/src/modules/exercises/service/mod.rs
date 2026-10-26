@@ -7,6 +7,7 @@ use crate::{
     AppError,
 };
 pub use create::create;
+pub(in crate::modules) use create::insert_many;
 pub use read::read;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DatabaseTransaction,

@@ -1,6 +1,6 @@
 use super::dto::{ImportResource, Input};
 use crate::{
-    entities::{ai_imports as imports, exercises},
+    entities::ai_imports as imports,
     modules::{
         notes::{
             document::{validate, Reference},
@@ -105,20 +105,12 @@ pub async fn prepare(
         txn.commit().await?;
         return Ok(response);
     }
-    let mut ids = Vec::new();
-    for (definition, question) in input.exercises.into_iter().zip(questions) {
-        let model = exercises::ActiveModel {
-            session_id: Set(session),
-            user_id: Set(user),
-            title: Set(definition.title),
-            question: Set(question),
-            revision: Set(1),
-            ..Default::default()
-        }
-        .insert(&txn)
-        .await?;
-        ids.push(model.id);
-    }
+    let rows = input
+        .exercises
+        .into_iter()
+        .map(|definition| definition.title)
+        .zip(questions);
+    let ids = crate::modules::exercises::service::insert_many(&txn, user, session, rows).await?;
     for (path, index) in replacements {
         *input.content.pointer_mut(&path).expect("validated path") = Value::from(ids[index]);
     }

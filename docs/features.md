@@ -493,3 +493,5 @@ Readiness collaboration `/up` kiểm Rust qua URL cấu hình (timeout 2s, cache
 - C1.5: tìm buổi theo ngày chọn midnight sớm nhất khi DST lặp giờ; nếu nhảy qua midnight thì chọn giây hợp lệ đầu ngày. Ngày bị bỏ toàn bộ không thêm điều kiện ngày, vẫn tìm theo tiêu đề, không trả 422. Test Santiago (gap), Havana (overlap) và Apia (ngày bị bỏ).
 
 - C1.6: lưu vị trí nghe dùng một upsert có điều kiện quyền/file/session/cha active trong chính SQL, không giữ khóa place. Test giữ khóa place nhưng insert và update vị trí vẫn hoàn tất; sai session, nguồn đã xóa và share bị thu hồi bị 404, không ghi đè vị trí cũ. Không đổi note revision.
+
+- C1.7: AI import và tạo bài tập dùng chung helper insert_many trả ID; validate/serialize vẫn trước khóa, insert/receipt vẫn cùng transaction. Test metric xác nhận 100 câu chỉ một INSERT, giữ thứ tự placeholder, retry không tạo trùng và batch rỗng không lỗi.

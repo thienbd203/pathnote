@@ -54,9 +54,6 @@ Các mục dưới đây là lỗi đã được đọc lại đúng dòng code.
 
 *C1 — Hiệu năng và đúng đắn (ưu tiên cao)*
 
-- **C1.7 Tạo bài tập từ Học cùng AI insert từng dòng trong lúc giữ khóa place**
-  - **Vị trí:** `ai_study/service.rs:106-118`.
-  - **Sửa:** dùng chung đường `insert_many(...).exec_with_returning_keys` của `exercises/service/create.rs:21-37`, tách thành một helper dùng chung.
 - **C1.8 Upload đọc tới 100 MiB vào RAM trước khi kiểm định dạng**
   - **Vị trí:** `media/handlers.rs:42-53`.
   - **Sửa tối thiểu:** giới hạn theo loại dự kiến ngay khi stream. Đuôi không phải mp3/m4a/mp4 thì dừng ở 10 MB.

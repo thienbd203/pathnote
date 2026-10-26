@@ -206,3 +206,71 @@ async fn ai_realtime_snapshot_attaches_import_and_invalid_cross_lesson_marker_is
     );
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn ai_import_inserts_one_batch_preserves_placeholder_order_and_retries_without_duplicates() {
+    let (app, queries) = LearningApp::spawn_with_queries(false).await;
+    let session = lesson(&app).await;
+    let mut body = payload(uuid::Uuid::new_v4());
+    let definition = body["exercises"][0].clone();
+    body["exercises"] = Value::Array(
+        (1..=100)
+            .map(|i| {
+                let mut d = definition.clone();
+                d["title"] = json!(format!("Question {i}"));
+                d["questions"][0]["prompt"] = json!(format!("Prompt {i} ___"));
+                d
+            })
+            .collect(),
+    );
+    body["content"]["content"]
+        .as_array_mut()
+        .unwrap()
+        .truncate(3);
+    for i in 1..=100 {
+        body["content"]["content"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"type":"exercise","attrs":{"exerciseId":i}}));
+    }
+    queries.lock().unwrap().clear();
+    let a = prepare(&app, session, &body).await;
+    let b = prepare(&app, session, &body).await;
+    assert_eq!(a["content"], b["content"]);
+    assert_eq!(
+        queries
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|sql| sql.starts_with("INSERT INTO \"exercises\""))
+            .count(),
+        1
+    );
+    for (i, node) in a["content"].as_array().unwrap().iter().skip(3).enumerate() {
+        let model = exercises::Entity::find_by_id(node["attrs"]["exerciseId"].as_i64().unwrap())
+            .one(app.db.as_ref())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(model.title, format!("Question {}", i + 1));
+        assert_eq!(model.question["prompt"], format!("Prompt {} ___", i + 1));
+    }
+    // A vocabulary-only AI section has no exercises and must not issue an empty INSERT.
+    body["key"] = json!(uuid::Uuid::new_v4());
+    body["exercises"] = json!([]);
+    body["content"]["content"]
+        .as_array_mut()
+        .unwrap()
+        .truncate(3);
+    prepare(&app, session, &body).await;
+    assert_eq!(
+        queries
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|sql| sql.starts_with("INSERT INTO \"exercises\""))
+            .count(),
+        1
+    );
+    app.cleanup().await;
+}

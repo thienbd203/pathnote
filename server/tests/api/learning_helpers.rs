@@ -7,7 +7,8 @@ use server::{
     access_token::AccessTokens, app::build_app, config::Config, entities::users, state::AppState,
     GoogleAuth,
 };
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+pub type Queries = Arc<Mutex<Vec<String>>>;
 use tower_sessions_sqlx_store::PostgresStore;
 
 pub struct LearningApp {
@@ -37,7 +38,7 @@ impl LearningApp {
         Self::spawn_config(false, false, Some((ipa, translation))).await
     }
     async fn spawn_config(enabled: bool, network: bool, service_url: Option<(&str, &str)>) -> Self {
-        Self::spawn_migrations(enabled, network, service_url, None, None).await
+        Self::spawn_migrations(enabled, network, service_url, None, None, None).await
     }
     pub async fn spawn_before_flashcard_grouping() -> Self {
         Self::spawn_migrations(
@@ -53,11 +54,18 @@ impl LearningApp {
                     .expect("shared-memory migration is registered") as u32,
             ),
             None,
+            None,
         )
         .await
     }
     pub async fn spawn_browser() -> Self {
-        Self::spawn_migrations(false, true, None, None, Some(4180)).await
+        Self::spawn_migrations(false, true, None, None, Some(4180), None).await
+    }
+    pub async fn spawn_with_queries(enabled: bool) -> (Self, Queries) {
+        let queries = Queries::default();
+        let app =
+            Self::spawn_migrations(enabled, false, None, None, None, Some(queries.clone())).await;
+        (app, queries)
     }
     async fn spawn_migrations(
         enabled: bool,
@@ -65,6 +73,7 @@ impl LearningApp {
         service_url: Option<(&str, &str)>,
         steps: Option<u32>,
         browser_port: Option<u16>,
+        queries: Option<Queries>,
     ) -> Self {
         dotenvy::dotenv().ok();
         let explicit = std::env::var("TEST_DATABASE_URL").ok();
@@ -89,8 +98,14 @@ impl LearningApp {
             .max_connections(3)
             .set_schema_search_path(&schema)
             .sqlx_logging(std::env::var_os("PATHNOTE_SQL_PROFILE").is_some());
-        let db = Arc::new(Database::connect(options).await.unwrap());
-        Migrator::up(db.as_ref(), steps).await.unwrap();
+        let mut db = Database::connect(options).await.unwrap();
+        Migrator::up(&db, steps).await.unwrap();
+        if let Some(queries) = queries {
+            db.set_metric_callback(move |info| {
+                queries.lock().unwrap().push(info.statement.sql.clone())
+            });
+        }
+        let db = Arc::new(db);
         let store = PostgresStore::new(db.get_postgres_connection_pool().clone())
             .with_schema_name(&schema)
             .unwrap()
