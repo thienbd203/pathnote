@@ -12,6 +12,7 @@ pub async fn start(
     user: CurrentUser,
     body: Result<AppJson<dto::Create>, AppError>,
 ) -> Result<ApiResponse<dto::ReviewResource>, AppError> {
+    // Giữ lỗi theo field nghiệp vụ (filters/settings/rating/mode/answer), không đổi contract.
     let AppJson(input) = body.map_err(|_| AppError::validation("mode", "Lượt ôn không hợp lệ."))?;
     Ok(ApiResponse::created(
         service::create(&s.db, user.id, input).await?,
@@ -30,6 +31,7 @@ pub async fn submit(
     AppPath(id): AppPath<i64>,
     body: Result<AppJson<dto::AnswerInput>, AppError>,
 ) -> Result<ApiResponse<dto::AnswerResource>, AppError> {
+    // Giữ lỗi theo field nghiệp vụ (filters/settings/rating/mode/answer), không đổi contract.
     let AppJson(input) =
         body.map_err(|_| AppError::validation("answer", "Đáp án không hợp lệ."))?;
     Ok(ApiResponse::ok(
@@ -42,6 +44,7 @@ pub async fn pronunciation(
     AppPath(id): AppPath<i64>,
     query: Result<AppQuery<dto::Position>, AppError>,
 ) -> Result<ApiResponse<dto::Pronunciation>, AppError> {
+    // Giữ lỗi theo bộ lọc/vị trí để giao diện hiển thị đúng phần nhập bị lỗi.
     let AppQuery(input) =
         query.map_err(|_| AppError::validation("position", "Vị trí không hợp lệ."))?;
     Ok(ApiResponse::ok(

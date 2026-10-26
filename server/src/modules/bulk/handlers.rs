@@ -10,6 +10,7 @@ async fn handler(
     kind: Kind,
     body: Result<AppJson<Input>, AppError>,
 ) -> Result<StatusCode, AppError> {
+    // Giữ lỗi ids để giao diện gắn thông báo vào danh sách mục được chọn.
     let AppJson(input) =
         body.map_err(|_| AppError::validation("ids", "Danh sách ID không hợp lệ."))?;
     service::remove(&s.db, u.id, kind, input).await?;

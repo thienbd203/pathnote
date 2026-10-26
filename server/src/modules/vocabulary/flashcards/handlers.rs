@@ -14,6 +14,7 @@ pub async fn overview(
     user: CurrentUser,
     input: Result<AppQuery<dto::Filters>, AppError>,
 ) -> Result<ApiResponse<dto::Overview>, AppError> {
+    // Giữ lỗi theo bộ lọc/vị trí để giao diện hiển thị đúng phần nhập bị lỗi.
     let AppQuery(input) =
         input.map_err(|_| AppError::validation("filters", "Bộ lọc không hợp lệ."))?;
     Ok(ApiResponse::ok(
@@ -25,6 +26,7 @@ pub async fn configure(
     user: CurrentUser,
     input: Result<AppJson<dto::SettingsInput>, AppError>,
 ) -> Result<ApiResponse<dto::Overview>, AppError> {
+    // Giữ lỗi theo field nghiệp vụ (filters/settings/rating/mode/answer), không đổi contract.
     let AppJson(input) =
         input.map_err(|_| AppError::validation("settings", "Cấu hình không hợp lệ."))?;
     Ok(ApiResponse::ok(
@@ -36,6 +38,7 @@ pub async fn next(
     user: CurrentUser,
     input: Result<AppJson<dto::Filters>, AppError>,
 ) -> Result<ApiResponse<dto::Next>, AppError> {
+    // Giữ lỗi theo field nghiệp vụ (filters/settings/rating/mode/answer), không đổi contract.
     let AppJson(input) =
         input.map_err(|_| AppError::validation("filters", "Bộ lọc không hợp lệ."))?;
     Ok(ApiResponse::ok(service::next(&s.db, user.id, input).await?))
@@ -71,6 +74,7 @@ pub async fn grade(
     AppPath(id): AppPath<Uuid>,
     input: Result<AppJson<dto::Grade>, AppError>,
 ) -> Result<ApiResponse<dto::GradeResult>, AppError> {
+    // Giữ lỗi theo field nghiệp vụ (filters/settings/rating/mode/answer), không đổi contract.
     let AppJson(input) =
         input.map_err(|_| AppError::validation("rating", "Đánh giá không hợp lệ."))?;
     Ok(ApiResponse::ok(
@@ -82,6 +86,7 @@ pub async fn create_run(
     user: CurrentUser,
     input: Result<AppJson<dto::Filters>, AppError>,
 ) -> Result<ApiResponse<dto::RunSummary>, AppError> {
+    // Giữ lỗi theo field nghiệp vụ (filters/settings/rating/mode/answer), không đổi contract.
     let AppJson(input) =
         input.map_err(|_| AppError::validation("filters", "Bộ lọc không hợp lệ."))?;
     Ok(ApiResponse::created(
@@ -93,6 +98,7 @@ pub async fn history(
     user: CurrentUser,
     input: Result<AppQuery<dto::HistoryFilters>, AppError>,
 ) -> Result<Json<Page<dto::HistoryEntry>>, AppError> {
+    // Giữ lỗi theo bộ lọc/vị trí để giao diện hiển thị đúng phần nhập bị lỗi.
     let AppQuery(input) =
         input.map_err(|_| AppError::validation("filters", "Bộ lọc lịch sử không hợp lệ."))?;
     Ok(Json(service::history(&s.db, user.id, input).await?))

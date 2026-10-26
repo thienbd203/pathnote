@@ -515,3 +515,7 @@ Readiness collaboration `/up` kiểm Rust qua URL cấu hình (timeout 2s, cache
 - C2.6: Question dùng một struct chứa 5 field chung và Kind flatten; validate/public/grade không còn match lặp để lấy cùng field. JSON giữ nguyên đủ 7 loại; strict wire adapter chỉ dùng lúc deserialize vì Serde không hỗ trợ flatten + deny_unknown_fields. Giữ từ chối field lạ/trùng, items sai loại/null/thiếu, không lộ answers/explanation. Test round-trip đủ 7 loại và strict input; toàn bộ test chấm bài tập hiện có.
 
 - C2.7: reveal, grade thiếu snapshot và lịch sử legacy dùng chung factory snapshot với locale/IPA/ví dụ UK và nghĩa gộp theo identity. Lịch sử gom nghĩa cả trang bằng một query, không N+1; khi source đã inactive và không còn cluster active thì giữ nghĩa nguồn chưa thay đổi. Snapshot đã lưu giữ nguyên, gồm accent cũ; content_key khác vẫn không dựng fallback. Test cả ba đường, nhiều log chỉ một query nghĩa, UK word/example, nghĩa gộp và không đổi FSRS.
+
+### Rà soát Rust C3 (26/10)
+
+- C3.1: ghi rõ ngoại lệ A.3 tại các handler bulk/IPA/flashcard/review/library: giữ thông báo theo field nghiệp vụ để tương thích giao diện, không thay JSON/status. Các extractor thông thường tiếp tục đi qua AppJson/AppQuery/AppPath.

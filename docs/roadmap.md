@@ -54,28 +54,27 @@ Các mục dưới đây là lỗi đã được đọc lại đúng dòng code.
 
 *C3 — Dọn dẹp nhỏ (ưu tiên thấp, có thể gộp vài mục vào một commit cùng module)*
 
-- **Comment bắt buộc theo A.3** cho các handler tự `map_err` lỗi extractor: `bulk/handlers.rs:13-14`, `ipa/handlers.rs:15-63`, `vocabulary/flashcards/handlers.rs`, `vocabulary/reviews/handlers.rs`, `vocabulary/library/handlers.rs:13`. Chỗ nào không cần thông báo riêng thì bỏ `map_err`, để `AppJson`/`AppQuery` tự trả lỗi.
-- **JSONB đọc bằng index chuỗi:**
+- **C3.2 JSONB đọc bằng index chuỗi:**
   - `cards.rs:64-66` đọc `run.settings["direction"]`, khi thiếu thì âm thầm dùng mặc định. Deserialize vào struct có kiểu.
   - `RunSummary.filters/settings`, `HistoryEntry.card` và `reviews::Card.source` trả struct thay vì `Value` (A.4).
-- **Guard NaN:** `vocabulary/flashcards/scheduler.rs:45`. NaN đi qua `clamp`, ép kiểu thành 0, thẻ đến hạn ngay. Kiểm `is_finite` trước.
-- **Gom hằng số** đang viết tay ở nhiều nơi:
+- **C3.3 Guard NaN:** `vocabulary/flashcards/scheduler.rs:45`. NaN đi qua `clamp`, ép kiểu thành 0, thẻ đến hạn ngay. Kiểm `is_finite` trước.
+- **C3.4 Gom hằng số** đang viết tay ở nhiều nơi:
   - Retention mặc định 0.9: `queue.rs:86`, `cards.rs:66`.
   - Giới hạn topic 60 và q 200: `library/service.rs:58`, `reviews/create.rs:26`, `flashcards/dto.rs:19`.
   - TTL 24 giờ của AI import: `ai_study/dto.rs:23`, `main.rs:73`.
   - `2_800_000` / `2_100_000` liên quan tới `3*1024*1024`: `collaboration.rs:83,92`, `internal.rs:21`.
-- **Gom hàm bị chép:**
+- **C3.5 Gom hàm bị chép:**
   - Mẫu hash `sha256(to_vec(...))`, có hai hàm cùng tên `key` khác nghĩa: `reviews/state.rs:11`, `queue.rs:15,28`, `flashcards/dto.rs:37`.
   - Validator tên: `places/dto.rs:24-48`, `courses/dto.rs:28-52`, `sessions/dto.rs:46`.
   - Làm sạch tên file: `media/service.rs:29`, `media/dto.rs:53`.
   - Lọc reference AI: `ai_study/service.rs:147-156,176-185`.
   - SQL đếm từ và bài tập: `courses/service.rs:196-200,237-238`.
   - Upsert trong settings: `settings/service.rs`.
-- **Giá trị kiểu chuỗi** thay bằng enum:
+- **C3.6 Giá trị kiểu chuỗi** thay bằng enum:
   - Kind media `"file"`: `media/service.rs:143`, `recordings/service.rs:27,93`, `notes/document/mod.rs:12` dùng `media::dto::Kind`.
   - `"word"`/`"pair"`: `ipa/service.rs`.
   - Category settings: `settings/service.rs`.
-- **Lặt vặt:**
+- **C3.7 Lặt vặt:**
   - `auth/handlers.rs:98`: đổi `auth.user.unwrap()` thành `.ok_or(AppError::Unauthenticated)?`.
   - `config.rs:115`: `optional()` bỏ qua chuỗi rỗng; giá trị mặc định `.storage/media` không chép sang `bin/media-cleanup.rs:6`.
   - `error.rs:110`: `Display` của `AppError` in đúng biến thể lỗi.
