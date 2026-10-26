@@ -32,6 +32,27 @@ fn calendar_day(term: &str, year: i32) -> Option<NaiveDate> {
     }
     NaiveDate::from_ymd_opt(year, parts[1].parse().ok()?, parts[0].parse().ok()?)
 }
+/// Chrono resolves overlaps with `earliest`; gaps require finding the first
+/// representable local instant. A skipped calendar date has no date predicate.
+fn day_start(tz: chrono_tz::Tz, day: NaiveDate) -> Option<chrono::DateTime<chrono::FixedOffset>> {
+    let midnight = day.and_hms_opt(0, 0, 0)?;
+    let resolve = |seconds| {
+        tz.from_local_datetime(&(midnight + chrono::Duration::seconds(seconds)))
+            .earliest()
+            .map(|dt| dt.fixed_offset())
+    };
+    if let Some(start) = resolve(0) {
+        return Some(start);
+    }
+    for minute in 1..1440 {
+        if resolve(minute * 60).is_some() {
+            // Historical timezone transitions can include seconds, not just hours.
+            return ((minute - 1) * 60 + 1..=minute * 60).find_map(resolve);
+        }
+    }
+    None
+}
+
 pub async fn search(
     db: &DatabaseConnection,
     user_id: i64,
@@ -88,38 +109,16 @@ pub async fn search(
         .like(LikeExpr::new(pattern).escape('!'));
         let mut matching = Condition::any().add(title);
         if let Some(day) = calendar_day(term, Utc::now().with_timezone(&tz).year()) {
-            let next = day
+            if let Some((start, end)) = day
                 .succ_opt()
-                .ok_or_else(|| AppError::validation("q", "Ngày tìm kiếm không hợp lệ."))?;
-            let start = tz
-                .from_local_datetime(&day.and_hms_opt(0, 0, 0).unwrap())
-                .single()
-                .ok_or_else(|| {
-                    AppError::validation(
-                        "timezone",
-                        "Ngày này không có mốc bắt đầu duy nhất tại múi giờ đã chọn.",
-                    )
-                })?;
-            let end = tz
-                .from_local_datetime(&next.and_hms_opt(0, 0, 0).unwrap())
-                .single()
-                .ok_or_else(|| {
-                    AppError::validation(
-                        "timezone",
-                        "Ngày kế tiếp không có mốc bắt đầu duy nhất tại múi giờ đã chọn.",
-                    )
-                })?;
-            matching = matching.add(
-                Condition::all()
-                    .add(
-                        crate::entities::sessions::Column::StartsAt
-                            .gte(start.with_timezone(&Utc).fixed_offset()),
-                    )
-                    .add(
-                        crate::entities::sessions::Column::StartsAt
-                            .lt(end.with_timezone(&Utc).fixed_offset()),
-                    ),
-            );
+                .and_then(|next| day_start(tz, day).zip(day_start(tz, next)))
+            {
+                matching = matching.add(
+                    Condition::all()
+                        .add(crate::entities::sessions::Column::StartsAt.gte(start))
+                        .add(crate::entities::sessions::Column::StartsAt.lt(end)),
+                );
+            }
         }
         query = query.filter(matching);
     }

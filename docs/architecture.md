@@ -250,3 +250,5 @@ Các document schema 1–3 vẫn đọc được; client hiện tại lưu bằn
 | Hiệu suất ôn (24/10) | `GET /flashcards/statistics` | Chỉ thời gian hoạt động | Bổ sung `performance:{total,ratings:[again,hard,good,easy],remembered_rate:number|null,buckets:[{date,ratings:[again,hard,good,easy]}]}`; đếm riêng attempt đã chấm của người gọi theo reviewed_at/timezone và cùng period, có lịch sử cũ, không trả nội dung nguồn. Rate = (Good+Easy)/tổng lượt, null khi không có lượt. Week/month theo ngày, year theo tháng; ngày trống có zero counts. Chỉ SELECT, không migration/đổi FSRS; web giữ tương thích nếu thiếu performance. |
 
 | 26/10 C1.4 | `GET/PUT /sessions/{id}/note`, bridge, tạo template/structure | Note mới mặc định schema 3, nhận writer thiếu version | Note mới/trống trả schema 4, writer thiếu version bị 409 client_outdated. Grace schema 3 chỉ dành cho note legacy đã tồn tại. |
+
+| 26/10 C1.5 | `GET /sessions/search` | Ngày DST không có midnight duy nhất trả 422 | Chọn mốc đầu ngày hợp lệ, giữ cả hai giờ trùng; ngày bị bỏ toàn bộ chỉ tìm tiêu đề, trả 200. |

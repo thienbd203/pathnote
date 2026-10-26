@@ -161,7 +161,7 @@ async fn search_dst_day_has_twenty_three_hours_and_wildcards_are_literal() {
         .add_query_param("timezone", "Pacific/Apia")
         .add_query_param("q", "30/12/2011")
         .await
-        .assert_status_unprocessable_entity();
+        .assert_status_ok();
     app.cleanup().await;
 }
 
@@ -320,5 +320,59 @@ async fn workspace_filters_paginates_and_neighbors_stay_inside_owned_parent() {
     r.assert_status_ok();
     assert_eq!(r.json::<Value>()["meta"]["total"], 1);
     assert_eq!(r.json::<Value>()["data"][0]["id"], future);
+    app.cleanup().await;
+}
+
+#[tokio::test]
+async fn search_handles_midnight_dst_gap_and_overlap_without_losing_sessions() {
+    let app = LearningApp::spawn().await;
+    let p = place(&app, &app.owner_token).await;
+    for (tz, day, times) in [
+        (
+            "America/Santiago",
+            "6/9/2026",
+            [
+                "2026-09-06T03:00:00Z",
+                "2026-09-06T04:00:00Z",
+                "2026-09-07T02:00:00Z",
+                "2026-09-07T03:00:00Z",
+            ],
+        ),
+        (
+            "America/Havana",
+            "1/11/2026",
+            [
+                "2026-11-01T03:00:00Z",
+                "2026-11-01T04:30:00Z",
+                "2026-11-01T05:30:00Z",
+                "2026-11-02T05:00:00Z",
+            ],
+        ),
+    ] {
+        let mut expected = Vec::new();
+        for (i, time) in times.iter().enumerate() {
+            let id = session(&app, p, &app.owner_token, "Lesson", time, tz).await;
+            if i == 1 || i == 2 {
+                expected.push(id);
+            }
+        }
+        let response = app
+            .api
+            .get("/api/v1/sessions/search")
+            .add_header("authorization", bearer(&app.owner_token))
+            .add_query_param("q", day)
+            .add_query_param("timezone", tz)
+            .await;
+        response.assert_status_ok();
+        assert_eq!(
+            response.json::<Value>()["data"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|row| row["id"].as_i64().unwrap())
+                .collect::<Vec<_>>(),
+            expected
+        );
+    }
     app.cleanup().await;
 }

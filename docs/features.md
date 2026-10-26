@@ -489,3 +489,5 @@ Readiness collaboration `/up` kiểm Rust qua URL cấu hình (timeout 2s, cache
 - C1.3: overview chỉ tải cột memory/lịch sử cần để tính FSRS; replay từ 32 chuỗi stale hoặc trên 512 lượt được chuyển sang blocking pool. Lịch sử thiếu dùng stability đã lưu, state không hợp lệ được bỏ qua, không làm hỏng toàn bộ overview. Giữ GET read-only để tránh ghi replay đè lên lượt chấm đồng thời; lịch ôn không đổi. Test fallback qua API và 64 thẻ có một state lỗi.
 
 - C1.4: ghi chú mới (trống, template, sao chép cấu trúc) đều khai báo schema hiện tại 4; writer thiếu version bị 409 client_outdated. Chỉ note legacy đã lưu mới dùng hằng legacy 3 cho grace D1. AI import/IPA validation dùng version hiện tại. Test tạo cả ba loại và chặn writer cũ, giữ test grace cho dữ liệu cũ.
+
+- C1.5: tìm buổi theo ngày chọn midnight sớm nhất khi DST lặp giờ; nếu nhảy qua midnight thì chọn giây hợp lệ đầu ngày. Ngày bị bỏ toàn bộ không thêm điều kiện ngày, vẫn tìm theo tiêu đề, không trả 422. Test Santiago (gap), Havana (overlap) và Apia (ngày bị bỏ).

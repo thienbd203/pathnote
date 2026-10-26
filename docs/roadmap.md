@@ -54,10 +54,6 @@ Các mục dưới đây là lỗi đã được đọc lại đúng dòng code.
 
 *C1 — Hiệu năng và đúng đắn (ưu tiên cao)*
 
-- **C1.5 Tìm buổi học theo ngày trả 422 ở múi giờ có nửa đêm bị nhảy giờ (DST)**
-  - **Vị trí:** `sessions/service/search.rs:94-111`.
-  - **Sửa:** dùng `.earliest()`. Khi nửa đêm không tồn tại thì lấy mốc hợp lệ đầu tiên, hoặc bỏ điều kiện ngày, không báo lỗi.
-  - **Test:** chạy với `America/Santiago` vào ngày đổi giờ.
 - **C1.6 Lưu tiến độ nghe giữ khóa ghi của cả place**
   - **Vị trí:** `media/recordings/service.rs:88-90`.
   - **Lỗi:** client gửi tiến độ vài giây một lần, tranh khóa với lưu ghi chú và upload.
