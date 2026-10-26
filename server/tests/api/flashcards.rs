@@ -1325,3 +1325,47 @@ async fn invalid_saved_run_settings_fail_before_creating_a_ticket_instead_of_def
     assert!(restored["card"].is_object());
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn non_finite_saved_memory_fails_reveal_without_changing_ticket_or_schedule() {
+    let app = LearningApp::spawn().await;
+    let (session, _) = seed(&app).await;
+    let first = next(&app, &app.owner_token, json!({"session_id":session})).await;
+    let id = first["card"]["id"].as_str().unwrap();
+    reveal(&app, &app.owner_token, id).await;
+    grade(&app, id, 3).await;
+    let row = memory::Entity::find()
+        .one(app.db.as_ref())
+        .await
+        .unwrap()
+        .unwrap();
+    let mut row: memory::ActiveModel = row.into();
+    row.stability = Set(f32::NAN);
+    row.due_at = Set(Utc::now().fixed_offset() - Duration::minutes(1));
+    let saved = row.update(app.db.as_ref()).await.unwrap();
+    let card = next(&app, &app.owner_token, json!({"session_id":session})).await;
+    let id = card["card"]["id"].as_str().unwrap();
+    app.api
+        .post(&format!("/api/v1/flashcards/{id}/reveal"))
+        .add_header("authorization", auth(&app.owner_token))
+        .await
+        .assert_status(StatusCode::INTERNAL_SERVER_ERROR);
+    let ticket = server::entities::flashcard_attempts::Entity::find_by_id(
+        uuid::Uuid::parse_str(id).unwrap(),
+    )
+    .one(app.db.as_ref())
+    .await
+    .unwrap()
+    .unwrap();
+    assert!(!ticket.revealed);
+    assert!(ticket.snapshot.is_none());
+    let after = memory::Entity::find()
+        .one(app.db.as_ref())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(after.due_at, saved.due_at);
+    assert_eq!(after.reviews, saved.reviews);
+    assert!(after.stability.is_nan());
+    app.cleanup().await;
+}

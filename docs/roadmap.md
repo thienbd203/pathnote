@@ -54,7 +54,6 @@ Các mục dưới đây là lỗi đã được đọc lại đúng dòng code.
 
 *C3 — Dọn dẹp nhỏ (ưu tiên thấp, có thể gộp vài mục vào một commit cùng module)*
 
-- **C3.3 Guard NaN:** `vocabulary/flashcards/scheduler.rs:45`. NaN đi qua `clamp`, ép kiểu thành 0, thẻ đến hạn ngay. Kiểm `is_finite` trước.
 - **C3.4 Gom hằng số** đang viết tay ở nhiều nơi:
   - Retention mặc định 0.9: `queue.rs:86`, `cards.rs:66`.
   - Giới hạn topic 60 và q 200: `library/service.rs:58`, `reviews/create.rs:26`, `flashcards/dto.rs:19`.
@@ -79,6 +78,44 @@ Các mục dưới đây là lỗi đã được đọc lại đúng dòng code.
   - Gọi thừa `page_size()`: `sessions/service/mod.rs:99`.
   - Status 400 "đang dùng realtime" chuyển thành 409 theo A.4: `notes/collaboration.rs:30`, `notes/service/mod.rs:132,216`. Đây là thay đổi contract, phải ghi vào bảng.
   - `vocabulary/flashcards/service/statistics.rs:34-75`: bỏ transaction không cần thiết, INSERT/EXISTS viết bằng SeaQuery (`insert_many().on_conflict(do_nothing)`).
+
+**Animation lật thẻ flashcard** (repo `pathnote-web`, chốt 27/10/2026)
+
+Mục tiêu: màn ôn `/flashcards/study` (`src/views/VocabularyFlashcardsView.vue`) có chuyển động như bản demo đã duyệt (Artifact "Lật thẻ Pathnote"). Logic ôn giữ nguyên: ticket, `reveal`/`grade`, phím tắt, FSRS, request.
+
+1. **Thư viện:** dùng Motion for Vue (`motion-v`, bản 2.x mới nhất), không tự viết bằng Web Animations API. Dùng các API: `motion.*`, `AnimatePresence`, transition `type: 'spring'`, `MotionConfig reducedMotion="user"`, `useMotionValue`.
+2. **Cấu trúc thẻ:**
+   - Một khối `flipper` chứa hai mặt xếp chồng bằng CSS grid (`grid-area: 1/1`), nên chiều cao thẻ bằng mặt cao hơn.
+   - Cả hai mặt có `backface-visibility: hidden`; mặt sau xoay sẵn `rotateY(180deg)`.
+   - Mặt nào đang ẩn thì đặt `aria-hidden="true"`.
+   - Nội dung mặt sau chỉ render sau khi `reveal` trả về. **Không gọi API sớm, không lộ đáp án trước.**
+3. **Chờ API khi bấm lật:** thẻ thu nhỏ `scale .985` và lắc `rotateY` ±6° lặp lại cho tới khi có response. Nút chuyển sang "Đang lật…" như hiện tại.
+4. **Lật:**
+   - `rotateY` từ 0 lên 180, spring `stiffness 170, damping 18`.
+   - Cùng lúc thẻ nhấc lên (`translateZ 40px`, `scale 1.03`) và bóng đổ sâu hơn ở khoảng 45% thời gian, rồi hạ xuống.
+   - Một vệt sáng quét ngang mặt sau (CSS keyframe, 0,75 giây).
+   - Các dòng đáp án hiện lần lượt, mỗi dòng trễ 70 ms, `opacity` 0→1 kèm `y` 10→0.
+   - Bốn nút chấm hiện lần lượt, mỗi nút trễ 40 ms.
+   - Chiều cao thẻ đổi mượt bằng `layout`.
+5. **Chấm điểm:**
+   - Viền thẻ nháy màu của mức chấm trong 420 ms.
+   - Thẻ bay ra theo mức chấm, dùng `AnimatePresence` với key là ID ticket và prop `custom` là mức chấm, thời gian 420 ms, ease-in:
+     - Quên: giật nhẹ rồi rơi xuống trái (`x -140, y 90, rotate -14°`).
+     - Khó: trượt trái (`x -160, rotate -7°`).
+     - Nhớ: trượt phải (`x 160, rotate 7°`).
+     - Dễ: bay lên phải (`x 150, y -120, rotate 12°, scale .95`).
+   - Thẻ mới trồi lên từ chồng bài: từ `y 11, scale .955, opacity .7` về vị trí chuẩn bằng spring `stiffness 260, damping 22`.
+6. **Chồng bài:** hai lớp thẻ mờ phía sau (`translateY 11px scale .955 opacity .75` và `translateY 22px scale .91 opacity .45`), giật nhẹ khi thẻ trên cùng rời đi. Khi lượt ôn còn ít thẻ hơn thì ẩn bớt lớp nếu dữ liệu cho biết số thẻ còn lại; nếu không có dữ liệu đó thì luôn hiện cả hai.
+7. **Nghiêng theo chuột:** chỉ khi `(hover: hover) and (pointer: fine)`, tối đa 6°, trả về 0 khi chuột rời thẻ. Tắt khi đang chờ API hoặc đang có animation.
+8. **Chạm để lật:** cả thẻ là vùng bấm khi chưa lật, có `role="button"` và `aria-label`. Nút "Hiện đáp án" và phím Space/Enter vẫn giữ. Phím 1–4 không chạy khi đang có animation, hoặc giữ nguyên guard `busy`/`graded` hiện có.
+9. **Giảm chuyển động:** đi theo hệ điều hành qua `MotionConfig reducedMotion="user"`. Khi bật thì chỉ mờ chéo 150 ms, không xoay, không bay, không nghiêng. Kiểm tra bằng `page.emulateMedia({ reducedMotion: 'reduce' })`.
+   - **Lỗi đã gặp trong demo:** sau khi làm mờ mặt trước, thẻ bị trắng hẳn vì giá trị opacity 0 của animation bị ghi lại vào style. Thêm test e2e: ở chế độ giảm chuyển động, sau chu trình lật → chấm, mặt trước của thẻ kế tiếp vẫn hiện.
+10. **Không đổi:** API, số request (ngân sách `e2e/request-budgets.ts` không được tăng), luồng lỗi và thử lại, phát âm, lịch sử.
+11. **Kiểm tra:**
+    - `npm test`, `npm run build`, `npm run format:check`, `npm run e2e`.
+    - Ảnh visual của màn ôn chụp với `reducedMotion: 'reduce'` để ổn định. Nếu ảnh thay đổi thì cập nhật và nêu lý do.
+    - Thử tay trên Chrome và Safari (desktop và iOS), vì `backface-visibility` và `preserve-3d` hay lỗi trên Safari.
+12. **Tài liệu:** thêm mục "Chuyển động" vào `docs/ui.md` gồm thông số spring, thời gian, quy tắc giảm chuyển động và quy tắc chỉ lật sau khi API trả về.
 
 **Phát hành**
 - Blue–green: thử rollback tương thích trên staging và smoke realtime hai cửa sổ qua listener 3010. Lượt production đầu đã qua CI và chuyển green → blue; bằng chứng ở `docs/features.md`.
