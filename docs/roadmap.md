@@ -52,12 +52,6 @@ Kết quả review: không có lỗi bảo mật. Những phần đã làm tốt
 
 Các mục dưới đây là lỗi đã được đọc lại đúng dòng code. Đường dẫn tính từ `server/src/modules/`. Sau mỗi mục, chạy đủ ba lệnh ở A.7 của `docs/architecture.md`.
 
-*C1 — Hiệu năng và đúng đắn (ưu tiên cao)*
-
-- **C1.9 Lưu ghi chú qua bridge đọc lại cả dòng (kèm `yjs_state`) 2–3 lần**
-  - **Vị trí:** `notes/service/collaboration.rs:67,73,110,114,146`.
-  - **Sửa:** làm giống đường REST (`notes/service/mod.rs:123-125`): load một lần, dựng kết quả từ model trả về.
-
 *C2 — Gộp logic bị chép (ưu tiên trung bình; đã bắt đầu lệch nhau)*
 
 - **C2.1 Ghi ghi chú bị chép giữa REST và bridge**

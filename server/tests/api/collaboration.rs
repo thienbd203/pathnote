@@ -318,3 +318,64 @@ async fn schema_four_transition_accepts_missing_version_only_for_plain_legacy_no
     assert_eq!(response["data"]["schema_version"], 3);
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn bridge_reads_note_once_per_request_and_preserves_large_state_on_retry_and_conflict() {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    let (app, queries) = LearningApp::spawn_with_queries(true).await;
+    let id = lesson(&app).await;
+    let path = format!("/api/v1/internal/notes/{id}");
+    let state = STANDARD.encode(vec![42u8; 2 * 1024 * 1024]);
+    let payload = json!({"content":doc(),"schema_version":4,"state":state,"base_revision":0});
+    let note_reads = || {
+        queries
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|sql| sql.starts_with("SELECT") && sql.contains("FROM \"notes\""))
+            .count()
+    };
+    for _ in 0..2 {
+        queries.lock().unwrap().clear();
+        let saved = app
+            .api
+            .put(&path)
+            .add_header("x-collaboration-secret", SECRET)
+            .json(&payload)
+            .await;
+        saved.assert_status_ok();
+        assert_eq!(saved.json::<Value>()["data"]["revision"], 1);
+        assert_eq!(note_reads(), 1);
+    }
+    queries.lock().unwrap().clear();
+    let fetched = app
+        .api
+        .get(&path)
+        .add_header("x-collaboration-secret", SECRET)
+        .await;
+    fetched.assert_status_ok();
+    assert_eq!(note_reads(), 1);
+    assert_eq!(fetched.json::<Value>()["data"]["state"], state);
+    assert_eq!(fetched.json::<Value>()["data"]["content"], doc());
+    let mut stale = payload.clone();
+    stale["content"]["content"][0]["content"][0]["text"] = json!("Must not overwrite");
+    queries.lock().unwrap().clear();
+    let conflict = app
+        .api
+        .put(&path)
+        .add_header("x-collaboration-secret", SECRET)
+        .json(&stale)
+        .await;
+    conflict.assert_status(StatusCode::CONFLICT);
+    assert_eq!(note_reads(), 1);
+    assert_eq!(conflict.json::<Value>()["data"]["revision"], 1);
+    let saved = notes::Entity::find_by_id(id)
+        .one(app.db.as_ref())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(saved.content, doc());
+    assert_eq!(saved.revision, 1);
+    assert_eq!(STANDARD.encode(saved.yjs_state.unwrap()), state);
+    app.cleanup().await;
+}

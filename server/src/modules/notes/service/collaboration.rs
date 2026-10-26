@@ -64,13 +64,13 @@ async fn active_session<C: ConnectionTrait>(db: &C, id: i64) -> Result<sessions:
 }
 pub async fn fetch(db: &DatabaseConnection, id: i64) -> Result<StateResource, AppError> {
     active_session(db, id).await?;
-    let state = notes::Entity::find_by_id(id)
-        .one(db)
-        .await?
-        .and_then(|n| n.yjs_state)
+    let loaded = notes::Entity::find_by_id(id).one(db).await?;
+    let state = loaded
+        .as_ref()
+        .and_then(|n| n.yjs_state.as_ref())
         .map(|bytes| STANDARD.encode(bytes));
     Ok(StateResource {
-        note: service::note(db, id).await?,
+        note: service::resource(id, loaded),
         state,
     })
 }
@@ -109,15 +109,16 @@ pub async fn store(
         .ok_or(AppError::Forbidden)?;
     let txn = places::write_tx(db, place.user_id, place.id).await?;
     active_session(&txn, id).await?;
-    let current = service::note(&txn, id).await?;
+    let loaded = notes::Entity::find_by_id(id).one(&txn).await?;
+    let existed = loaded.is_some();
+    let unchanged = loaded
+        .as_ref()
+        .is_some_and(|n| n.yjs_state.as_ref() == Some(&bytes) && n.content == input.content);
+    let current = service::resource(id, loaded);
     let version =
         super::super::schema::write_version(input.schema_version, &current, &input.content)?;
     service::validate_references(&txn, id, &references).await?;
-    let old = notes::Entity::find_by_id(id).one(&txn).await?;
-    if old
-        .as_ref()
-        .is_some_and(|n| n.yjs_state.as_ref() == Some(&bytes) && n.content == input.content)
-    {
+    if unchanged {
         return Ok(current);
     }
     if current.revision != input.base_revision {
@@ -135,17 +136,17 @@ pub async fn store(
         revision: Set(current.revision + 1),
         saved_at: Set(now),
     };
-    if old.is_some() {
-        next.update(&txn).await?;
+    let saved = if existed {
+        next.update(&txn).await?
     } else {
-        next.insert(&txn).await?;
-    }
+        next.insert(&txn).await?
+    };
     sessions::Entity::update_many()
         .col_expr(sessions::Column::UpdatedAt, Expr::value(now))
         .filter(sessions::Column::Id.eq(id))
         .exec(&txn)
         .await?;
-    let note: NoteResource = service::note(&txn, id).await?;
+    let note = service::resource(id, Some(saved));
     crate::modules::ai_study::service::attach(&txn, id, &references).await?;
     crate::modules::vocabulary::sync::sync(&txn, id, vocabulary).await?;
     txn.commit().await?;
