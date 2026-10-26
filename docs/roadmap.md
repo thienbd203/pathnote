@@ -54,11 +54,6 @@ Các mục dưới đây là lỗi đã được đọc lại đúng dòng code.
 
 *C3 — Dọn dẹp nhỏ (ưu tiên thấp, có thể gộp vài mục vào một commit cùng module)*
 
-- **C3.4 Gom hằng số** đang viết tay ở nhiều nơi:
-  - Retention mặc định 0.9: `queue.rs:86`, `cards.rs:66`.
-  - Giới hạn topic 60 và q 200: `library/service.rs:58`, `reviews/create.rs:26`, `flashcards/dto.rs:19`.
-  - TTL 24 giờ của AI import: `ai_study/dto.rs:23`, `main.rs:73`.
-  - `2_800_000` / `2_100_000` liên quan tới `3*1024*1024`: `collaboration.rs:83,92`, `internal.rs:21`.
 - **C3.5 Gom hàm bị chép:**
   - Mẫu hash `sha256(to_vec(...))`, có hai hàm cùng tên `key` khác nghĩa: `reviews/state.rs:11`, `queue.rs:15,28`, `flashcards/dto.rs:37`.
   - Validator tên: `places/dto.rs:24-48`, `courses/dto.rs:28-52`, `sessions/dto.rs:46`.

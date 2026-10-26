@@ -79,7 +79,9 @@ pub async fn store(
     input: SaveState,
 ) -> Result<NoteResource, AppError> {
     let session = active_session(db, id).await?;
-    if !(0..i32::MAX).contains(&input.base_revision) || input.state.len() > 2_800_000 {
+    if !(0..i32::MAX).contains(&input.base_revision)
+        || input.state.len() > super::super::limits::YJS_BASE64_BYTES
+    {
         return Err(AppError::validation(
             "state",
             "Trạng thái đồng bộ không hợp lệ.",
@@ -88,7 +90,7 @@ pub async fn store(
     let bytes = STANDARD
         .decode(&input.state)
         .map_err(|_| AppError::validation("state", "Trạng thái đồng bộ không hợp lệ."))?;
-    if bytes.is_empty() || bytes.len() > 2_100_000 {
+    if bytes.is_empty() || bytes.len() > super::super::limits::YJS_STATE_BYTES {
         return Err(AppError::validation(
             "state",
             "Trạng thái đồng bộ quá lớn hoặc rỗng.",

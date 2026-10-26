@@ -18,7 +18,7 @@ pub fn routes(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/sessions/{id}/collaboration/authorize", post(authorize))
         .route("/internal/notes/{id}", get(fetch).put(store))
-        .layer(DefaultBodyLimit::max(3 * 1024 * 1024))
+        .layer(DefaultBodyLimit::max(super::limits::BRIDGE_BODY_BYTES))
         .layer(middleware::from_fn_with_state(state, bridge_secret))
 }
 async fn bridge_secret(

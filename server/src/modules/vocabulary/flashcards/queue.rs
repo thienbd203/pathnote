@@ -131,16 +131,18 @@ pub async fn configuration<C: ConnectionTrait>(
     let config = settings::Entity::find_by_id((user, f.scope()))
         .one(db)
         .await?;
-    Ok(config.map_or((Direction::ViEn, 0.9), |c| {
-        (
-            match c.direction.as_str() {
-                "en_vi" => Direction::EnVi,
-                "both" => Direction::Both,
-                _ => Direction::ViEn,
-            },
-            c.retention,
-        )
-    }))
+    Ok(
+        config.map_or((Direction::ViEn, super::DEFAULT_RETENTION), |c| {
+            (
+                match c.direction.as_str() {
+                    "en_vi" => Direction::EnVi,
+                    "both" => Direction::Both,
+                    _ => Direction::ViEn,
+                },
+                c.retention,
+            )
+        }),
+    )
 }
 pub async fn memory<C: ConnectionTrait>(
     db: &C,

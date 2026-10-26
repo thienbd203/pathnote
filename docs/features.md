@@ -523,3 +523,5 @@ Readiness collaboration `/up` kiểm Rust qua URL cấu hình (timeout 2s, cache
 - C3.2: cấu hình run được deserialize bằng Configuration và kiểm retention, không mặc định khi direction/retention đã lưu bị hỏng. RunSummary filters/settings, HistoryEntry.card, review Card.source và filters dùng DTO có kiểu; shape hợp lệ giữ nguyên, không thay snapshot accent cũ. Test cấu hình lỗi trả 500 trước INSERT ticket, khôi phục config đọc được; toàn bộ test JSON/history/review hiện có.
 
 - C3.3: kiểm finite và miền retention/memory trước FSRS, kiểm output trước clamp/cast; ngày đến hạn dùng checked_add. NaN/Infinity không thể thành thẻ đến hạn ngay. Test interval/retention không hữu hạn, clamp hữu hạn giữ nguyên, API reveal với stability NaN trả 500 mà không đổi ticket/lịch.
+
+- C3.4: gom retention mặc định, giới hạn topic/query, TTL AI pending (API và worker), cap body/Yjs/base64. Giá trị và thời hạn cũ giữ nguyên; base64 cap tính từ cap nhị phân. Test encode đúng cap và cả state + note tối đa vẫn vừa envelope bridge.

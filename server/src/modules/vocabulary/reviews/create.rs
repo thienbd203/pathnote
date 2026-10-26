@@ -2,6 +2,7 @@ use super::{
     dto::*,
     state::{key_fields, Review},
 };
+use crate::modules::vocabulary::{MAX_QUERY_CHARS, MAX_TOPIC_CHARS};
 use crate::{
     entities::{
         places, sessions, vocabulary_cards as cards, vocabulary_progress as progress,
@@ -62,8 +63,14 @@ pub async fn create(db: &DatabaseConnection, user: i64, input: Create) -> Result
     if !(1..=50).contains(&limit)
         || input.course_id.is_some_and(|id| id <= 0)
         || input.session_id.is_some_and(|id| id <= 0)
-        || input.topic.as_ref().is_some_and(|t| t.chars().count() > 60)
-        || input.q.as_ref().is_some_and(|q| q.chars().count() > 200)
+        || input
+            .topic
+            .as_ref()
+            .is_some_and(|t| t.chars().count() > MAX_TOPIC_CHARS)
+        || input
+            .q
+            .as_ref()
+            .is_some_and(|q| q.chars().count() > MAX_QUERY_CHARS)
     {
         return Err(AppError::validation(
             "limit",

@@ -1,3 +1,5 @@
+pub(super) const MAX_TOPIC_CHARS: usize = 60;
+pub(super) const MAX_QUERY_CHARS: usize = 200;
 pub(crate) mod flashcards;
 mod library;
 mod pronunciation;

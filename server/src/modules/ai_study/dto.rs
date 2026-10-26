@@ -20,7 +20,7 @@ impl From<ai_imports::Model> for ImportResource {
         Self {
             key: model.id,
             content: model.content["content"].clone(),
-            expires_at: (!model.attached).then(|| model.created_at + chrono::Duration::hours(24)),
+            expires_at: (!model.attached).then(|| model.created_at + super::PENDING_IMPORT_TTL),
         }
     }
 }

@@ -1,3 +1,4 @@
+pub(super) const DEFAULT_RETENTION: f32 = 0.9;
 mod dto;
 mod handlers;
 mod history;

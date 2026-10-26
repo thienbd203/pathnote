@@ -1,3 +1,4 @@
+pub const PENDING_IMPORT_TTL: chrono::Duration = chrono::Duration::hours(24);
 pub(crate) mod cleanup;
 mod dto;
 mod handlers;

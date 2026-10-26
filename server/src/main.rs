@@ -70,7 +70,7 @@ async fn main() {
             interval.tick().await;
             match server::clean_pending_ai_imports(
                 &cleanup_db,
-                chrono::Utc::now().fixed_offset() - chrono::Duration::hours(24),
+                chrono::Utc::now().fixed_offset() - server::AI_IMPORT_TTL,
             )
             .await
             {

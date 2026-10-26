@@ -1,3 +1,4 @@
+use crate::modules::vocabulary::{MAX_QUERY_CHARS, MAX_TOPIC_CHARS};
 use crate::AppError;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -16,8 +17,14 @@ impl Filters {
     pub fn validate(&mut self) -> Result<(), AppError> {
         if self.course_id.is_some_and(|id| id <= 0)
             || self.session_id.is_some_and(|id| id <= 0)
-            || self.topic.as_ref().is_some_and(|s| s.chars().count() > 60)
-            || self.q.as_ref().is_some_and(|s| s.chars().count() > 200)
+            || self
+                .topic
+                .as_ref()
+                .is_some_and(|s| s.chars().count() > MAX_TOPIC_CHARS)
+            || self
+                .q
+                .as_ref()
+                .is_some_and(|s| s.chars().count() > MAX_QUERY_CHARS)
         {
             return Err(AppError::validation("filters", "Bộ lọc không hợp lệ."));
         }
