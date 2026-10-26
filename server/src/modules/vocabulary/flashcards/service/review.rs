@@ -77,33 +77,22 @@ pub async fn reveal(
         t.retention,
         chrono::Utc::now().fixed_offset(),
     )?;
-    let meaning = queue::meanings(&txn, user, &c).await?;
-    let ipa = crate::modules::vocabulary::pronunciation::ipa(&c);
-    let examples = crate::modules::vocabulary::pronunciation::examples(&c);
+    let snapshot = super::snapshot::snapshot(&c, queue::meanings(&txn, user, &c).await?);
     let mut model: attempts::ActiveModel = t.into();
     model.revealed = Set(true);
     model.snapshot = Set(Some(
-        serde_json::to_value(dto::Snapshot {
-            word: c.word.clone(),
-            meaning: meaning.clone(),
-            ipa: ipa.clone(),
-            locale: crate::modules::vocabulary::pronunciation::DEFAULT_LOCALE.into(),
-            part_of_speech: c.part_of_speech.clone(),
-            topics: c.topics.clone(),
-            examples: examples.clone(),
-        })
-        .map_err(|e| AppError::Internal(e.to_string()))?,
+        serde_json::to_value(&snapshot).map_err(|e| AppError::Internal(e.to_string()))?,
     ));
     model.update(&txn).await?;
     txn.commit().await?;
     Ok(dto::Reveal {
         back: dto::Back {
-            word: c.word,
-            meaning,
-            ipa,
-            locale: crate::modules::vocabulary::pronunciation::DEFAULT_LOCALE.into(),
-            part_of_speech: c.part_of_speech,
-            examples,
+            word: snapshot.word,
+            meaning: snapshot.meaning,
+            ipa: snapshot.ipa,
+            locale: snapshot.locale,
+            part_of_speech: snapshot.part_of_speech,
+            examples: snapshot.examples,
         },
         options,
     })
@@ -202,27 +191,20 @@ pub async fn grade(
     )
     .exec(&txn)
     .await?;
-    let ipa = crate::modules::vocabulary::pronunciation::ipa(&c);
-    let examples = crate::modules::vocabulary::pronunciation::examples(&c);
-    let snapshot = t.snapshot.clone();
+    let snapshot = match t.snapshot.clone() {
+        Some(value) => value,
+        None => serde_json::to_value(super::snapshot::snapshot(
+            &c,
+            queue::meanings(&txn, user, &c).await?,
+        ))
+        .map_err(|e| AppError::Internal(e.to_string()))?,
+    };
     let mut saved: attempts::ActiveModel = t.into();
     saved.delta_days =
         Set(Some(m.as_ref().map_or(0, |m| {
             (now - m.reviewed_at).num_days().max(0) as i32
         })));
-    saved.snapshot = Set(Some(match snapshot {
-        Some(value) => value,
-        None => serde_json::to_value(dto::Snapshot {
-            word: c.word,
-            meaning: c.meaning,
-            ipa,
-            locale: crate::modules::vocabulary::pronunciation::DEFAULT_LOCALE.into(),
-            part_of_speech: c.part_of_speech,
-            topics: c.topics,
-            examples,
-        })
-        .map_err(|e| AppError::Internal(e.to_string()))?,
-    }));
+    saved.snapshot = Set(Some(snapshot));
     saved.reviewed_at = Set(Some(now));
     saved.rating = Set(Some(i32::from(input.rating)));
     saved.due_at = Set(Some(result.due_at));

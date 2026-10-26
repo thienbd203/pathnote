@@ -240,3 +240,104 @@ async fn history_paginates_by_review_time_respects_dst_and_hides_other_users_and
     );
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn legacy_snapshot_fallbacks_match_reveal_and_grade_use_uk_and_batch_grouped_meanings() {
+    let (app, queries) = LearningApp::spawn_with_queries(false).await;
+    let session = lesson(&app, &app.owner_token).await;
+    let mut entries = vec![
+        entry("teacher", "giáo viên", &["Jobs"]),
+        entry("teacher", "người dạy học", &["Jobs"]),
+    ];
+    for entry in &mut entries {
+        entry["attrs"]["ipaUK"] = json!("/UK word/");
+        entry["content"][0]["content"][0]["attrs"]["ipaUK"] = json!("/UK example/");
+    }
+    save(&app, session, &doc(entries), 0).await;
+    let id = start(&app, &app.owner_token, "teacher").await;
+    let revealed = app
+        .api
+        .post(&format!("/api/v1/flashcards/{id}/reveal"))
+        .add_header("authorization", auth(&app.owner_token))
+        .await;
+    revealed.assert_status_ok();
+    let ticket_id = uuid::Uuid::parse_str(&id).unwrap();
+    let model = attempts::Entity::find_by_id(ticket_id)
+        .one(app.db.as_ref())
+        .await
+        .unwrap()
+        .unwrap();
+    let expected = model.snapshot.clone().unwrap();
+    assert_eq!(expected["locale"], "en-GB");
+    assert_eq!(expected["ipa"], "/UK word/");
+    assert_eq!(expected["examples"][0]["ipa"], "/UK example/");
+    assert!(expected["meaning"].as_str().unwrap().contains("giáo viên"));
+    assert!(expected["meaning"]
+        .as_str()
+        .unwrap()
+        .contains("người dạy học"));
+    let mut legacy: attempts::ActiveModel = model.into();
+    legacy.snapshot = Set(None);
+    legacy.update(app.db.as_ref()).await.unwrap();
+    app.api
+        .post(&format!("/api/v1/flashcards/{id}/grade"))
+        .add_header("authorization", auth(&app.owner_token))
+        .json(&json!({"rating":3}))
+        .await
+        .assert_status_ok();
+    let graded = attempts::Entity::find_by_id(ticket_id)
+        .one(app.db.as_ref())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(graded.snapshot, Some(expected.clone()));
+    let mut legacy: attempts::ActiveModel = graded.into();
+    legacy.snapshot = Set(None);
+    let legacy = legacy.update(app.db.as_ref()).await.unwrap();
+    let mut duplicate: attempts::ActiveModel = legacy.into();
+    duplicate.id = Set(uuid::Uuid::new_v4());
+    duplicate.insert(app.db.as_ref()).await.unwrap();
+    let memory_before = memory::Entity::find().all(app.db.as_ref()).await.unwrap();
+    queries.lock().unwrap().clear();
+    let list = history(&app, &app.owner_token, "").await;
+    assert_eq!(list["meta"]["total"], 2);
+    for row in list["data"].as_array().unwrap() {
+        assert_eq!(row["snapshot"], false);
+        assert_eq!(row["card"], expected);
+    }
+    assert_eq!(
+        queries
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|sql| sql.starts_with("SELECT \"vocabulary_cards\".\"word_key\""))
+            .count(),
+        1
+    );
+    // A stored historical snapshot keeps its original accent/content.
+    let mut old_snapshot = expected;
+    old_snapshot["locale"] = json!("en-US");
+    old_snapshot["ipa"] = json!("/saved US/");
+    let model = attempts::Entity::find_by_id(ticket_id)
+        .one(app.db.as_ref())
+        .await
+        .unwrap()
+        .unwrap();
+    let mut model: attempts::ActiveModel = model.into();
+    model.snapshot = Set(Some(old_snapshot.clone()));
+    model.update(app.db.as_ref()).await.unwrap();
+    let list = history(&app, &app.owner_token, "").await;
+    let saved = list["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["id"] == id)
+        .unwrap();
+    assert_eq!(saved["snapshot"], true);
+    assert_eq!(saved["card"], old_snapshot);
+    assert_eq!(
+        memory::Entity::find().all(app.db.as_ref()).await.unwrap(),
+        memory_before
+    );
+    app.cleanup().await;
+}

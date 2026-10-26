@@ -44,24 +44,71 @@ pub async fn meanings<C: ConnectionTrait>(
     user: i64,
     card: &cards::Model,
 ) -> Result<String, AppError> {
+    Ok(meanings_for(db, user, &[card])
+        .await?
+        .remove(&card.id)
+        .unwrap_or_else(|| card.meaning.clone()))
+}
+/// Batch legacy history fallbacks instead of issuing one meanings query per log row.
+pub(super) async fn meanings_for<C: ConnectionTrait>(
+    db: &C,
+    user: i64,
+    items: &[&cards::Model],
+) -> Result<std::collections::HashMap<i64, String>, AppError> {
+    if items.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+    let mut identities = Condition::any();
+    let mut seen = std::collections::BTreeSet::new();
+    for card in items {
+        if seen.insert((&card.word_key, &card.locale, &card.part_of_speech)) {
+            identities = identities.add(
+                Condition::all()
+                    .add(cards::Column::WordKey.eq(&card.word_key))
+                    .add(cards::Column::Locale.eq(&card.locale))
+                    .add(cards::Column::PartOfSpeech.eq(&card.part_of_speech)),
+            );
+        }
+    }
     let rows = super::super::library::scope(user, None)
-        .filter(cards::Column::WordKey.eq(&card.word_key))
-        .filter(cards::Column::Locale.eq(&card.locale))
-        .filter(cards::Column::PartOfSpeech.eq(&card.part_of_speech))
+        .filter(identities)
         .filter(cards::Column::Meaning.ne(""))
         .order_by_asc(cards::Column::Id)
         .select_only()
-        .column(cards::Column::Meaning)
-        .into_tuple::<String>()
+        .columns([
+            cards::Column::WordKey,
+            cards::Column::Locale,
+            cards::Column::PartOfSpeech,
+            cards::Column::Meaning,
+        ])
+        .into_tuple::<(String, String, String, String)>()
         .all(db)
         .await?;
-    let mut meanings = std::collections::BTreeMap::new();
-    for meaning in rows {
-        meanings
+    let mut grouped =
+        std::collections::BTreeMap::<_, std::collections::BTreeMap<String, String>>::new();
+    for (word, locale, pos, meaning) in rows {
+        grouped
+            .entry((word, locale, pos))
+            .or_default()
             .entry(super::super::sync::normalize(&meaning))
             .or_insert(meaning);
     }
-    Ok(meanings.into_values().collect::<Vec<_>>().join("; "))
+    Ok(items
+        .iter()
+        .map(|card| {
+            let meaning = grouped
+                .get(&(
+                    card.word_key.clone(),
+                    card.locale.clone(),
+                    card.part_of_speech.clone(),
+                ))
+                .map(|meanings| meanings.values().cloned().collect::<Vec<_>>().join("; "))
+                // History may reference an inactive card after its block was removed.
+                // There is no active cluster then, but its unchanged source meaning is still known.
+                .unwrap_or_else(|| card.meaning.clone());
+            (card.id, meaning)
+        })
+        .collect())
 }
 pub async fn authorize<C: ConnectionTrait>(
     db: &C,

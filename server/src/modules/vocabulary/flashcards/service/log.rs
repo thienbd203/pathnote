@@ -131,6 +131,15 @@ pub async fn history(
         .into_iter()
         .map(|(session, place)| (session.id, (session, place)))
         .collect();
+    let fallback_cards: Vec<_> = rows
+        .iter()
+        .filter_map(|(attempt, card)| {
+            card.as_ref().filter(|card| {
+                attempt.snapshot.is_none() && queue::content_key(card) == attempt.content_key
+            })
+        })
+        .collect();
+    let meanings = queue::meanings_for(db, user, &fallback_cards).await?;
     let data = rows
         .into_iter()
         .filter_map(|(attempt, card)| {
@@ -140,15 +149,13 @@ pub async fn history(
             let content = match attempt.snapshot {
                 Some(value) => Some(value),
                 None if queue::content_key(&card) == attempt.content_key => Some(
-                    serde_json::to_value(dto::Snapshot {
-                        word: card.word,
-                        meaning: card.meaning,
-                        ipa: card.ipa,
-                        locale: card.locale,
-                        part_of_speech: card.part_of_speech,
-                        topics: card.topics,
-                        examples: card.examples,
-                    })
+                    serde_json::to_value(super::snapshot::snapshot(
+                        &card,
+                        meanings
+                            .get(&card.id)
+                            .cloned()
+                            .unwrap_or_else(|| card.meaning.clone()),
+                    ))
                     .expect("Snapshot serialization"),
                 ),
                 None => None,

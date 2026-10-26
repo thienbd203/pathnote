@@ -1,6 +1,7 @@
 mod cards;
 mod log;
 mod review;
+mod snapshot;
 mod statistics;
 pub(super) use statistics::{record_time, statistics};
 pub(super) mod runs;

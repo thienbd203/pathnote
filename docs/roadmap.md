@@ -52,12 +52,6 @@ Kết quả review: không có lỗi bảo mật. Những phần đã làm tốt
 
 Các mục dưới đây là lỗi đã được đọc lại đúng dòng code. Đường dẫn tính từ `server/src/modules/`. Sau mỗi mục, chạy đủ ba lệnh ở A.7 của `docs/architecture.md`.
 
-*C2 — Gộp logic bị chép (ưu tiên trung bình; đã bắt đầu lệch nhau)*
-
-- **C2.7 Snapshot dự phòng của flashcard lệch giữa `log`, `reveal` và `grade`**
-  - **Vị trí:** `vocabulary/flashcards/service/log.rs:146-147`, `service/review.rs:81,90,215-223`.
-  - **Sửa:** tách một hàm `snapshot(&card, meanings)` dùng chung, theo đúng locale mặc định và cách gộp nghĩa.
-
 *C3 — Dọn dẹp nhỏ (ưu tiên thấp, có thể gộp vài mục vào một commit cùng module)*
 
 - **Comment bắt buộc theo A.3** cho các handler tự `map_err` lỗi extractor: `bulk/handlers.rs:13-14`, `ipa/handlers.rs:15-63`, `vocabulary/flashcards/handlers.rs`, `vocabulary/reviews/handlers.rs`, `vocabulary/library/handlers.rs:13`. Chỗ nào không cần thông báo riêng thì bỏ `map_err`, để `AppJson`/`AppQuery` tự trả lỗi.
