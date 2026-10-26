@@ -6,29 +6,28 @@ use crate::{
 };
 use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, PaginatorTrait, QueryFilter};
 
-use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
-pub fn key(card: &cards::Model) -> String {
-    key_fields(
+pub fn review_key(card: &cards::Model) -> String {
+    review_key_fields(
         &card.word,
         &card.locale,
         &card.part_of_speech,
         &card.meaning,
     )
 }
-pub(super) fn key_fields(word: &str, locale: &str, part_of_speech: &str, meaning: &str) -> String {
-    format!(
-        "{:x}",
-        Sha256::digest(
-            serde_json::to_vec(&(
-                super::super::sync::normalize(word),
-                locale,
-                part_of_speech,
-                super::super::sync::normalize(meaning),
-            ))
-            .expect("String serialization")
-        )
-    )
+pub(super) fn review_key_fields(
+    word: &str,
+    locale: &str,
+    part_of_speech: &str,
+    meaning: &str,
+) -> String {
+    crate::fingerprint::json_hash(&(
+        super::super::sync::normalize(word),
+        locale,
+        part_of_speech,
+        super::super::sync::normalize(meaning),
+    ))
+    .expect("String serialization")
 }
 
 pub struct Review {
@@ -85,7 +84,7 @@ impl Review {
             .one(db)
             .await?
             .ok_or_else(|| AppError::NotFound("Không tìm thấy từ vựng.".into()))?;
-        if !card.active || key(&card) != q.study_key {
+        if !card.active || review_key(&card) != q.study_key {
             return Err(AppError::Conflict(
                 "Từ hoặc nghĩa đã thay đổi. Hãy tạo lượt ôn mới.".into(),
             ));

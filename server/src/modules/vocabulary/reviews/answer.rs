@@ -1,6 +1,6 @@
 use super::{
     dto::*,
-    state::{key, Review},
+    state::{review_key, Review},
 };
 use crate::{
     entities::{places, sessions, vocabulary_progress as progress, vocabulary_reviews as reviews},
@@ -121,7 +121,7 @@ pub async fn answer(
         let old = progress::Entity::find_by_id((user, current.id))
             .one(&txn)
             .await?
-            .filter(|p| p.study_key == key(&current));
+            .filter(|p| p.study_key == review_key(&current));
         let correct_count = old
             .as_ref()
             .map_or(0, |p| p.correct)
@@ -145,7 +145,7 @@ pub async fn answer(
         progress::Entity::insert(progress::ActiveModel {
             user_id: Set(user),
             card_id: Set(current.id),
-            study_key: Set(key(&current)),
+            study_key: Set(review_key(&current)),
             correct: Set(correct_count),
             incorrect: Set(incorrect),
             streak: Set(streak),

@@ -41,6 +41,8 @@ Quy tắc:
 | `response.rs` | `ApiResponse<T>` (`ok`, `created`, `with_message`) | Giữ field `message` (tùy chọn) cho thông báo thành công từ backend |
 | `pagination.rs` | `ListQuery`, `Page<T>`, `PageMeta` | Thêm `PageMeta::new(page, per_page, total)` và `like_contains(term) -> String` |
 | `extract.rs` (mới) | `AppJson<T>`, `AppQuery<T>`, `AppPath<T>` | Xem A.3 |
+| `fingerprint.rs` | SHA-256 của JSON qua serde/sha2; không chuẩn hóa hoặc đổi identity của caller | Dùng chung hash, giữ nguyên byte tương thích dữ liệu cũ |
+| `validation.rs` | Trim/đếm ký tự cho tên và mô tả | Caller giữ field/message nghiệp vụ; không thay schema request |
 | `access_token.rs` | Extractor `CurrentUser` | Không đổi |
 
 ## A.3 Extractor: mọi lỗi đều trả JSON

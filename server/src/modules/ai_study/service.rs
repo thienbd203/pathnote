@@ -15,7 +15,6 @@ use sea_orm::{
     QuerySelect, Set,
 };
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 fn invalid() -> AppError {
     AppError::validation("content", "Section Học cùng AI không hợp lệ.")
 }
@@ -81,10 +80,8 @@ pub async fn prepare(
     }
     let mut replacements = Vec::new();
     paths(&input.content, String::new(), &mut replacements);
-    let fingerprint = format!(
-        "{:x}",
-        Sha256::digest(serde_json::to_vec(&input).map_err(|e| AppError::Internal(e.to_string()))?)
-    );
+    let fingerprint =
+        crate::fingerprint::json_hash(&input).map_err(|e| AppError::Internal(e.to_string()))?;
     let txn = places::write_tx(db, place.user_id, place.id).await?;
     notes::access(&txn, user, session, false).await?;
     if let Some(mut model) = imports::Entity::find_by_id(input.key).one(&txn).await? {
@@ -139,16 +136,7 @@ pub async fn references<C: ConnectionTrait>(
     session: i64,
     refs: &[Reference],
 ) -> Result<(), AppError> {
-    let keys: Vec<_> = refs
-        .iter()
-        .filter_map(|r| {
-            if let Reference::AIStudy(id) = r {
-                Some(*id)
-            } else {
-                None
-            }
-        })
-        .collect();
+    let keys = ai_keys(refs);
     if keys.is_empty() {
         return Ok(());
     }
@@ -168,16 +156,7 @@ pub async fn attach<C: ConnectionTrait>(
     session: i64,
     refs: &[Reference],
 ) -> Result<(), AppError> {
-    let keys: Vec<_> = refs
-        .iter()
-        .filter_map(|r| {
-            if let Reference::AIStudy(id) = r {
-                Some(*id)
-            } else {
-                None
-            }
-        })
-        .collect();
+    let keys = ai_keys(refs);
     let exercise_ids: Vec<_> = refs
         .iter()
         .filter_map(|r| {
@@ -219,4 +198,13 @@ pub async fn attach<C: ConnectionTrait>(
             .await?;
     }
     Ok(())
+}
+
+fn ai_keys(refs: &[Reference]) -> Vec<uuid::Uuid> {
+    refs.iter()
+        .filter_map(|reference| match reference {
+            Reference::AIStudy(id) => Some(*id),
+            _ => None,
+        })
+        .collect()
 }

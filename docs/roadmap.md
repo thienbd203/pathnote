@@ -54,13 +54,6 @@ Các mục dưới đây là lỗi đã được đọc lại đúng dòng code.
 
 *C3 — Dọn dẹp nhỏ (ưu tiên thấp, có thể gộp vài mục vào một commit cùng module)*
 
-- **C3.5 Gom hàm bị chép:**
-  - Mẫu hash `sha256(to_vec(...))`, có hai hàm cùng tên `key` khác nghĩa: `reviews/state.rs:11`, `queue.rs:15,28`, `flashcards/dto.rs:37`.
-  - Validator tên: `places/dto.rs:24-48`, `courses/dto.rs:28-52`, `sessions/dto.rs:46`.
-  - Làm sạch tên file: `media/service.rs:29`, `media/dto.rs:53`.
-  - Lọc reference AI: `ai_study/service.rs:147-156,176-185`.
-  - SQL đếm từ và bài tập: `courses/service.rs:196-200,237-238`.
-  - Upsert trong settings: `settings/service.rs`.
 - **C3.6 Giá trị kiểu chuỗi** thay bằng enum:
   - Kind media `"file"`: `media/service.rs:143`, `recordings/service.rs:27,93`, `notes/document/mod.rs:12` dùng `media::dto::Kind`.
   - `"word"`/`"pair"`: `ipa/service.rs`.

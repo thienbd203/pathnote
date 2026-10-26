@@ -525,3 +525,5 @@ Readiness collaboration `/up` kiểm Rust qua URL cấu hình (timeout 2s, cache
 - C3.3: kiểm finite và miền retention/memory trước FSRS, kiểm output trước clamp/cast; ngày đến hạn dùng checked_add. NaN/Infinity không thể thành thẻ đến hạn ngay. Test interval/retention không hữu hạn, clamp hữu hạn giữ nguyên, API reveal với stability NaN trả 500 mà không đổi ticket/lịch.
 
 - C3.4: gom retention mặc định, giới hạn topic/query, TTL AI pending (API và worker), cap body/Yjs/base64. Giá trị và thời hạn cũ giữ nguyên; base64 cap tính từ cap nhị phân. Test encode đúng cap và cả state + note tối đa vẫn vừa envelope bridge.
+
+- C3.5: gom SHA-256 JSON bằng serde/sha2 hiện có (golden hash UTF-8/legacy scope), đổi tên memory_key/review_key để rõ identity; giữ normalization/byte của caller. Dùng chung trim tên/mô tả nhưng giữ message và null/empty; gom chính sách tên file, giữ sanitize-upload khác reject-rename. Gộp lọc reference AI, biểu thức JSONPath đếm block và upsert settings. Test Unicode/cap/đuôi file, hash cũ, toàn bộ course stats/settings/AI/review/migration. Không migration hay reset lịch.

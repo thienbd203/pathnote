@@ -22,29 +22,10 @@ pub struct UpdatePlace {
 pub use crate::pagination::{ListQuery as ListPlaces, PageMeta};
 
 pub fn validate_name(name: String) -> Result<String, AppError> {
-    let name = name.trim().to_owned();
-    if name.is_empty() || name.chars().count() > 200 {
-        return Err(AppError::validation(
-            "name",
-            "Tên nơi học cần từ 1 đến 200 ký tự.",
-        ));
-    }
-    Ok(name)
+    crate::validation::required_text(name, "name", 200, "Tên nơi học cần từ 1 đến 200 ký tự.")
 }
-pub fn validate_description(description: Option<String>) -> Result<Option<String>, AppError> {
-    description
-        .map(|value| {
-            let value = value.trim().to_owned();
-            if value.chars().count() > 2000 {
-                Err(AppError::validation(
-                    "description",
-                    "Mô tả tối đa 2000 ký tự.",
-                ))
-            } else {
-                Ok(value)
-            }
-        })
-        .transpose()
+pub fn validate_description(value: Option<String>) -> Result<Option<String>, AppError> {
+    crate::validation::optional_text(value, "description", 2000, "Mô tả tối đa 2000 ký tự.")
 }
 
 #[derive(Serialize)]

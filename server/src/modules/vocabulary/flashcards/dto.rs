@@ -1,7 +1,6 @@
 use crate::modules::vocabulary::{MAX_QUERY_CHARS, MAX_TOPIC_CHARS};
 use crate::AppError;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Filters {
@@ -43,20 +42,16 @@ impl Filters {
     // Searching narrows the deck, but does not create another saved configuration.
     pub fn scope(&self) -> String {
         if let Some(course) = self.course_id {
-            return format!(
-                "{:x}",
-                Sha256::digest(
-                    serde_json::to_vec(&("course", course, self.session_id, &self.topic))
-                        .expect("String serialization")
-                )
-            );
+            return crate::fingerprint::json_hash(&(
+                "course",
+                course,
+                self.session_id,
+                &self.topic,
+            ))
+            .expect("String serialization");
         }
-        format!(
-            "{:x}",
-            Sha256::digest(
-                serde_json::to_vec(&(self.session_id, &self.topic)).expect("String serialization")
-            )
-        )
+        crate::fingerprint::json_hash(&(self.session_id, &self.topic))
+            .expect("String serialization")
     }
 }
 #[derive(Clone, Copy, Default, PartialEq, Deserialize, Serialize)]

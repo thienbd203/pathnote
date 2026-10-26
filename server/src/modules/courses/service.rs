@@ -1,3 +1,4 @@
+mod counts;
 mod read;
 use super::dto::{self, CoursePage, CourseResource, CreateCourse, UpdateCourse};
 use crate::modules::places::service as place_service;
@@ -180,20 +181,22 @@ pub async fn library_stats(
     id: i64,
 ) -> Result<super::dto::CourseStats, AppError> {
     model(db, user_id, id).await?;
+    // PostgreSQL recursive JSONPath counts require these shared SQL expressions.
     let rows = super::dto::SessionStats::find_by_statement(Statement::from_sql_and_values(
         DbBackend::Postgres,
-        r#"SELECT s.id, s.title, s.starts_at,
-            (SELECT COUNT(DISTINCT node #>> '{attrs,id}')
-             FROM jsonb_path_query(n.content, '$.** ? (@.type == "vocabularyEntry")') AS node
-             WHERE btrim(COALESCE(node #>> '{attrs,word}', '')) <> '') AS words,
-            (SELECT COUNT(DISTINCT node #>> '{attrs,exerciseId}')
-             FROM jsonb_path_query(n.content, '$.** ? (@.type == "exercise")') AS node) AS exercises
+        format!(
+            r#"SELECT s.id, s.title, s.starts_at,
+            {words} AS words,
+            {exercises} AS exercises
            FROM sessions s
            JOIN courses c ON c.id = s.course_id AND c.deleted_at IS NULL
            JOIN places p ON p.id = s.place_id AND p.deleted_at IS NULL
            LEFT JOIN notes n ON n.session_id = s.id
            WHERE s.course_id = $1 AND p.user_id = $2 AND s.deleted_at IS NULL
            ORDER BY s.starts_at, s.id"#,
+            words = counts::WORDS,
+            exercises = counts::EXERCISES
+        ),
         [id.into(), user_id.into()],
     ))
     .all(db)
@@ -222,17 +225,18 @@ pub async fn library_summaries(
     query: crate::pagination::IdsQuery,
 ) -> Result<Vec<dto::CourseSummary>, AppError> {
     let ids = query.validate()?;
+    // PostgreSQL JSONPath plus LATERAL aggregation; identifiers are static, values bound.
     let rows = dto::SummaryRow::find_by_statement(Statement::from_sql_and_values(DbBackend::Postgres,
-        r#"SELECT c.id, COUNT(s.id)::bigint AS session_count,
-          COALESCE(SUM((SELECT COUNT(DISTINCT node #>> '{attrs,id}') FROM jsonb_path_query(n.content, '$.** ? (@.type == "vocabularyEntry")') node WHERE btrim(COALESCE(node #>> '{attrs,word}', '')) <> '')),0)::bigint AS words,
-          COALESCE(SUM((SELECT COUNT(DISTINCT node #>> '{attrs,exerciseId}') FROM jsonb_path_query(n.content, '$.** ? (@.type == "exercise")') node)),0)::bigint AS exercises,
+        format!(r#"SELECT c.id, COUNT(s.id)::bigint AS session_count,
+          COALESCE(SUM({words}),0)::bigint AS words,
+          COALESCE(SUM({exercises}),0)::bigint AS exercises,
           latest.id AS latest_id, latest.title AS latest_title, latest.starts_at AS latest_starts_at
         FROM courses c JOIN places p ON p.id=c.place_id AND p.deleted_at IS NULL
         LEFT JOIN sessions s ON s.course_id=c.id AND s.place_id=p.id AND s.deleted_at IS NULL
         LEFT JOIN notes n ON n.session_id=s.id
         LEFT JOIN LATERAL (SELECT id,title,starts_at FROM sessions WHERE course_id=c.id AND place_id=p.id AND deleted_at IS NULL AND starts_at <= CURRENT_TIMESTAMP ORDER BY starts_at DESC,id DESC LIMIT 1) latest ON true
         WHERE c.id=ANY($1) AND p.user_id=$2 AND c.deleted_at IS NULL
-        GROUP BY c.id, latest.id, latest.title, latest.starts_at"#,
+        GROUP BY c.id, latest.id, latest.title, latest.starts_at"#, words=counts::WORDS, exercises=counts::EXERCISES),
         [ids.clone().into(),user.into()])).all(db).await?;
     let mut rows: std::collections::HashMap<_, _> = rows
         .into_iter()

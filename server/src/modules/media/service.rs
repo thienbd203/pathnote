@@ -23,28 +23,7 @@ pub(super) async fn create(
 ) -> Result<MediaResource, AppError> {
     let (session, place) = access;
     let id = session.id;
-    let mut name = name
-        .chars()
-        .map(|c| {
-            if c.is_control() || ['/', '\\', '"'].contains(&c) {
-                '_'
-            } else {
-                c
-            }
-        })
-        .collect::<String>();
-    if name.chars().count() > 200 {
-        if kind == Kind::File {
-            let ext = name.rsplit('.').next().unwrap_or("").to_owned();
-            let prefix = name
-                .chars()
-                .take(200usize.saturating_sub(ext.chars().count() + 1))
-                .collect::<String>();
-            name = format!("{prefix}.{ext}");
-        } else {
-            name = name.chars().take(200).collect();
-        }
-    }
+    let name = super::filename::sanitize_upload(name, kind);
     let (data, mime, name) = tokio::task::spawn_blocking(move || {
         let mime = super::validation::inspect(kind, &name, &data)?;
         Ok::<_, AppError>((data, mime, name))

@@ -44,14 +44,7 @@ pub struct UpdateSession {
     pub timezone: Option<String>,
 }
 pub fn title(value: String) -> Result<String, AppError> {
-    let value = value.trim().to_owned();
-    if value.is_empty() || value.chars().count() > 200 {
-        return Err(AppError::validation(
-            "title",
-            "Tên buổi học cần từ 1 đến 200 ký tự.",
-        ));
-    }
-    Ok(value)
+    crate::validation::required_text(value, "title", 200, "Tên buổi học cần từ 1 đến 200 ký tự.")
 }
 pub fn timezone(value: &str) -> Result<Tz, AppError> {
     value

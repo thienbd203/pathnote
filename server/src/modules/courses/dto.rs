@@ -26,29 +26,10 @@ pub struct UpdateCourse {
     pub ends_on: Option<Option<NaiveDate>>,
 }
 pub fn validate_name(name: String) -> Result<String, AppError> {
-    let name = name.trim().to_owned();
-    if name.is_empty() || name.chars().count() > 200 {
-        return Err(AppError::validation(
-            "name",
-            "Tên khóa học cần từ 1 đến 200 ký tự.",
-        ));
-    }
-    Ok(name)
+    crate::validation::required_text(name, "name", 200, "Tên khóa học cần từ 1 đến 200 ký tự.")
 }
 pub fn validate_description(value: Option<String>) -> Result<Option<String>, AppError> {
-    value
-        .map(|v| {
-            let v = v.trim().to_owned();
-            if v.chars().count() > 2000 {
-                Err(AppError::validation(
-                    "description",
-                    "Mô tả tối đa 2000 ký tự.",
-                ))
-            } else {
-                Ok(v)
-            }
-        })
-        .transpose()
+    crate::validation::optional_text(value, "description", 2000, "Mô tả tối đa 2000 ký tự.")
 }
 pub fn validate_dates(start: NaiveDate, end: Option<NaiveDate>) -> Result<(), AppError> {
     if end.is_some_and(|end| end < start) {

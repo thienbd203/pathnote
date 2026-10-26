@@ -1,6 +1,6 @@
 use super::{
     dto::*,
-    state::{key_fields, Review},
+    state::{review_key_fields, Review},
 };
 use crate::modules::vocabulary::{MAX_QUERY_CHARS, MAX_TOPIC_CHARS};
 use crate::{
@@ -128,7 +128,7 @@ pub async fn create(db: &DatabaseConnection, user: i64, input: Create) -> Result
     .await?
     .into_iter()
     .map(|card| {
-        let key = key_fields(
+        let key = review_key_fields(
             &card.word,
             &card.locale,
             &card.part_of_speech,

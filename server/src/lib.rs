@@ -5,9 +5,11 @@ pub mod config;
 pub mod entities;
 mod error;
 pub mod extract;
+mod fingerprint;
 mod modules;
 pub mod response;
 pub mod state;
+mod validation;
 
 pub use error::AppError;
 pub use modules::auth::google::GoogleAuth;

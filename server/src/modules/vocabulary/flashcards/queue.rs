@@ -13,12 +13,8 @@ use sea_orm::{
     QuerySelect, QueryTrait, RelationTrait,
 };
 use serde_json::Value;
-pub fn key(card: &cards::Model) -> String {
-    use sha2::{Digest, Sha256};
-    format!(
-        "{:x}",
-        Sha256::digest(serde_json::to_vec(&identity(card)).expect("String serialization"))
-    )
+pub fn memory_key(card: &cards::Model) -> String {
+    crate::fingerprint::json_hash(&identity(card)).expect("String serialization")
 }
 pub fn identity(card: &cards::Model) -> Value {
     serde_json::to_value((&card.word_key, &card.locale, &card.part_of_speech))
@@ -27,17 +23,13 @@ pub fn identity(card: &cards::Model) -> Value {
 // A shared schedule is identified by the word and its part of speech. Tickets
 // separately retain the source content hash so edits still invalidate them.
 pub fn content_key(card: &cards::Model) -> String {
-    use sha2::{Digest, Sha256};
-    let content = (
+    crate::fingerprint::json_hash(&(
         &card.word,
         &card.meaning,
         &card.locale,
         &card.part_of_speech,
-    );
-    format!(
-        "{:x}",
-        Sha256::digest(serde_json::to_vec(&content).expect("String tuple serialization"))
-    )
+    ))
+    .expect("String tuple serialization")
 }
 pub async fn meanings<C: ConnectionTrait>(
     db: &C,
@@ -151,10 +143,10 @@ pub async fn memory<C: ConnectionTrait>(
     direction: &str,
 ) -> Result<Option<memory::Model>, AppError> {
     Ok(
-        memory::Entity::find_by_id((user, key(card), direction.to_owned()))
+        memory::Entity::find_by_id((user, memory_key(card), direction.to_owned()))
             .one(db)
             .await?
-            .filter(|m| m.study_key == key(card)),
+            .filter(|m| m.study_key == memory_key(card)),
     )
 }
 fn base(user: i64, f: &Filters, direction: &str) -> sea_orm::Select<cards::Entity> {
@@ -346,7 +338,7 @@ pub async fn next<C: ConnectionTrait>(
             .await?;
         if let Some((candidate, m)) = selected {
             let card = candidate.card;
-            let m = m.filter(|m| m.study_key == key(&card));
+            let m = m.filter(|m| m.study_key == memory_key(&card));
             let source = super::dto::Source {
                 id: card.session_id,
                 title: candidate.source_title,

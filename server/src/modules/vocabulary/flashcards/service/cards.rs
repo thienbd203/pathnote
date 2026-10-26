@@ -101,7 +101,7 @@ pub async fn next(
         memory_card_id: Set(memory.as_ref().map_or(card.id, |m| m.card_id)),
         run_id: Set(run_id),
         direction: Set(direction.into()),
-        study_key: Set(queue::key(&card)),
+        study_key: Set(queue::memory_key(&card)),
         content_key: Set(queue::content_key(&card)),
         version: Set(memory.as_ref().map_or(0, |m| m.reviews)),
         parameter_version: Set(profile.version()),

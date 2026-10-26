@@ -109,7 +109,7 @@ pub async fn list(
             let card = cards::Model::from_query_result(&row, "")?;
             let matching = row
                 .try_get::<Option<String>>("", "progress_key")?
-                .is_some_and(|key| key == super::super::reviews::state::key(&card));
+                .is_some_and(|key| key == super::super::reviews::state::review_key(&card));
             let progress = if matching {
                 Progress {
                     correct: row.try_get("", "progress_correct")?,
