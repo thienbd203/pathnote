@@ -54,10 +54,6 @@ Các mục dưới đây là lỗi đã được đọc lại đúng dòng code.
 
 *C2 — Gộp logic bị chép (ưu tiên trung bình; đã bắt đầu lệch nhau)*
 
-- **C2.2 Xóa mềm theo tầng chép ở 3 nơi**
-  - **Vị trí:** `places/service.rs:126-155`, `courses/service.rs:163-182`, `bulk/service.rs:74-108`.
-  - **Sửa:** handler xóa đơn lẻ gọi `bulk::service` với một ID. Nếu không được thì tách helper `soft_delete_cascade`.
-  - **Kèm:** `bulk/service.rs:70-72` khóa place bằng một câu `is_in(...).order_by_asc(Id).lock_exclusive()` thay cho vòng lặp.
 - **C2.3 Google client giữ write lock suốt lúc gọi HTTP**
   - **Vị trí:** `auth/google.rs:84`.
   - **Sửa:** đọc cache bằng `read()`. Chỉ lấy `write()` khi cache hết hạn, rồi kiểm tra lại sau khi đã có lock.

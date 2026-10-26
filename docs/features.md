@@ -503,3 +503,5 @@ Readiness collaboration `/up` kiểm Rust qua URL cấu hình (timeout 2s, cache
 ### Rà soát Rust C2 (26/10)
 
 - C2.1: REST và bridge dùng chung persist trong transaction; cùng điều kiện tồn tại dựa saved_at (kể cả note legacy revision 0), cùng mốc saved_at/updated_at. Kiểm quyền/schema/conflict/idempotence vẫn ở caller; đồng bộ projection và commit vẫn nguyên tử. Test tạo/cập nhật cả hai đường, note legacy và timestamp bằng nhau.
+
+- C2.2: xóa một place/course dùng chung cascade của bulk; giữ kiểm quyền, transaction và timestamp chung, không đổi deleted_at con đã xóa. Bulk lấy toàn bộ khóa place bằng một SELECT FOR UPDATE theo ID tăng dần, kiểm lại quyền sau khóa. Test SQL chỉ một câu khóa, cascade đơn/bulk và concurrent bulk hiện có.

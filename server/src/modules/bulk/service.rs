@@ -9,7 +9,7 @@ use crate::{
 };
 use sea_orm::{
     sea_query::Expr, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter,
-    TransactionTrait,
+    QueryOrder, QuerySelect, TransactionTrait,
 };
 use std::collections::BTreeSet;
 async fn parents<C: ConnectionTrait>(
@@ -48,7 +48,7 @@ async fn parents<C: ConnectionTrait>(
     }
     Ok(parents)
 }
-pub(super) async fn remove(
+pub(in crate::modules) async fn remove(
     db: &DatabaseConnection,
     user: i64,
     kind: Kind,
@@ -67,8 +67,19 @@ pub(super) async fn remove(
     }
     let place_ids = parents(db, user, kind, &ids).await?;
     let txn = db.begin().await?;
-    for id in place_ids {
-        place_service::lock_for_write(&txn, user, id).await?;
+    let locked = place_service::owned(user)
+        .filter(places::Column::Id.is_in(place_ids.iter().copied()))
+        .order_by_asc(places::Column::Id)
+        .lock_exclusive()
+        .select_only()
+        .column(places::Column::Id)
+        .into_tuple::<i64>()
+        .all(&txn)
+        .await?;
+    if locked.len() != place_ids.len() {
+        return Err(AppError::NotFound(
+            "Không tìm thấy một hoặc nhiều mục đã chọn.".into(),
+        ));
     }
     parents(&txn, user, kind, &ids).await?;
     let now = chrono::Utc::now().fixed_offset();

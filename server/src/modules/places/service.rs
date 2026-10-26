@@ -124,32 +124,12 @@ pub async fn lock_for_write(
         .ok_or_else(not_found)
 }
 pub async fn delete(db: &DatabaseConnection, user_id: i64, id: i64) -> Result<(), AppError> {
-    let txn = write_tx(db, user_id, id).await?;
-    let now = chrono::Utc::now().fixed_offset();
-    use crate::entities::sessions;
-    sessions::Entity::update_many()
-        .col_expr(sessions::Column::DeletedAt, Expr::value(now))
-        .col_expr(sessions::Column::UpdatedAt, Expr::value(now))
-        .filter(sessions::Column::PlaceId.eq(id))
-        .filter(sessions::Column::DeletedAt.is_null())
-        .exec(&txn)
-        .await?;
-    use crate::entities::courses;
-    courses::Entity::update_many()
-        .col_expr(courses::Column::DeletedAt, Expr::value(now))
-        .col_expr(courses::Column::UpdatedAt, Expr::value(now))
-        .filter(courses::Column::PlaceId.eq(id))
-        .filter(courses::Column::DeletedAt.is_null())
-        .exec(&txn)
-        .await?;
-    places::Entity::update_many()
-        .col_expr(places::Column::DeletedAt, Expr::value(now))
-        .col_expr(places::Column::UpdatedAt, Expr::value(now))
-        .filter(places::Column::Id.eq(id))
-        .filter(places::Column::UserId.eq(user_id))
-        .filter(places::Column::DeletedAt.is_null())
-        .exec(&txn)
-        .await?;
-    txn.commit().await?;
-    Ok(())
+    get(db, user_id, id).await?;
+    crate::modules::bulk::service::remove(
+        db,
+        user_id,
+        crate::modules::bulk::Kind::Place,
+        crate::modules::bulk::Input { ids: vec![id] },
+    )
+    .await
 }

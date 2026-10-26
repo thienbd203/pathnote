@@ -161,24 +161,14 @@ pub async fn update(
     Ok(CourseResource::new(course, parent))
 }
 pub async fn delete(db: &DatabaseConnection, user_id: i64, id: i64) -> Result<(), AppError> {
-    let parent_id = model(db, user_id, id).await?.place_id;
-    let txn = place_service::write_tx(db, user_id, parent_id).await?;
-    let current = model(&txn, user_id, id).await?;
-    let now = chrono::Utc::now().fixed_offset();
-    let mut changes: courses::ActiveModel = current.into();
-    changes.deleted_at = Set(Some(now));
-    changes.updated_at = Set(now);
-    use crate::entities::sessions;
-    sessions::Entity::update_many()
-        .col_expr(sessions::Column::DeletedAt, Expr::value(now))
-        .col_expr(sessions::Column::UpdatedAt, Expr::value(now))
-        .filter(sessions::Column::CourseId.eq(id))
-        .filter(sessions::Column::DeletedAt.is_null())
-        .exec(&txn)
-        .await?;
-    changes.update(&txn).await?;
-    txn.commit().await?;
-    Ok(())
+    model(db, user_id, id).await?;
+    crate::modules::bulk::service::remove(
+        db,
+        user_id,
+        crate::modules::bulk::Kind::Course,
+        crate::modules::bulk::Input { ids: vec![id] },
+    )
+    .await
 }
 
 use sea_orm::{DbBackend, FromQueryResult, Statement};

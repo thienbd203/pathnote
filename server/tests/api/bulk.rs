@@ -205,3 +205,95 @@ async fn concurrent_bulk_requests_lock_parents_in_the_same_order() {
     assert_eq!(statuses, [204, 404]);
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn bulk_locks_all_parents_in_one_ordered_query_and_single_deletes_share_the_cascade() {
+    let (app, queries) = LearningApp::spawn_with_queries(false).await;
+    let a = hierarchy(&app, &app.owner_token).await;
+    let b = hierarchy(&app, &app.owner_token).await;
+    queries.lock().unwrap().clear();
+    app.api
+        .delete("/api/v1/places")
+        .add_header("authorization", bearer(&app.owner_token))
+        .json(&json!({"ids":[b.0,a.0]}))
+        .await
+        .assert_status_no_content();
+    let locks: Vec<_> = queries
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|sql| sql.contains("FOR UPDATE"))
+        .cloned()
+        .collect();
+    assert_eq!(locks.len(), 1);
+    assert!(locks[0].contains("ORDER BY \"places\".\"id\" ASC"));
+    for (place, course, nested, independent) in [a, b] {
+        let at = places::Entity::find_by_id(place)
+            .one(app.db.as_ref())
+            .await
+            .unwrap()
+            .unwrap()
+            .deleted_at;
+        assert!(at.is_some());
+        assert_eq!(
+            courses::Entity::find_by_id(course)
+                .one(app.db.as_ref())
+                .await
+                .unwrap()
+                .unwrap()
+                .deleted_at,
+            at
+        );
+        for id in [nested, independent] {
+            assert_eq!(
+                sessions::Entity::find_by_id(id)
+                    .one(app.db.as_ref())
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .deleted_at,
+                at
+            );
+        }
+    }
+    for place_level in [true, false] {
+        let (place, course, nested, independent) = hierarchy(&app, &app.owner_token).await;
+        let path = if place_level {
+            format!("/api/v1/places/{place}")
+        } else {
+            format!("/api/v1/courses/{course}")
+        };
+        app.api
+            .delete(&path)
+            .add_header("authorization", bearer(&app.owner_token))
+            .await
+            .assert_status_no_content();
+        let at = courses::Entity::find_by_id(course)
+            .one(app.db.as_ref())
+            .await
+            .unwrap()
+            .unwrap()
+            .deleted_at;
+        assert!(at.is_some());
+        assert_eq!(
+            sessions::Entity::find_by_id(nested)
+                .one(app.db.as_ref())
+                .await
+                .unwrap()
+                .unwrap()
+                .deleted_at,
+            at
+        );
+        assert_eq!(
+            sessions::Entity::find_by_id(independent)
+                .one(app.db.as_ref())
+                .await
+                .unwrap()
+                .unwrap()
+                .deleted_at
+                .is_some(),
+            place_level
+        );
+    }
+    app.cleanup().await;
+}
