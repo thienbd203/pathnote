@@ -54,9 +54,6 @@ Các mục dưới đây là lỗi đã được đọc lại đúng dòng code.
 
 *C2 — Gộp logic bị chép (ưu tiên trung bình; đã bắt đầu lệch nhau)*
 
-- **C2.3 Google client giữ write lock suốt lúc gọi HTTP**
-  - **Vị trí:** `auth/google.rs:84`.
-  - **Sửa:** đọc cache bằng `read()`. Chỉ lấy `write()` khi cache hết hạn, rồi kiểm tra lại sau khi đã có lock.
 - **C2.4 `POST /flashcards/next` chạy khoảng 10 query cho mỗi thẻ**
   - **Vị trí:** `vocabulary/flashcards/service/cards.rs:92-147`.
   - **Sửa:**

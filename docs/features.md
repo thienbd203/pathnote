@@ -505,3 +505,5 @@ Readiness collaboration `/up` kiểm Rust qua URL cấu hình (timeout 2s, cache
 - C2.1: REST và bridge dùng chung persist trong transaction; cùng điều kiện tồn tại dựa saved_at (kể cả note legacy revision 0), cùng mốc saved_at/updated_at. Kiểm quyền/schema/conflict/idempotence vẫn ở caller; đồng bộ projection và commit vẫn nguyên tử. Test tạo/cập nhật cả hai đường, note legacy và timestamp bằng nhau.
 
 - C2.2: xóa một place/course dùng chung cascade của bulk; giữ kiểm quyền, transaction và timestamp chung, không đổi deleted_at con đã xóa. Bulk lấy toàn bộ khóa place bằng một SELECT FOR UPDATE theo ID tăng dần, kiểm lại quyền sau khóa. Test SQL chỉ một câu khóa, cascade đơn/bulk và concurrent bulk hiện có.
+
+- C2.3: Google dùng read lock cho metadata còn TTL; chỉ miss/expiry mới lấy write lock và kiểm lại cache sau khi chờ, tránh discovery trùng. HTTP timeout, issuer, OAuth PKCE/nonce/state và xác minh token giữ nguyên. Test hai authorization đồng thời khi một reader khác giữ cache, không gọi Google thật; các test OAuth hiện có tiếp tục chạy.

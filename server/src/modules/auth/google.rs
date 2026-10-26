@@ -81,20 +81,31 @@ impl GoogleAuth {
     }
 
     async fn client(&self) -> Result<Client, AppError> {
-        let mut cache = self.metadata.write().await;
-        if cache
-            .as_ref()
-            .is_none_or(|(at, _)| at.elapsed() > Duration::from_secs(300))
-        {
-            let metadata = CoreProviderMetadata::discover_async(
-                IssuerUrl::new("https://accounts.google.com".into()).unwrap(),
-                &self.http,
-            )
+        const TTL: Duration = Duration::from_secs(300);
+        let cached = self
+            .metadata
+            .read()
             .await
-            .map_err(|_| AppError::Internal("Google discovery unavailable".into()))?;
-            *cache = Some((Instant::now(), metadata));
-        }
-        let metadata = cache.as_ref().unwrap().1.clone();
+            .as_ref()
+            .filter(|(at, _)| at.elapsed() <= TTL)
+            .map(|(_, metadata)| metadata.clone());
+        let metadata = if let Some(metadata) = cached {
+            metadata
+        } else {
+            // Serialize refreshes, but recheck after waiting: a previous writer
+            // may already have completed discovery while we queued for this lock.
+            let mut cache = self.metadata.write().await;
+            if cache.as_ref().is_none_or(|(at, _)| at.elapsed() > TTL) {
+                let metadata = CoreProviderMetadata::discover_async(
+                    IssuerUrl::new("https://accounts.google.com".into()).unwrap(),
+                    &self.http,
+                )
+                .await
+                .map_err(|_| AppError::Internal("Google discovery unavailable".into()))?;
+                *cache = Some((Instant::now(), metadata));
+            }
+            cache.as_ref().expect("metadata was refreshed").1.clone()
+        };
         Ok(CoreClient::from_provider_metadata(
             metadata,
             ClientId::new(self.config.google_client_id.clone()),
@@ -196,4 +207,61 @@ fn verify_response(
         name,
         avatar_url,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn auth() -> GoogleAuth {
+        let config = Config {
+            collaboration_url: None,
+            collaboration_secret: None,
+            pronunciation_url: None,
+            translation_url: None,
+            media_root: "unused".into(),
+            google_client_id: "test-client".into(),
+            google_client_secret: "test-secret".into(),
+            google_redirect_url: "https://api.example.test/callback".into(),
+            cookie_secure: true,
+            bind_addr: "127.0.0.1:3000".into(),
+            frontend_url: "https://frontend.example.test".into(),
+            database_url: "unused".into(),
+            database_max_connections: 1,
+            database_acquire_timeout_secs: 1,
+            jwt_private_key_path: "unused".into(),
+            jwt_issuer: "https://api.example.test".into(),
+            jwt_audience: "test".into(),
+            jwt_key_id: "test".into(),
+        };
+        let metadata = serde_json::from_value(serde_json::json!({
+            "issuer":"https://accounts.google.com",
+            "authorization_endpoint":"https://accounts.google.com/authorize",
+            "token_endpoint":"https://accounts.google.com/token",
+            "jwks_uri":"https://accounts.google.com/jwks",
+            "response_types_supported":["code"],"subject_types_supported":["public"],
+            "id_token_signing_alg_values_supported":["RS256"]
+        }))
+        .unwrap();
+        GoogleAuth::new(Arc::new(config))
+            .unwrap()
+            .with_provider_metadata(metadata)
+            .unwrap()
+    }
+    #[tokio::test]
+    async fn fresh_metadata_allows_parallel_authorization_while_another_reader_holds_the_cache() {
+        let auth = auth();
+        let guard = auth.metadata.read().await;
+        let (a, b) = tokio::time::timeout(Duration::from_secs(1), async {
+            tokio::join!(auth.authorization(), auth.authorization())
+        })
+        .await
+        .expect("fresh cache required an exclusive lock");
+        let (a_url, a) = a.unwrap();
+        let (b_url, b) = b.unwrap();
+        assert_ne!(a.state.secret(), b.state.secret());
+        assert_ne!(a.nonce, b.nonce);
+        assert!(a_url.contains("code_challenge_method=S256"));
+        assert!(b_url.contains("code_challenge_method=S256"));
+        drop(guard);
+    }
 }
