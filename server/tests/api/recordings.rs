@@ -454,3 +454,91 @@ async fn renaming_media_keeps_bytes_tickets_progress_and_rejects_foreign_or_inva
         .assert_status_not_found();
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn playback_progress_does_not_wait_for_parent_write_lock_and_rechecks_deleted_sources() {
+    use sea_orm::{QuerySelect, TransactionTrait};
+    use server::entities::{media, media_progress, places, sessions};
+    let app = LearningApp::spawn().await;
+    let session = lesson(&app).await;
+    let id = upload(
+        &app,
+        session,
+        "Lesson.mp3",
+        include_bytes!("../fixtures/lesson.mp3"),
+    )
+    .await;
+    let place = sessions::Entity::find_by_id(session)
+        .one(app.db.as_ref())
+        .await
+        .unwrap()
+        .unwrap()
+        .place_id;
+    let path = format!("/api/v1/sessions/{session}/recordings/{id}/progress");
+    let txn = app.db.begin().await.unwrap();
+    places::Entity::find_by_id(place)
+        .lock_exclusive()
+        .one(&txn)
+        .await
+        .unwrap()
+        .unwrap();
+    for seconds in [1.0, 2.0] {
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            app.api
+                .put(&path)
+                .add_header("authorization", bearer(&app.owner_token))
+                .json(&json!({"position_seconds":seconds})),
+        )
+        .await;
+        result
+            .expect("progress waited for the place lock")
+            .assert_status_ok();
+    }
+    txn.rollback().await.unwrap();
+    assert_eq!(
+        media_progress::Entity::find_by_id((app.owner_id, id))
+            .one(app.db.as_ref())
+            .await
+            .unwrap()
+            .unwrap()
+            .position_seconds,
+        2.0
+    );
+    // A valid file from another session must not pass the permission-filtered insert.
+    let other = lesson(&app).await;
+    app.api
+        .put(&format!(
+            "/api/v1/sessions/{other}/recordings/{id}/progress"
+        ))
+        .add_header("authorization", bearer(&app.owner_token))
+        .json(&json!({"position_seconds":3}))
+        .await
+        .assert_status_not_found();
+    app.api
+        .delete(&format!("/api/v1/sessions/{session}"))
+        .add_header("authorization", bearer(&app.owner_token))
+        .await
+        .assert_status(StatusCode::NO_CONTENT);
+    app.api
+        .put(&path)
+        .add_header("authorization", bearer(&app.owner_token))
+        .json(&json!({"position_seconds":3}))
+        .await
+        .assert_status_not_found();
+    assert!(media::Entity::find_by_id(id)
+        .one(app.db.as_ref())
+        .await
+        .unwrap()
+        .is_some());
+    assert_eq!(
+        media_progress::Entity::find_by_id((app.owner_id, id))
+            .one(app.db.as_ref())
+            .await
+            .unwrap()
+            .unwrap()
+            .position_seconds,
+        2.0
+    );
+    app.cleanup().await;
+}

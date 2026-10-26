@@ -30,6 +30,7 @@ Quy tắc:
 - **Domain con:** dùng cùng layout lồng bên trong, ví dụ `vocabulary/flashcards/{mod,handlers,service,dto}.rs`.
 - **Route nội bộ** (bridge collaboration): đặt trong `<domain>/internal.rs`, có router và middleware riêng, nhưng vẫn gọi service. Không ghi DB trực tiếp trong file đó.
 - **Khóa nhiều place trong reviews/answer.rs:** ngoại lệ có chủ đích cho lượt ôn từ nhiều bài. Khóa parent theo ID tăng dần, dùng cùng lock_for_write với lưu note/thu hồi quyền để tránh deadlock và không chấm sau khi mất quyền. Không đổi thành các khóa rời ngoài transaction.
+- **Tiến độ nghe:** ngoại lệ ghi không lấy khóa place; dùng upsert có điều kiện quyền như A.5 để không chặn autosave.
 - **Thao tác liên domain:** `modules/bulk.rs` được giữ làm ngoại lệ có chủ đích, vì xóa nhiều place, course hoặc session cần một thứ tự khóa chung. Không thêm file liên domain mới nếu chưa ghi lý do vào tài liệu này.
 
 ## A.2 Hạ tầng dùng chung (`server/src/`)
@@ -138,6 +139,7 @@ Quy tắc:
 
     Helper này `begin()` rồi `lock_for_write()`. Caller kiểm tra lại quyền của bản ghi con trong transaction rồi `commit()`.
   - Không chép lại cặp `begin` + `lock_for_write` ở từng module.
+- **Ngoại lệ tiến độ nghe:** `media/recordings::progress` là trạng thái riêng của user, không sửa note/cấu trúc. Một `INSERT SELECT ... ON CONFLICT UPDATE` chứa điều kiện file đúng session và `notes::accessible` (cả cha đang active). Không khóa place; quyền được xét theo snapshot của chính statement, request sau thu hồi/xóa đã commit bị 404.
 - **Khóa nhiều place:** khóa theo thứ tự `id` tăng dần để tránh deadlock, như `bulk.rs` đang làm.
 - **Không gọi HTTP ngoài trong transaction** (pronunciation, translation, AI). Kiểm tra quyền trước, gọi HTTP sau, rồi mở transaction mới nếu cần ghi.
 - **Việc tốn CPU hoặc IO đồng bộ** (decode ảnh, zip, đọc file) chạy trong `tokio::task::spawn_blocking`.

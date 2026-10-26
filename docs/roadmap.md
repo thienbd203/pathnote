@@ -54,10 +54,6 @@ Các mục dưới đây là lỗi đã được đọc lại đúng dòng code.
 
 *C1 — Hiệu năng và đúng đắn (ưu tiên cao)*
 
-- **C1.6 Lưu tiến độ nghe giữ khóa ghi của cả place**
-  - **Vị trí:** `media/recordings/service.rs:88-90`.
-  - **Lỗi:** client gửi tiến độ vài giây một lần, tranh khóa với lưu ghi chú và upload.
-  - **Sửa:** kiểm `notes::access` rồi upsert `ON CONFLICT` không lấy `write_tx`. Nếu cần chặn người vừa bị thu hồi quyền thì đưa điều kiện quyền vào chính câu upsert. Thêm vào A.1/A.5 như một ngoại lệ có chủ đích.
 - **C1.7 Tạo bài tập từ Học cùng AI insert từng dòng trong lúc giữ khóa place**
   - **Vị trí:** `ai_study/service.rs:106-118`.
   - **Sửa:** dùng chung đường `insert_many(...).exec_with_returning_keys` của `exercises/service/create.rs:21-37`, tách thành một helper dùng chung.

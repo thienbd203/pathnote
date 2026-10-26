@@ -1,11 +1,14 @@
 use super::dto::{PlaybackResource, Progress, RecordingResource};
 use crate::{
     entities::{media, media_progress},
-    modules::{notes::service as notes, places::service as places},
+    modules::notes::service as notes,
     state::AppState,
     AppError,
 };
-use sea_orm::{sea_query::OnConflict, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set};
+use sea_orm::{
+    sea_query::{Expr, OnConflict, Query},
+    ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect, QueryTrait,
+};
 use std::collections::HashMap;
 const TYPES: [&str; 3] = ["audio/mpeg", "audio/mp4", "video/mp4"];
 async fn get(state: &AppState, user: i64, session: i64, id: i64) -> Result<media::Model, AppError> {
@@ -85,38 +88,55 @@ pub async fn progress(
     input: Progress,
 ) -> Result<Progress, AppError> {
     input.validate()?;
-    let (_, place) = notes::access(state.db.as_ref(), user, session, false).await?;
-    let txn = places::write_tx(state.db.as_ref(), place.user_id, place.id).await?;
-    notes::access(&txn, user, session, false).await?;
-    let model = media::Entity::find_by_id(id)
-        .filter(media::Column::SessionId.eq(session))
-        .filter(media::Column::Kind.eq("file"))
-        .filter(media::Column::MimeType.is_in(TYPES))
-        .one(&txn)
-        .await?;
-    if model.is_none() {
-        return Err(AppError::NotFound("Không tìm thấy file nghe/xem.".into()));
-    }
-    media_progress::Entity::insert(media_progress::ActiveModel {
-        user_id: Set(user),
-        media_id: Set(id),
-        position_seconds: Set(input.position_seconds),
-        updated_at: Set(chrono::Utc::now().fixed_offset()),
-    })
-    .on_conflict(
-        OnConflict::columns([
+    // Per-user derived state: authorize in the same statement as the upsert,
+    // without serializing note saves/uploads on the place row.
+    let allowed = notes::accessible(user, false)
+        .filter(crate::entities::sessions::Column::Id.eq(session))
+        .select_only()
+        .column(crate::entities::sessions::Column::Id)
+        .into_query();
+    let source = Query::select()
+        .expr(Expr::val(user))
+        .column(media::Column::Id)
+        .expr(Expr::val(input.position_seconds))
+        .expr(Expr::val(chrono::Utc::now().fixed_offset()))
+        .from(media::Entity)
+        .and_where(media::Column::Id.eq(id))
+        .and_where(media::Column::SessionId.eq(session))
+        .and_where(media::Column::Kind.eq("file"))
+        .and_where(media::Column::MimeType.is_in(TYPES))
+        .and_where(Expr::exists(allowed))
+        .to_owned();
+    let query = Query::insert()
+        .into_table(media_progress::Entity)
+        .columns([
             media_progress::Column::UserId,
             media_progress::Column::MediaId,
-        ])
-        .update_columns([
             media_progress::Column::PositionSeconds,
             media_progress::Column::UpdatedAt,
         ])
-        .to_owned(),
-    )
-    .exec(&txn)
-    .await?;
-    txn.commit().await?;
+        .select_from(source)
+        .map_err(|e| AppError::Internal(e.to_string()))?
+        .on_conflict(
+            OnConflict::columns([
+                media_progress::Column::UserId,
+                media_progress::Column::MediaId,
+            ])
+            .update_columns([
+                media_progress::Column::PositionSeconds,
+                media_progress::Column::UpdatedAt,
+            ])
+            .to_owned(),
+        )
+        .to_owned();
+    let affected = state
+        .db
+        .execute(state.db.get_database_backend().build(&query))
+        .await?
+        .rows_affected();
+    if affected == 0 {
+        return Err(AppError::NotFound("Không tìm thấy file nghe/xem.".into()));
+    }
     Ok(input)
 }
 
