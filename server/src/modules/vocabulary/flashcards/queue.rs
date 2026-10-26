@@ -1,15 +1,16 @@
 use super::dto::{Configuration, Direction, Filters, Overview};
 use crate::{
     entities::{
-        flashcard_memory as memory, flashcard_settings as settings, vocabulary_cards as cards,
+        flashcard_memory as memory, flashcard_settings as settings, places, sessions,
+        vocabulary_cards as cards,
     },
     modules::notes::service as notes,
     AppError,
 };
 use sea_orm::{
     sea_query::{Alias, Expr, JoinType},
-    ColumnTrait, Condition, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
-    QueryTrait,
+    ColumnTrait, Condition, ConnectionTrait, EntityTrait, FromQueryResult, QueryFilter, QueryOrder,
+    QuerySelect, QueryTrait, RelationTrait,
 };
 use serde_json::Value;
 pub fn key(card: &cards::Model) -> String {
@@ -237,12 +238,26 @@ pub async fn counts<C: ConnectionTrait>(
     }
     Ok(result)
 }
+pub(super) struct Queued {
+    pub card: cards::Model,
+    pub direction: &'static str,
+    pub memory: Option<memory::Model>,
+    pub source: super::dto::Source,
+}
+#[derive(FromQueryResult)]
+struct Candidate {
+    #[sea_orm(nested)]
+    card: cards::Model,
+    source_title: String,
+    source_owner: i64,
+}
+
 pub async fn next<C: ConnectionTrait>(
     db: &C,
     user: i64,
     f: &Filters,
     direction: Direction,
-) -> Result<Option<(cards::Model, &'static str, Option<memory::Model>)>, AppError> {
+) -> Result<Option<Queued>, AppError> {
     let now = chrono::Utc::now().fixed_offset();
     let mut candidates = Vec::new();
     for d in direction.directions() {
@@ -264,13 +279,43 @@ pub async fn next<C: ConnectionTrait>(
                 sea_orm::Order::Asc,
             )
             .order_by_expr(Expr::cust("random()"), sea_orm::Order::Asc);
-        if let Some((card, m)) = query.select_also(memory::Entity).limit(1).one(db).await? {
+        let selected = query
+            .join(JoinType::InnerJoin, cards::Relation::Session.def())
+            .join(JoinType::InnerJoin, sessions::Relation::Place.def())
+            .select_also(memory::Entity)
+            .expr_as(
+                Expr::col((sessions::Entity, sessions::Column::Title)),
+                "A_source_title",
+            )
+            .expr_as(
+                Expr::col((places::Entity, places::Column::UserId)),
+                "A_source_owner",
+            )
+            .limit(1)
+            .into_model::<Candidate, memory::Model>()
+            .one(db)
+            .await?;
+        if let Some((candidate, m)) = selected {
+            let card = candidate.card;
             let m = m.filter(|m| m.study_key == key(&card));
-            candidates.push((m.as_ref().map(|m| m.due_at), card, *d, m));
+            let source = super::dto::Source {
+                id: card.session_id,
+                title: candidate.source_title,
+                shared: candidate.source_owner != user,
+            };
+            candidates.push((
+                m.as_ref().map(|m| m.due_at),
+                Queued {
+                    card,
+                    direction: d,
+                    memory: m,
+                    source,
+                },
+            ));
         }
     }
     use rand::seq::SliceRandom;
     candidates.shuffle(&mut rand::thread_rng());
-    candidates.sort_by_key(|(due, _, _, _)| (due.is_none(), *due));
-    Ok(candidates.into_iter().next().map(|(_, c, d, m)| (c, d, m)))
+    candidates.sort_by_key(|(due, _)| (due.is_none(), *due));
+    Ok(candidates.into_iter().next().map(|(_, queued)| queued))
 }

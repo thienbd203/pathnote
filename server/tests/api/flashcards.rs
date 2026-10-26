@@ -1220,3 +1220,43 @@ async fn memory_progress_estimates_recall_without_duplicates_or_schedule_writes(
     );
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn next_loads_source_in_the_candidate_query_and_keeps_the_overview_contract() {
+    let (app, queries) = LearningApp::spawn_with_queries(false).await;
+    let id = lesson(&app, &app.owner_token).await;
+    save(
+        &app,
+        id,
+        &doc(vec![typed_entry("remember", "nhớ", "verb")]),
+        0,
+    )
+    .await;
+    queries.lock().unwrap().clear();
+    let response = next(&app, &app.owner_token, json!({})).await;
+    assert_eq!(response["card"]["source"]["id"], id);
+    assert_eq!(response["card"]["source"]["shared"], false);
+    assert!(response["card"]["source"]["title"].is_string());
+    assert_eq!(response["overview"]["new"], 1);
+    let selects: Vec<_> = queries
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|sql| sql.starts_with("SELECT"))
+        .cloned()
+        .collect();
+    assert_eq!(selects.len(), 5, "{selects:#?}");
+    assert!(!selects
+        .iter()
+        .any(|sql| sql.starts_with("SELECT \"sessions\"")));
+    assert_eq!(
+        queries
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|sql| sql.starts_with("INSERT INTO \"flashcard_attempts\""))
+            .count(),
+        1
+    );
+    app.cleanup().await;
+}

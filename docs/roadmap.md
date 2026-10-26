@@ -54,12 +54,6 @@ Các mục dưới đây là lỗi đã được đọc lại đúng dòng code.
 
 *C2 — Gộp logic bị chép (ưu tiên trung bình; đã bắt đầu lệch nhau)*
 
-- **C2.4 `POST /flashcards/next` chạy khoảng 10 query cho mỗi thẻ**
-  - **Vị trí:** `vocabulary/flashcards/service/cards.rs:92-147`.
-  - **Sửa:**
-    - Bỏ `notes::access` thừa (thẻ đã qua `library::scope`).
-    - Lấy title/owner trước khi insert ticket, để lỗi không để lại ticket mồ côi.
-    - Không tính lại `queue::counts` đầy đủ cho mỗi thẻ nếu frontend không cần.
 - **C2.5 Tạo vocabulary review tải dữ liệu thừa**
   - **Vị trí:** `vocabulary/reviews/create.rs`.
   - **Lỗi:**

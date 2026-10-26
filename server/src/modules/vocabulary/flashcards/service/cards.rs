@@ -2,7 +2,6 @@ use super::super::{dto, personal, queue};
 use super::runs;
 use crate::{
     entities::{flashcard_attempts as attempts, flashcard_settings as settings},
-    modules::notes::service as notes,
     AppError,
 };
 use sea_orm::{sea_query::OnConflict, ActiveModelTrait, EntityTrait, Set};
@@ -79,7 +78,13 @@ pub async fn next(
         });
     }
     let configured_direction = direction;
-    let Some((card, direction, memory)) = queue::next(db, user, &f, direction).await? else {
+    let Some(queue::Queued {
+        card,
+        direction,
+        memory,
+        source,
+    }) = queue::next(db, user, &f, direction).await?
+    else {
         if let Some(id) = run_id {
             runs::finish(db, user, id, true).await?;
         }
@@ -90,6 +95,7 @@ pub async fn next(
         });
     };
     let profile = personal::load(db, user).await?;
+    let meaning = queue::meanings(db, user, &card).await?;
     let id = Uuid::new_v4();
     attempts::ActiveModel {
         id: Set(id),
@@ -117,13 +123,6 @@ pub async fn next(
     }
     .insert(db)
     .await?;
-    let (source_session, source_place) = notes::access(db, user, card.session_id, false).await?;
-    let source = dto::Source {
-        id: source_session.id,
-        title: source_session.title,
-        shared: source_place.user_id != user,
-    };
-    let meaning = queue::meanings(db, user, &card).await?;
     Ok(dto::Next {
         run: runs::optional_summary(db, user, run_id).await?,
         card: Some(dto::Front {
