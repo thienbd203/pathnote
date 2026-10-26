@@ -377,3 +377,55 @@ async fn skipped_optimizer_checks_are_durable_and_do_not_reload_history_on_next_
         app.cleanup().await;
     }
 }
+
+#[tokio::test]
+async fn optimizer_status_counts_valid_chains_beyond_the_training_load_limit() {
+    use sea_orm::{ConnectionTrait, DbBackend, Statement};
+    let app = LearningApp::spawn().await;
+    let cards = seed_history(&app).await;
+    let original = status(&app, &app.owner_token).await;
+    assert_eq!(original["reviews"], 120);
+    assert_eq!(original["samples"], 80);
+    app.db
+        .execute(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            "UPDATE flashcard_attempts SET version=10 WHERE card_id=$1 AND version=2",
+            [cards[0].id.into()],
+        ))
+        .await
+        .unwrap();
+    app.db
+        .execute(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            "UPDATE flashcard_attempts SET delta_days=-1 WHERE card_id=$1 AND version=1",
+            [cards[1].id.into()],
+        ))
+        .await
+        .unwrap();
+    app.db
+        .execute(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            "UPDATE flashcard_attempts SET delta_days=-99 WHERE card_id=$1 AND version=0",
+            [cards[2].id.into()],
+        ))
+        .await
+        .unwrap();
+    let info = status(&app, &app.owner_token).await;
+    assert_eq!(info["reviews"], 114);
+    assert_eq!(info["samples"], 76);
+    // One large insert tests repeated resets and a complete chain longer than MAX_SEQUENCE.
+    app.db.execute(Statement::from_sql_and_values(DbBackend::Postgres, r#"
+        INSERT INTO flashcard_attempts (id,user_id,card_id,memory_card_id,direction,study_key,content_key,
+            version,retention,revealed,rating,reviewed_at,created_at,parameter_version,delta_days)
+        SELECT md5('large-status-'||i)::uuid,$1,$2,$2,'vi_en',repeat('a',64),repeat('b',64),
+            0,0.9,true,3,now(),now(),0,0 FROM generate_series(1,50001) i
+        UNION ALL
+        SELECT md5('long-chain-'||i)::uuid,$1,$2,$2,'en_vi',repeat('c',64),repeat('b',64),
+            i,0.9,true,3,now()+i*interval '1 second',now(),0,1 FROM generate_series(0,259) i
+    "#, [app.owner_id.into(),cards[0].id.into()])).await.unwrap();
+    let info = status(&app, &app.owner_token).await;
+    assert_eq!(info["reviews"], 50375);
+    assert_eq!(info["samples"], 331);
+    assert_eq!(status(&app, &app.other_token).await["reviews"], 0);
+    app.cleanup().await;
+}

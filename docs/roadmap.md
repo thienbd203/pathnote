@@ -54,10 +54,6 @@ Các mục dưới đây là lỗi đã được đọc lại đúng dòng code.
 
 *C1 — Hiệu năng và đúng đắn (ưu tiên cao)*
 
-- **C1.2 `GET /flashcards/optimization` tải toàn bộ attempts chỉ để đếm mẫu**
-  - **Vị trí:** `optimization.rs:42-45`, `history.rs:103-118`.
-  - **Lỗi:** khi vượt `MAX_REVIEWS` thì endpoint trả 503 mãi mãi.
-  - **Sửa:** đếm mẫu bằng một aggregate SQL. Endpoint chỉ báo trạng thái, không trả lỗi khi lịch sử lớn.
 - **C1.3 Overview flashcard replay FSRS sau mỗi lần đổi version model, và một thẻ lỗi làm hỏng cả request**
   - **Vị trí:** `vocabulary/flashcards/progress.rs:84-131`.
   - **Sửa:**

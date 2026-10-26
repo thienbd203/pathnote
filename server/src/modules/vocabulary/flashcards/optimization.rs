@@ -11,8 +11,8 @@ use sea_orm::{
     TransactionTrait,
 };
 use std::sync::{Arc, Mutex};
-fn metadata(profile: &personal::Profile, data: &history::Dataset) -> Optimization {
-    let samples = data.sample_count();
+fn metadata(profile: &personal::Profile, data: &history::Counts) -> Optimization {
+    let samples = data.samples;
     let state = if samples < history::MIN_SAMPLES {
         "collecting"
     } else if profile.version() > 0 {
@@ -31,7 +31,7 @@ fn metadata(profile: &personal::Profile, data: &history::Dataset) -> Optimizatio
         state,
         personalized: profile.version() > 0,
         version: profile.version(),
-        reviews: data.review_count(),
+        reviews: data.reviews,
         samples,
         minimum_samples: history::MIN_SAMPLES,
         eligible: samples >= history::MIN_SAMPLES,
@@ -41,7 +41,7 @@ fn metadata(profile: &personal::Profile, data: &history::Dataset) -> Optimizatio
 }
 pub async fn status(db: &DatabaseConnection, user: i64) -> Result<Optimization, AppError> {
     let profile = personal::load(db, user).await?;
-    let data = history::load(db, user).await?;
+    let data = history::counts(db, user).await?;
     Ok(metadata(&profile, &data))
 }
 struct CancelTraining(Arc<Mutex<CombinedProgressState>>);

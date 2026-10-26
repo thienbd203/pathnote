@@ -199,3 +199,48 @@ pub(super) fn current_item<R: Into<ReviewRow>>(
         reviews: history.reviews,
     })
 }
+
+pub(super) struct Counts {
+    pub reviews: usize,
+    pub samples: usize,
+}
+/// Same chain validation as `prepare`, aggregated without loading attempt payloads.
+pub(super) async fn counts<C: ConnectionTrait>(db: &C, user: i64) -> Result<Counts, AppError> {
+    // Window functions identify version-zero chains and validate the entire sequence;
+    // a plain COUNT would include broken histories and overcount the 256-review training cap.
+    let row = db
+        .query_one(sea_orm::Statement::from_sql_and_values(
+            sea_orm::DbBackend::Postgres,
+            r#"
+        WITH ordered AS (
+            SELECT memory_card_id, direction, study_key, version, reviewed_at, delta_days,
+                created_at, id,
+                SUM(CASE WHEN version=0 THEN 1 ELSE 0 END) OVER w AS generation,
+                LAG(reviewed_at) OVER w AS previous
+            FROM flashcard_attempts
+            WHERE user_id=$1 AND rating BETWEEN 1 AND 4 AND reviewed_at IS NOT NULL
+            WINDOW w AS (PARTITION BY memory_card_id,direction,study_key
+                ORDER BY reviewed_at,created_at,id ROWS UNBOUNDED PRECEDING)
+        ), numbered AS (
+            SELECT *, ROW_NUMBER() OVER (PARTITION BY memory_card_id,direction,study_key,generation
+                ORDER BY reviewed_at,created_at,id)-1 AS position,
+                CASE WHEN version=0 THEN 0 ELSE COALESCE(delta_days::bigint,
+                    FLOOR(EXTRACT(EPOCH FROM (reviewed_at-previous))/86400)::bigint) END AS delta
+            FROM ordered WHERE generation>0
+        ), chains AS (
+            SELECT COUNT(*) AS reviews,
+                COUNT(*) FILTER (WHERE position < $2 AND delta > 0) AS samples,
+                BOOL_AND(version=position AND delta BETWEEN 0 AND 4294967295) AS valid
+            FROM numbered GROUP BY memory_card_id,direction,study_key,generation
+        ) SELECT COALESCE(SUM(reviews) FILTER (WHERE valid),0)::bigint AS reviews,
+            COALESCE(SUM(samples) FILTER (WHERE valid),0)::bigint AS samples FROM chains
+    "#,
+            [user.into(), (MAX_SEQUENCE as i64).into()],
+        ))
+        .await?
+        .expect("aggregate always returns one row");
+    Ok(Counts {
+        reviews: row.try_get::<i64>("", "reviews")? as usize,
+        samples: row.try_get::<i64>("", "samples")? as usize,
+    })
+}

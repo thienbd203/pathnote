@@ -483,3 +483,5 @@ Readiness collaboration `/up` kiểm Rust qua URL cấu hình (timeout 2s, cache
 ### Rà soát Rust C1 (26/10)
 
 - C1.1: optimizer ghi `checked_at` trước khi đọc lịch sử, kể cả thiếu mẫu/không đủ mẫu mới/lỗi đọc. Tick sau trong một giờ không tải lại lịch sử. Projection lịch sử chỉ lấy cột phục vụ FSRS, bỏ JSON snapshot/parameters. Thêm `evaluated_at` (migration additive, backfill từ checked_at cho model đã đánh giá) để mốc 30 ngày không bị các lần kiểm tra định kỳ đẩy lùi mãi. Không đổi lịch thẻ hoặc tham số khi chỉ bỏ qua. Test metric SQL xác nhận hai nhánh bỏ qua và vẫn đánh giá lại sau 30 ngày.
+
+- C1.2: trạng thái optimizer dùng một aggregate SQL, không tải JSON/lịch sử vào Rust và không còn giới hạn 50.000 lượt của bộ fitting. Chỉ đếm chuỗi bắt đầu version 0, đủ thứ tự, delta hợp lệ; mẫu dùng tối đa 256 lượt/chuỗi. Test chuỗi lỗi, reset, chuỗi dài và hơn 50.000 lượt, tách dữ liệu từng user.
