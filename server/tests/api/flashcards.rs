@@ -1206,5 +1206,17 @@ async fn memory_progress_estimates_recall_without_duplicates_or_schedule_writes(
         memory::Entity::find().all(app.db.as_ref()).await.unwrap(),
         schedules_before
     );
+    // Missing historical attempts must not make the whole overview fail after a model update.
+    server::entities::flashcard_attempts::Entity::delete_many()
+        .exec(app.db.as_ref())
+        .await
+        .unwrap();
+    let fallback = overview(&app, &app.owner_token, "").await;
+    assert!((fallback["remembered"].as_f64().unwrap() - 0.9).abs() < 0.001);
+    assert_eq!(fallback["unseen"], 1);
+    assert_eq!(
+        memory::Entity::find().all(app.db.as_ref()).await.unwrap(),
+        schedules_before
+    );
     app.cleanup().await;
 }

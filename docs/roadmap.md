@@ -54,13 +54,6 @@ Các mục dưới đây là lỗi đã được đọc lại đúng dòng code.
 
 *C1 — Hiệu năng và đúng đắn (ưu tiên cao)*
 
-- **C1.3 Overview flashcard replay FSRS sau mỗi lần đổi version model, và một thẻ lỗi làm hỏng cả request**
-  - **Vị trí:** `vocabulary/flashcards/progress.rs:84-131`.
-  - **Sửa:**
-    - Thẻ có lịch sử thiếu thì bỏ qua (hoặc dùng stability đang lưu), không trả 409 cho cả overview.
-    - Đưa phần replay CPU vào `spawn_blocking` khi số thẻ stale lớn.
-    - Chỉ select cột cần.
-  - **Cân nhắc:** lưu state đã replay để request sau không phải làm lại. Nếu làm thì ghi lý do vào commit.
 - **C1.4 Ghi chú mới vẫn mang `schema_version` 3**
   - **Vị trí:** `sessions/service/mod.rs:211`, `sessions/service/initial_note.rs:42`.
   - **Lỗi:** ghi chú tạo từ template hoặc cấu trúc buổi trước lọt vào nhánh chuyển tiếp D1, nên writer cũ vẫn ghi đè được.
