@@ -54,10 +54,6 @@ Các mục dưới đây là lỗi đã được đọc lại đúng dòng code.
 
 *C2 — Gộp logic bị chép (ưu tiên trung bình; đã bắt đầu lệch nhau)*
 
-- **C2.6 `exercises::Question` lặp 5 field ở cả 7 variant**
-  - **Vị trí:** `exercises/question.rs:8-119,290-298`.
-  - **Sửa:** chuyển thành `struct Question { #[serde(flatten)] kind: Kind, … }`. JSON vào và ra phải giữ nguyên.
-  - **Test:** dùng các test exercise hiện có cộng một test round-trip cho đủ 7 loại câu hỏi.
 - **C2.7 Snapshot dự phòng của flashcard lệch giữa `log`, `reveal` và `grade`**
   - **Vị trí:** `vocabulary/flashcards/service/log.rs:146-147`, `service/review.rs:81,90,215-223`.
   - **Sửa:** tách một hàm `snapshot(&card, meanings)` dùng chung, theo đúng locale mặc định và cách gộp nghĩa.
