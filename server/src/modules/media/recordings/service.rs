@@ -1,7 +1,7 @@
 use super::dto::{PlaybackResource, Progress, RecordingResource};
 use crate::{
     entities::{media, media_progress},
-    modules::notes::service as notes,
+    modules::{media::Kind, notes::service as notes},
     state::AppState,
     AppError,
 };
@@ -12,8 +12,7 @@ use sea_orm::{
 use std::collections::HashMap;
 const TYPES: [&str; 3] = ["audio/mpeg", "audio/mp4", "video/mp4"];
 async fn get(state: &AppState, user: i64, session: i64, id: i64) -> Result<media::Model, AppError> {
-    let model =
-        super::super::service::get(state, user, session, super::super::dto::Kind::File, id).await?;
+    let model = super::super::service::get(state, user, session, Kind::File, id).await?;
     if !TYPES.contains(&model.mime_type.as_str()) {
         return Err(AppError::NotFound("Không tìm thấy file nghe/xem.".into()));
     }
@@ -27,7 +26,7 @@ pub async fn list(
     notes::access(state.db.as_ref(), user, session, false).await?;
     let files = media::Entity::find()
         .filter(media::Column::SessionId.eq(session))
-        .filter(media::Column::Kind.eq("file"))
+        .filter(media::Column::Kind.eq(Kind::File.as_str()))
         .filter(media::Column::MimeType.is_in(TYPES))
         .order_by_asc(media::Column::Id)
         .all(state.db.as_ref())
@@ -103,7 +102,7 @@ pub async fn progress(
         .from(media::Entity)
         .and_where(media::Column::Id.eq(id))
         .and_where(media::Column::SessionId.eq(session))
-        .and_where(media::Column::Kind.eq("file"))
+        .and_where(media::Column::Kind.eq(Kind::File.as_str()))
         .and_where(media::Column::MimeType.is_in(TYPES))
         .and_where(Expr::exists(allowed))
         .to_owned();

@@ -2,11 +2,24 @@ use super::dto::*;
 use crate::{entities::user_settings, AppError};
 use sea_orm::{sea_query::OnConflict, EntityTrait, Set};
 use std::collections::HashSet;
+#[derive(Clone, Copy)]
+enum Category {
+    Learning,
+    Navigation,
+}
+impl Category {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Learning => "learning",
+            Self::Navigation => "navigation",
+        }
+    }
+}
 pub async fn read(
     db: &sea_orm::DatabaseConnection,
     user: i64,
 ) -> Result<PersonalSettings, AppError> {
-    let saved = user_settings::Entity::find_by_id((user, "learning".to_owned()))
+    let saved = user_settings::Entity::find_by_id((user, Category::Learning.as_str().to_owned()))
         .one(db)
         .await?;
     let learning = match saved {
@@ -26,7 +39,7 @@ pub async fn save_learning(
     persist(
         db,
         user_id,
-        "learning",
+        Category::Learning,
         &learning,
         "Không lưu được cài đặt học tập.",
     )
@@ -37,7 +50,7 @@ pub async fn read_navigation(
     db: &sea_orm::DatabaseConnection,
     user: i64,
 ) -> Result<NavigationSettings, AppError> {
-    let saved = user_settings::Entity::find_by_id((user, "navigation".to_owned()))
+    let saved = user_settings::Entity::find_by_id((user, Category::Navigation.as_str().to_owned()))
         .one(db)
         .await?;
     let value = match saved {
@@ -64,21 +77,28 @@ pub async fn save_navigation(
             "Mỗi danh sách tối đa 100 mục, ID dương và không trùng nhau.",
         ));
     }
-    persist(db, user, "navigation", &value, "Không lưu được bộ lọc.").await?;
+    persist(
+        db,
+        user,
+        Category::Navigation,
+        &value,
+        "Không lưu được bộ lọc.",
+    )
+    .await?;
     Ok(value)
 }
 
 async fn persist<T: serde::Serialize>(
     db: &sea_orm::DatabaseConnection,
     user: i64,
-    category: &str,
+    category: Category,
     value: &T,
     message: &str,
 ) -> Result<(), AppError> {
     let value = serde_json::to_value(value).map_err(|_| AppError::Internal(message.into()))?;
     user_settings::Entity::insert(user_settings::ActiveModel {
         user_id: Set(user),
-        category: Set(category.into()),
+        category: Set(category.as_str().into()),
         value: Set(value),
         updated_at: Set(chrono::Utc::now().fixed_offset()),
     })

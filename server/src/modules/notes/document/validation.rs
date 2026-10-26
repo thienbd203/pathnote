@@ -375,11 +375,11 @@ pub fn validate(content: &serde_json::Value, version: i32) -> Result<Vec<Referen
             Node::Exercise { attrs } => found.push(Reference::Exercise(attrs.exercise_id)),
             Node::Image { attrs, .. } => found.push(Reference::Media {
                 id: attrs.media_id,
-                kind: "image",
+                kind: crate::modules::media::Kind::Image,
             }),
             Node::File { attrs, .. } => found.push(Reference::Media {
                 id: attrs.media_id,
-                kind: "file",
+                kind: crate::modules::media::Kind::File,
             }),
             _ => {}
         }

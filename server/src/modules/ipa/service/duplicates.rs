@@ -1,7 +1,7 @@
 use super::{prepare_pairs, prepare_words, Prepared};
 use crate::{
     entities::ipa_library as library,
-    modules::ipa::dto::{Duplicates, Pairs, Words},
+    modules::ipa::dto::{Duplicates, Kind, Pairs, Words},
     AppError,
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
@@ -10,13 +10,13 @@ async fn lookup(
     db: &sea_orm::DatabaseConnection,
     user: i64,
     locale: String,
-    kind: &str,
+    kind: Kind,
     entries: Vec<Prepared>,
 ) -> Result<Duplicates, AppError> {
     let mut existing: HashSet<String> = library::Entity::find()
         .filter(library::Column::UserId.eq(user))
         .filter(library::Column::Locale.eq(locale))
-        .filter(library::Column::Kind.eq(kind))
+        .filter(library::Column::Kind.eq(kind.as_str()))
         .filter(library::Column::Key.is_in(entries.iter().map(|e| e.key.clone())))
         .select_only()
         .column(library::Column::Key)
@@ -44,7 +44,7 @@ pub async fn words_duplicates(
     input: Words,
 ) -> Result<Duplicates, AppError> {
     let (locale, entries) = prepare_words(input)?;
-    lookup(db, user, locale, "word", entries).await
+    lookup(db, user, locale, Kind::Word, entries).await
 }
 pub async fn pairs_duplicates(
     db: &sea_orm::DatabaseConnection,
@@ -52,5 +52,5 @@ pub async fn pairs_duplicates(
     input: Pairs,
 ) -> Result<Duplicates, AppError> {
     let (locale, entries) = prepare_pairs(input)?;
-    lookup(db, user, locale, "pair", entries).await
+    lookup(db, user, locale, Kind::Pair, entries).await
 }

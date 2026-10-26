@@ -527,3 +527,5 @@ Readiness collaboration `/up` kiểm Rust qua URL cấu hình (timeout 2s, cache
 - C3.4: gom retention mặc định, giới hạn topic/query, TTL AI pending (API và worker), cap body/Yjs/base64. Giá trị và thời hạn cũ giữ nguyên; base64 cap tính từ cap nhị phân. Test encode đúng cap và cả state + note tối đa vẫn vừa envelope bridge.
 
 - C3.5: gom SHA-256 JSON bằng serde/sha2 hiện có (golden hash UTF-8/legacy scope), đổi tên memory_key/review_key để rõ identity; giữ normalization/byte của caller. Dùng chung trim tên/mô tả nhưng giữ message và null/empty; gom chính sách tên file, giữ sanitize-upload khác reject-rename. Gộp lọc reference AI, biểu thức JSONPath đếm block và upsert settings. Test Unicode/cap/đuôi file, hash cũ, toàn bộ course stats/settings/AI/review/migration. Không migration hay reset lịch.
+
+- C3.6: dùng Kind enum cho media (cả reference trong note và recordings), thư viện IPA word/pair, Category enum cho settings. Chỉ chuyển sang chuỗi ở ranh giới SQL/form; giá trị DB/JSON cũ không đổi, không migration. Bộ test upload/reference chéo loại, IPA hai loại/duplicate và settings riêng category kiểm tương thích.

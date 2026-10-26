@@ -14,7 +14,9 @@ pub async fn words(
 ) -> Result<Json<ListResource>, AppError> {
     // Giữ lỗi entries của contract IPA thay cho body/query chung của extractor.
     let AppQuery(q) = q.map_err(|_| invalid())?;
-    Ok(Json(service::list(&state.db, user.id, q, "word").await?))
+    Ok(Json(
+        service::list(&state.db, user.id, q, Kind::Word).await?,
+    ))
 }
 pub async fn pairs(
     State(state): State<AppState>,
@@ -23,7 +25,9 @@ pub async fn pairs(
 ) -> Result<Json<ListResource>, AppError> {
     // Giữ lỗi entries của contract IPA thay cho body/query chung của extractor.
     let AppQuery(q) = q.map_err(|_| invalid())?;
-    Ok(Json(service::list(&state.db, user.id, q, "pair").await?))
+    Ok(Json(
+        service::list(&state.db, user.id, q, Kind::Pair).await?,
+    ))
 }
 pub async fn import_words(
     State(state): State<AppState>,

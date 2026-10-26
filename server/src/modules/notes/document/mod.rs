@@ -9,7 +9,10 @@ use serde::Deserialize;
 pub use validation::validate;
 pub enum Reference {
     AIStudy(uuid::Uuid),
-    Media { id: i64, kind: &'static str },
+    Media {
+        id: i64,
+        kind: crate::modules::media::Kind,
+    },
     Exercise(i64),
 }
 #[derive(Deserialize)]

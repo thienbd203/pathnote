@@ -24,7 +24,7 @@ pub async fn list(
     db: &sea_orm::DatabaseConnection,
     user: i64,
     q: Query,
-    kind: &str,
+    kind: Kind,
 ) -> Result<ListResource, AppError> {
     if q.page == 0 || q.page > i32::MAX as u64 {
         return Err(AppError::validation("page", "Trang không hợp lệ."));
@@ -33,12 +33,12 @@ pub async fn list(
     let page = library::Entity::find()
         .filter(library::Column::UserId.eq(user))
         .filter(library::Column::Locale.eq(locale))
-        .filter(library::Column::Kind.eq(kind))
+        .filter(library::Column::Kind.eq(kind.as_str()))
         .order_by_asc(library::Column::Id)
         .paginate(db, 100);
     let total = page.num_items().await?;
     let rows = page.fetch_page(q.page - 1).await?;
-    let data = if kind == "word" {
+    let data = if kind == Kind::Word {
         LibraryData::Words {
             version: 1,
             locale: locale.into(),
@@ -85,7 +85,7 @@ async fn persist(
     db: &sea_orm::DatabaseConnection,
     user: i64,
     locale: &str,
-    kind: &str,
+    kind: Kind,
     entries: Vec<Prepared>,
 ) -> Result<ImportResource, AppError> {
     let txn = db.begin().await?;
@@ -97,7 +97,7 @@ async fn persist(
     let mut keys: HashSet<_> = library::Entity::find()
         .filter(library::Column::UserId.eq(user))
         .filter(library::Column::Locale.eq(locale))
-        .filter(library::Column::Kind.eq(kind))
+        .filter(library::Column::Kind.eq(kind.as_str()))
         .filter(library::Column::Key.is_in(entries.iter().map(|e| e.key.clone())))
         .select_only()
         .column(library::Column::Key)
@@ -116,7 +116,7 @@ async fn persist(
         models.push(library::ActiveModel {
             user_id: Set(user),
             locale: Set(locale.into()),
-            kind: Set(kind.into()),
+            kind: Set(kind.as_str().into()),
             key: Set(entry.key),
             content: Set(entry.content),
             ..Default::default()
@@ -147,7 +147,7 @@ pub async fn import_words(
     input: Words,
 ) -> Result<ImportResource, AppError> {
     let (locale, entries) = prepare_words(input)?;
-    persist(db, user, &locale, "word", entries).await
+    persist(db, user, &locale, Kind::Word, entries).await
 }
 fn prepare_words(mut input: Words) -> Result<(String, Vec<Prepared>), AppError> {
     if input.version != 1 || input.entries.is_empty() {
@@ -170,7 +170,7 @@ pub async fn import_pairs(
     input: Pairs,
 ) -> Result<ImportResource, AppError> {
     let (locale, entries) = prepare_pairs(input)?;
-    persist(db, user, &locale, "pair", entries).await
+    persist(db, user, &locale, Kind::Pair, entries).await
 }
 fn prepare_pairs(mut input: Pairs) -> Result<(String, Vec<Prepared>), AppError> {
     if input.version != 1

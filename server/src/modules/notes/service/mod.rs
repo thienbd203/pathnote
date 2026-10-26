@@ -162,7 +162,7 @@ pub(super) async fn validate_references<C: ConnectionTrait>(
             .await?;
         if !media_refs
             .iter()
-            .all(|r| media.iter().any(|m| m.id == r.0 && m.kind == r.1))
+            .all(|r| media.iter().any(|m| m.id == r.0 && m.kind == r.1.as_str()))
         {
             return Err(AppError::validation(
                 "content",

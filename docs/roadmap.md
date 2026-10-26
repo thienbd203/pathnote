@@ -54,10 +54,6 @@ Các mục dưới đây là lỗi đã được đọc lại đúng dòng code.
 
 *C3 — Dọn dẹp nhỏ (ưu tiên thấp, có thể gộp vài mục vào một commit cùng module)*
 
-- **C3.6 Giá trị kiểu chuỗi** thay bằng enum:
-  - Kind media `"file"`: `media/service.rs:143`, `recordings/service.rs:27,93`, `notes/document/mod.rs:12` dùng `media::dto::Kind`.
-  - `"word"`/`"pair"`: `ipa/service.rs`.
-  - Category settings: `settings/service.rs`.
 - **C3.7 Lặt vặt:**
   - `auth/handlers.rs:98`: đổi `auth.user.unwrap()` thành `.ok_or(AppError::Unauthenticated)?`.
   - `config.rs:115`: `optional()` bỏ qua chuỗi rỗng; giá trị mặc định `.storage/media` không chép sang `bin/media-cleanup.rs:6`.

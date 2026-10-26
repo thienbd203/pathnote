@@ -44,7 +44,7 @@ pub(super) async fn create(
         notes::access(&txn, user, id, false).await?;
         let model = media::ActiveModel {
             session_id: Set(id),
-            kind: Set(kind.field().into()),
+            kind: Set(kind.as_str().into()),
             name: Set(name),
             storage_key: Set(key.clone()),
             mime_type: Set(mime),
@@ -90,7 +90,7 @@ pub async fn get(
     notes::access(state.db.as_ref(), user, id, false).await?;
     media::Entity::find_by_id(media_id)
         .filter(media::Column::SessionId.eq(id))
-        .filter(media::Column::Kind.eq(kind.field()))
+        .filter(media::Column::Kind.eq(kind.as_str()))
         .one(state.db.as_ref())
         .await?
         .ok_or_else(|| AppError::NotFound("Không tìm thấy tài liệu.".into()))
@@ -119,7 +119,7 @@ pub async fn rename(
     notes::access(&txn, user, session, false).await?;
     let model = media::Entity::find_by_id(id)
         .filter(media::Column::SessionId.eq(session))
-        .filter(media::Column::Kind.eq("file"))
+        .filter(media::Column::Kind.eq(Kind::File.as_str()))
         .one(&txn)
         .await?
         .ok_or_else(|| AppError::NotFound("Không tìm thấy tài liệu.".into()))?;

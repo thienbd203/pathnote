@@ -7,11 +7,14 @@ pub enum Kind {
     File,
 }
 impl Kind {
-    pub fn field(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             Self::Image => "image",
             Self::File => "file",
         }
+    }
+    pub fn field(self) -> &'static str {
+        self.as_str()
     }
     pub fn limit(self) -> usize {
         match self {

@@ -212,3 +212,17 @@ mod dual_accent_tests {
         assert!(invalid.validate(&Locale::Us).is_err());
     }
 }
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
+    Word,
+    Pair,
+}
+impl Kind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Word => "word",
+            Self::Pair => "pair",
+        }
+    }
+}

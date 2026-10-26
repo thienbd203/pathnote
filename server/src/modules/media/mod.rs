@@ -1,3 +1,4 @@
+pub(in crate::modules) use dto::Kind;
 pub(crate) mod cleanup;
 mod dto;
 mod filename;
