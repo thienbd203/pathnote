@@ -19,6 +19,19 @@ impl Kind {
             Self::File => 100 * 1024 * 1024,
         }
     }
+    /// This is a streaming memory cap, not format validation: bytes are still inspected.
+    pub fn upload_limit(self, name: &str) -> usize {
+        let ext = name.rsplit('.').next().unwrap_or("");
+        if self == Self::File
+            && !["mp3", "m4a", "mp4"]
+                .iter()
+                .any(|recording| ext.eq_ignore_ascii_case(recording))
+        {
+            10 * 1024 * 1024
+        } else {
+            self.limit()
+        }
+    }
 }
 #[derive(Serialize)]
 pub struct MediaResource {
@@ -61,4 +74,26 @@ pub fn validate_name(name: String, original: &str) -> Result<String, AppError> {
         ));
     }
     Ok(name)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn upload_limits_are_selected_before_buffering_and_do_not_trust_mime_headers() {
+        for name in [
+            "file.pdf",
+            "file.txt",
+            "file.docx",
+            "unknown",
+            "audio.mp3.txt",
+            "audio.mp3 ",
+        ] {
+            assert_eq!(Kind::File.upload_limit(name), 10 * 1024 * 1024);
+        }
+        for name in ["audio.MP3", "audio.M4A", "video.Mp4"] {
+            assert_eq!(Kind::File.upload_limit(name), 100 * 1024 * 1024);
+            assert_eq!(Kind::Image.upload_limit(name), 5 * 1024 * 1024);
+        }
+    }
 }

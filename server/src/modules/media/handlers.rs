@@ -39,11 +39,12 @@ async fn upload(
         .file_name()
         .ok_or_else(|| AppError::validation(kind.field(), "Bạn hãy chọn file."))?
         .to_owned();
+    let limit = kind.upload_limit(&name);
     let mut bytes = Vec::new();
     while let Some(chunk) = field.chunk().await.map_err(|_| {
         AppError::validation(kind.field(), "Upload không hợp lệ hoặc vượt giới hạn.")
     })? {
-        if bytes.len() + chunk.len() > kind.limit() {
+        if bytes.len() + chunk.len() > limit {
             return Err(AppError::validation(
                 kind.field(),
                 "File vượt giới hạn dung lượng.",

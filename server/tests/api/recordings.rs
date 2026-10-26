@@ -542,3 +542,50 @@ async fn playback_progress_does_not_wait_for_parent_write_lock_and_rechecks_dele
     );
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn document_upload_stops_at_stream_cap_while_recordings_keep_the_larger_limit() {
+    let app = LearningApp::spawn().await;
+    let session = lesson(&app).await;
+    for name in ["large.txt", "unknown.bin", "large.pdf"] {
+        let response = app
+            .api
+            .post(&format!("/api/v1/sessions/{session}/files"))
+            .add_header("authorization", bearer(&app.owner_token))
+            .multipart(form("file", name, vec![b'a'; 10 * 1024 * 1024 + 1]))
+            .await;
+        response.assert_status_unprocessable_entity();
+        // Handler rejects before deferred format inspection (which has a different message).
+        assert_eq!(
+            response.json::<Value>()["errors"]["file"][0],
+            "File vượt giới hạn dung lượng."
+        );
+    }
+    for (name, fixture) in [
+        (
+            "large.MP3",
+            include_bytes!("../fixtures/lesson.mp3").as_slice(),
+        ),
+        (
+            "large.M4A",
+            include_bytes!("../fixtures/lesson.m4a").as_slice(),
+        ),
+        (
+            "large.MP4",
+            include_bytes!("../fixtures/lesson.mp4").as_slice(),
+        ),
+    ] {
+        let mut data = fixture.to_vec();
+        data.resize(10 * 1024 * 1024 + 1, 0);
+        upload(&app, session, name, &data).await;
+    }
+    assert_eq!(
+        server::entities::media::Entity::find()
+            .all(app.db.as_ref())
+            .await
+            .unwrap()
+            .len(),
+        3
+    );
+    app.cleanup().await;
+}

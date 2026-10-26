@@ -495,3 +495,5 @@ Readiness collaboration `/up` kiểm Rust qua URL cấu hình (timeout 2s, cache
 - C1.6: lưu vị trí nghe dùng một upsert có điều kiện quyền/file/session/cha active trong chính SQL, không giữ khóa place. Test giữ khóa place nhưng insert và update vị trí vẫn hoàn tất; sai session, nguồn đã xóa và share bị thu hồi bị 404, không ghi đè vị trí cũ. Không đổi note revision.
 
 - C1.7: AI import và tạo bài tập dùng chung helper insert_many trả ID; validate/serialize vẫn trước khóa, insert/receipt vẫn cùng transaction. Test metric xác nhận 100 câu chỉ một INSERT, giữ thứ tự placeholder, retry không tạo trùng và batch rỗng không lỗi.
+
+- C1.8: multipart chọn cap trước khi đọc chunk: ảnh 5 MiB, MP3/M4A/MP4 (không phân biệt hoa/thường) 100 MiB, các đuôi còn lại 10 MiB. Vẫn kiểm bytes/đuôi thực trong blocking pool; đuôi recording không bỏ qua kiểm định dạng. Test response chặn trước inspect và recording trên 10 MiB vẫn nhận. Giữ buffering hiện tại (tối đa cap) vì chuyển temp-file cần thay cả đường inspect/storage và quản lý lease/cleanup; mục này áp dụng bản sửa tối thiểu.

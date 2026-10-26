@@ -54,10 +54,6 @@ Các mục dưới đây là lỗi đã được đọc lại đúng dòng code.
 
 *C1 — Hiệu năng và đúng đắn (ưu tiên cao)*
 
-- **C1.8 Upload đọc tới 100 MiB vào RAM trước khi kiểm định dạng**
-  - **Vị trí:** `media/handlers.rs:42-53`.
-  - **Sửa tối thiểu:** giới hạn theo loại dự kiến ngay khi stream. Đuôi không phải mp3/m4a/mp4 thì dừng ở 10 MB.
-  - **Sửa đầy đủ** (làm nếu không phức tạp): ghi ra file tạm rồi kiểm tra trong `spawn_blocking`.
 - **C1.9 Lưu ghi chú qua bridge đọc lại cả dòng (kèm `yjs_state`) 2–3 lần**
   - **Vị trí:** `notes/service/collaboration.rs:67,73,110,114,146`.
   - **Sửa:** làm giống đường REST (`notes/service/mod.rs:123-125`): load một lần, dựng kết quả từ model trả về.
