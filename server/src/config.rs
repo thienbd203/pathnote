@@ -1,4 +1,8 @@
 use std::env;
+pub const DEFAULT_MEDIA_ROOT: &str = ".storage/media";
+pub fn media_root() -> String {
+    optional("MEDIA_ROOT", DEFAULT_MEDIA_ROOT)
+}
 
 #[derive(Clone)]
 pub struct Config {
@@ -85,7 +89,7 @@ impl Config {
             translation_url: service_url("TRANSLATION_URL"),
             collaboration_url,
             collaboration_secret,
-            media_root: optional("MEDIA_ROOT", ".storage/media"),
+            media_root: media_root(),
             google_client_id: required("GOOGLE_CLIENT_ID"),
             google_client_secret: required("GOOGLE_CLIENT_SECRET"),
             google_redirect_url,
@@ -113,7 +117,13 @@ fn required(name: &str) -> String {
 }
 
 fn optional(name: &str, default: &str) -> String {
-    env::var(name).unwrap_or_else(|_| default.to_string())
+    optional_value(env::var(name).ok(), default)
+}
+
+fn optional_value(value: Option<String>, default: &str) -> String {
+    value
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| default.to_owned())
 }
 
 fn service_url(name: &str) -> Option<String> {
@@ -141,4 +151,23 @@ fn positive(name: &str, default: u64) -> u64 {
         .unwrap_or_else(|_| panic!("{name} phải là số nguyên dương"));
     assert!(value > 0, "{name} phải lớn hơn 0");
     value
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn optional_blank_values_use_defaults_without_changing_explicit_values() {
+        for value in [None, Some(String::new()), Some(" \t ".into())] {
+            assert_eq!(
+                optional_value(value, DEFAULT_MEDIA_ROOT),
+                DEFAULT_MEDIA_ROOT
+            );
+        }
+        assert_eq!(
+            optional_value(Some("/tmp/My Media".into()), DEFAULT_MEDIA_ROOT),
+            "/tmp/My Media"
+        );
+        assert_eq!(optional_value(Some("false".into()), "true"), "false");
+    }
 }

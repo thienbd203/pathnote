@@ -10,8 +10,9 @@ use crate::{
 pub use read::read_many;
 use sea_orm::{
     sea_query::{Expr, Func, LikeExpr},
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, JoinType,
-    PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, RelationTrait, Select, Set,
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DbBackend, EntityTrait,
+    FromQueryResult, JoinType, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, RelationTrait,
+    Select, Set, Statement,
 };
 
 fn missing() -> AppError {
@@ -172,7 +173,6 @@ pub async fn delete(db: &DatabaseConnection, user_id: i64, id: i64) -> Result<()
     .await
 }
 
-use sea_orm::{DbBackend, FromQueryResult, Statement};
 // Count blocks in the current note, including realtime saves. Stale extracted cards
 // or exercises which were created but never inserted in a note are not counted.
 pub async fn library_stats(

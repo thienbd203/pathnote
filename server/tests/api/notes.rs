@@ -491,3 +491,42 @@ async fn rest_and_bridge_persist_new_and_legacy_revision_zero_notes_with_identic
         app.cleanup().await;
     }
 }
+
+#[tokio::test]
+async fn persisted_realtime_note_with_disabled_bridge_returns_conflict_and_preserves_data() {
+    use sea_orm::{ActiveModelTrait, Set};
+    let app = LearningApp::spawn().await;
+    let id = lesson(&app).await;
+    let saved = notes::ActiveModel {
+        session_id: Set(id),
+        content: Set(doc()),
+        yjs_state: Set(Some(vec![1, 2, 3])),
+        schema_version: Set(4),
+        revision: Set(1),
+        saved_at: Set(chrono::Utc::now().fixed_offset()),
+    }
+    .insert(app.db.as_ref())
+    .await
+    .unwrap();
+    app.api
+        .get(&format!("/api/v1/sessions/{id}/collaboration"))
+        .add_header("authorization", token(&app.owner_token))
+        .await
+        .assert_status(StatusCode::CONFLICT);
+    let changed = json!({"type":"doc","content":[{"type":"paragraph"}]});
+    app.api
+        .put(&format!("/api/v1/sessions/{id}/note"))
+        .add_header("authorization", token(&app.owner_token))
+        .json(&save(changed, 1))
+        .await
+        .assert_status(StatusCode::CONFLICT);
+    assert_eq!(
+        notes::Entity::find_by_id(id)
+            .one(app.db.as_ref())
+            .await
+            .unwrap()
+            .unwrap(),
+        saved
+    );
+    app.cleanup().await;
+}

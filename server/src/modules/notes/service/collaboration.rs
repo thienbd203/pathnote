@@ -26,7 +26,7 @@ pub async fn config(
             .await?
             .unwrap_or(false)
     {
-        return Err(AppError::BadRequest(
+        return Err(AppError::Conflict(
             "Realtime chưa được cấu hình cho ghi chép này.".into(),
         ));
     }

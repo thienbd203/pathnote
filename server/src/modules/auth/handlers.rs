@@ -95,7 +95,7 @@ pub async fn refresh(
     State(state): State<AppState>,
     auth: AuthSession,
 ) -> Result<ApiResponse<TokenResource>, AppError> {
-    let user = auth.user.unwrap();
+    let user = auth.user.ok_or(AppError::Unauthenticated)?;
     Ok(ApiResponse::ok(TokenResource {
         access_token: state.access_tokens.issue(user.id)?,
         token_type: "Bearer",

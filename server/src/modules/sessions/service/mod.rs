@@ -96,7 +96,6 @@ pub async fn list(
     input: ListQuery,
 ) -> Result<SessionPage, AppError> {
     let (place_id, course_id) = parent(db, user, scope).await?;
-    input.page_size()?;
     let mut query = owned(user).filter(sessions::Column::PlaceId.eq(place_id));
     query = match course_id {
         Some(id) => query.filter(sessions::Column::CourseId.eq(id)),

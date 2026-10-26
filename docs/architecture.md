@@ -260,3 +260,5 @@ Các document schema 1–3 vẫn đọc được; client hiện tại lưu bằn
 | 26/10 C2.7 | Flashcard history và grade thiếu snapshot | Fallback có thể dùng IPA/locale gốc và chỉ một nghĩa | Fallback dùng cùng snapshot factory với reveal: UK, IPA ví dụ UK, nghĩa gộp theo identity. Snapshot lịch sử đã lưu không bị đổi; vẫn trả null nếu nguồn đã đổi content_key. JSON shape không đổi. |
 
 | 26/10 C3.2 | Flashcard run/next/history và vocabulary review | JSONB response truyền thẳng Value; settings thiếu field âm thầm dùng mặc định | DTO có kiểu, JSON hợp lệ giữ shape. Config đã lưu sai/thiếu field hoặc retention ngoài miền trả 500 và không tạo ticket, cần sửa dữ liệu thay vì đổi chiều ôn ngầm. |
+
+| 26/10 C3.7 | `GET /sessions/{id}/collaboration`, `PUT /sessions/{id}/note` | 400 khi note đã dùng realtime hoặc bridge bị tắt | 409 Conflict với message cũ, không có data revision mới; client giữ nháp và tải lại/khôi phục realtime, không coi đây là bản note cho ghi đè. Các lỗi schema/revision/permission khác giữ nguyên. |

@@ -151,7 +151,7 @@ async fn collaboration_snapshots_are_private_atomic_validated_and_idempotent() {
         .add_header("authorization", format!("Bearer {}", app.owner_token))
         .json(&json!({"content":doc(),"schema_version":4,"base_revision":1}))
         .await
-        .assert_status(StatusCode::BAD_REQUEST);
+        .assert_status(StatusCode::CONFLICT);
     app.api
         .delete(&format!("/api/v1/sessions/{id}"))
         .add_header("authorization", format!("Bearer {}", app.owner_token))

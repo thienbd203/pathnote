@@ -109,7 +109,20 @@ pub async fn route_not_found() -> AppError {
 
 impl std::fmt::Display for AppError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Authentication or application error")
+        match self {
+            Self::ClientOutdated => f.write_str("ClientOutdated"),
+            Self::MethodNotAllowed => f.write_str("MethodNotAllowed"),
+            Self::RequestTimeout => f.write_str("RequestTimeout"),
+            Self::Unauthenticated => f.write_str("Unauthenticated"),
+            Self::Forbidden => f.write_str("Forbidden"),
+            Self::Unavailable(message) => write!(f, "Unavailable: {message}"),
+            Self::Conflict(message) => write!(f, "Conflict: {message}"),
+            Self::ConflictWith { message, .. } => write!(f, "ConflictWith: {message}"),
+            Self::BadRequest(message) => write!(f, "BadRequest: {message}"),
+            Self::NotFound(message) => write!(f, "NotFound: {message}"),
+            Self::Internal(message) => write!(f, "Internal: {message}"),
+            Self::Validation(fields) => write!(f, "Validation: {fields:?}"),
+        }
     }
 }
 impl std::error::Error for AppError {}
@@ -127,6 +140,23 @@ impl AppError {
 mod tests {
     use super::*;
 
+    #[test]
+    fn display_identifies_errors_without_logging_conflict_document_data() {
+        assert_eq!(AppError::Unauthenticated.to_string(), "Unauthenticated");
+        assert_eq!(
+            AppError::Internal("failed".into()).to_string(),
+            "Internal: failed"
+        );
+        let conflict = AppError::ConflictWith {
+            message: "changed".into(),
+            data: serde_json::json!({"secret":"private note"}),
+        };
+        assert_eq!(conflict.to_string(), "ConflictWith: changed");
+        assert!(!conflict.to_string().contains("private note"));
+        assert!(AppError::validation("name", "required")
+            .to_string()
+            .starts_with("Validation:"));
+    }
     #[tokio::test]
     async fn route_timeout_is_gateway_timeout_with_the_existing_json_message() {
         let response = AppError::RequestTimeout.into_response();

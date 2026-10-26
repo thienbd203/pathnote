@@ -1,7 +1,14 @@
 use super::{dto, runs};
-use crate::AppError;
+use crate::{
+    entities::{flashcard_attempts as attempts, flashcard_study_time as study_time},
+    AppError,
+};
 use chrono::{Datelike, Duration, NaiveDate, Utc};
-use sea_orm::{ConnectionTrait, DatabaseConnection, DbBackend, Statement, TransactionTrait};
+use sea_orm::{
+    sea_query::{Expr, OnConflict, Query},
+    ColumnTrait, ConnectionTrait, DatabaseConnection, DbBackend, EntityTrait, QueryFilter,
+    QuerySelect, QueryTrait, Set, Statement,
+};
 use std::collections::BTreeMap;
 use uuid::Uuid;
 
@@ -31,15 +38,27 @@ pub async fn record_time(
         }
     }
     // A run must have actually served a card. No notes, answers or schedules are modified.
-    let tx = db.begin().await?;
-    let shown = tx.query_one(Statement::from_sql_and_values(DbBackend::Postgres,
-        "SELECT EXISTS(SELECT 1 FROM flashcard_attempts WHERE user_id=$1 AND run_id=$2) AS shown",
-        [user.into(), id.into()])).await?.expect("EXISTS always returns a row");
+    let shown_query = Query::select()
+        .expr_as(
+            Expr::exists(
+                attempts::Entity::find()
+                    .select_only()
+                    .column(attempts::Column::Id)
+                    .filter(attempts::Column::UserId.eq(user))
+                    .filter(attempts::Column::RunId.eq(id))
+                    .into_query(),
+            ),
+            "shown",
+        )
+        .to_owned();
+    let shown = db
+        .query_one(db.get_database_backend().build(&shown_query))
+        .await?
+        .expect("EXISTS always returns a row");
     if !shown.try_get::<bool>("", "shown")? {
         return Err(invalid());
     }
-    let mut values = Vec::new();
-    let mut placeholders = Vec::new();
+    let mut models = Vec::new();
     for segment in input.segments {
         let start = segment.started_at.max(run.started_at);
         let end = segment
@@ -49,30 +68,26 @@ pub async fn record_time(
         if end <= start {
             continue;
         }
-        let n = values.len();
-        placeholders.push(format!(
-            "(${},${},${},${},${})",
-            n + 1,
-            n + 2,
-            n + 3,
-            n + 4,
-            n + 5
-        ));
-        values.extend([
-            segment.id.into(),
-            user.into(),
-            id.into(),
-            start.into(),
-            end.into(),
-        ]);
+        models.push(study_time::ActiveModel {
+            id: Set(segment.id),
+            user_id: Set(user),
+            run_id: Set(id),
+            started_at: Set(start),
+            ended_at: Set(end),
+        });
     }
-    if !placeholders.is_empty() {
-        // One batch; retries never expose or overwrite another user's interval.
-        tx.execute(Statement::from_sql_and_values(DbBackend::Postgres,
-            format!("INSERT INTO flashcard_study_time (id,user_id,run_id,started_at,ended_at) VALUES {} ON CONFLICT (id) DO NOTHING", placeholders.join(",")),
-            values)).await?;
+    if !models.is_empty() {
+        // One atomic INSERT; conflicts never overwrite another user's interval.
+        study_time::Entity::insert_many(models)
+            .on_conflict(
+                OnConflict::column(study_time::Column::Id)
+                    .do_nothing()
+                    .to_owned(),
+            )
+            .do_nothing()
+            .exec(db)
+            .await?;
     }
-    tx.commit().await?;
     Ok(dto::StudyTimeRecorded { recorded: true })
 }
 

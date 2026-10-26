@@ -131,7 +131,7 @@ async fn save(
         return Ok(SaveOutcome::Conflict(current));
     }
     if has_realtime {
-        return Err(AppError::BadRequest(
+        return Err(AppError::Conflict(
             "Ghi chép này dùng realtime. Hãy tải lại trang để tiếp tục.".into(),
         ));
     }
@@ -194,7 +194,7 @@ pub async fn save_rest(
         super::schema::check_client(version)?;
     }
     if realtime {
-        return Err(AppError::BadRequest(
+        return Err(AppError::Conflict(
             "Ghi chép đang dùng realtime. Hãy tải lại trang.".into(),
         ));
     }
