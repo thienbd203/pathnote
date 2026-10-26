@@ -1,11 +1,49 @@
 use crate::{entities::flashcard_attempts as attempts, AppError};
 use chrono::{DateTime, FixedOffset};
 use fsrs::{FSRSItem, FSRSReview};
-use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
+use sea_orm::{
+    ColumnTrait, ConnectionTrait, EntityTrait, FromQueryResult, QueryFilter, QueryOrder,
+    QuerySelect,
+};
 use std::collections::BTreeMap;
 pub const MIN_SAMPLES: usize = 64;
 pub const MAX_REVIEWS: u64 = 50_000;
 pub const MAX_SEQUENCE: usize = 256;
+/// Only the columns needed to validate/replay a review chain; never load snapshot JSON.
+#[derive(FromQueryResult)]
+pub(super) struct ReviewRow {
+    pub memory_card_id: i64,
+    pub direction: String,
+    pub study_key: String,
+    pub version: i32,
+    pub rating: Option<i32>,
+    pub reviewed_at: Option<DateTime<FixedOffset>>,
+    pub delta_days: Option<i32>,
+}
+impl From<attempts::Model> for ReviewRow {
+    fn from(row: attempts::Model) -> Self {
+        Self {
+            memory_card_id: row.memory_card_id,
+            direction: row.direction,
+            study_key: row.study_key,
+            version: row.version,
+            rating: row.rating,
+            reviewed_at: row.reviewed_at,
+            delta_days: row.delta_days,
+        }
+    }
+}
+pub(super) fn select() -> sea_orm::Select<attempts::Entity> {
+    attempts::Entity::find().select_only().columns([
+        attempts::Column::MemoryCardId,
+        attempts::Column::Direction,
+        attempts::Column::StudyKey,
+        attempts::Column::Version,
+        attempts::Column::Rating,
+        attempts::Column::ReviewedAt,
+        attempts::Column::DeltaDays,
+    ])
+}
 pub struct History {
     pub reviews: Vec<FSRSReview>,
 }
@@ -46,7 +84,7 @@ impl Dataset {
     }
 }
 /// A chain is only usable when it starts at review zero and has no missing attempts.
-pub fn prepare(rows: Vec<attempts::Model>) -> Dataset {
+pub fn prepare(rows: Vec<ReviewRow>) -> Dataset {
     type Identity = (i64, String, String);
     type Chain = (Vec<FSRSReview>, Option<DateTime<FixedOffset>>);
     let mut chains: BTreeMap<Identity, Chain> = BTreeMap::new();
@@ -101,7 +139,7 @@ pub fn prepare(rows: Vec<attempts::Model>) -> Dataset {
     Dataset { histories }
 }
 pub async fn load<C: ConnectionTrait>(db: &C, user: i64) -> Result<Dataset, AppError> {
-    let rows = attempts::Entity::find()
+    let rows = select()
         .filter(attempts::Column::UserId.eq(user))
         .filter(attempts::Column::Rating.is_not_null())
         .filter(attempts::Column::ReviewedAt.is_not_null())
@@ -109,6 +147,7 @@ pub async fn load<C: ConnectionTrait>(db: &C, user: i64) -> Result<Dataset, AppE
         .order_by_asc(attempts::Column::CreatedAt)
         .order_by_asc(attempts::Column::Id)
         .limit(MAX_REVIEWS + 1)
+        .into_model::<ReviewRow>()
         .all(db)
         .await?;
     if rows.len() > MAX_REVIEWS as usize {
@@ -126,7 +165,7 @@ pub async fn current<C: ConnectionTrait>(
     key: &str,
     reviews: i32,
 ) -> Result<FSRSItem, AppError> {
-    let rows = attempts::Entity::find()
+    let rows = select()
         .filter(attempts::Column::UserId.eq(user))
         .filter(attempts::Column::MemoryCardId.eq(memory_card))
         .filter(attempts::Column::Direction.eq(direction))
@@ -136,12 +175,17 @@ pub async fn current<C: ConnectionTrait>(
         .order_by_asc(attempts::Column::ReviewedAt)
         .order_by_asc(attempts::Column::CreatedAt)
         .order_by_asc(attempts::Column::Id)
+        .into_model::<ReviewRow>()
         .all(db)
         .await?;
     current_item(rows, reviews)
 }
 /// Shared replay validation for the scheduler and batched dashboard estimates.
-pub(super) fn current_item(rows: Vec<attempts::Model>, reviews: i32) -> Result<FSRSItem, AppError> {
+pub(super) fn current_item<R: Into<ReviewRow>>(
+    rows: Vec<R>,
+    reviews: i32,
+) -> Result<FSRSItem, AppError> {
+    let rows: Vec<ReviewRow> = rows.into_iter().map(Into::into).collect();
     let start = rows
         .iter()
         .rposition(|r| r.version == 0)

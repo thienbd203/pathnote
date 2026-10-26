@@ -479,3 +479,7 @@ Rust coordinator đóng gói ba revision bất biến; build/test song song, kí
 Grace đúng một release schema 4 chỉ cho payload thiếu/null version trên note legacy chưa có attr hai giọng, chưa được nâng version; không áp dụng realtime client. Schema 5 tự tắt grace, cần bỏ nhánh ở release tiếp theo (xem architecture).
 
 Readiness collaboration `/up` kiểm Rust qua URL cấu hình (timeout 2s, cache 10s). Rust/DB lỗi làm HTTP 503 và rust:error, coordinator không cho frontend mới kích hoạt. Mẫu production/startup dùng listener 3010; local/in-place phải override 3000. `.env` production thực tế do người vận hành xác minh theo README collaboration; Codex chưa đọc hay sửa VPS trong lần fix này.
+
+### Rà soát Rust C1 (26/10)
+
+- C1.1: optimizer ghi `checked_at` trước khi đọc lịch sử, kể cả thiếu mẫu/không đủ mẫu mới/lỗi đọc. Tick sau trong một giờ không tải lại lịch sử. Projection lịch sử chỉ lấy cột phục vụ FSRS, bỏ JSON snapshot/parameters. Thêm `evaluated_at` (migration additive, backfill từ checked_at cho model đã đánh giá) để mốc 30 ngày không bị các lần kiểm tra định kỳ đẩy lùi mãi. Không đổi lịch thẻ hoặc tham số khi chỉ bỏ qua. Test metric SQL xác nhận hai nhánh bỏ qua và vẫn đánh giá lại sau 30 ngày.

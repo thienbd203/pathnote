@@ -290,3 +290,90 @@ async fn not_enough_history_stays_default_and_no_manual_optimize_endpoint_exists
         .assert_status_unauthorized();
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn skipped_optimizer_checks_are_durable_and_do_not_reload_history_on_next_tick() {
+    use sea_orm::{ConnectionTrait, DbBackend, Statement};
+    use std::sync::{Arc, Mutex};
+    for broken_chain in [true, false] {
+        let app = LearningApp::spawn().await;
+        seed_history(&app).await;
+        if broken_chain {
+            // Candidate has enough logged reviews but not one complete FSRS chain.
+            app.db
+                .execute_unprepared("UPDATE flashcard_attempts SET version=1")
+                .await
+                .unwrap();
+        } else {
+            models::ActiveModel {
+                user_id: Set(app.owner_id),
+                parameters: Set(json!(fsrs::DEFAULT_PARAMETERS)),
+                version: Set(0),
+                trained_reviews: Set(120),
+                training_samples: Set(79),
+                baseline_loss: Set(0.5),
+                fitted_loss: Set(0.5),
+                optimized_at: Set(None),
+                evaluated_at: Set(Some(Utc::now().fixed_offset() - Duration::days(1))),
+                checked_at: Set(Utc::now().fixed_offset() - Duration::hours(2)),
+            }
+            .insert(app.db.as_ref())
+            .await
+            .unwrap();
+        }
+        let queries = Arc::new(Mutex::new(Vec::<String>::new()));
+        let captured = queries.clone();
+        let mut db = app.db.as_ref().clone();
+        db.set_metric_callback(move |info| {
+            captured.lock().unwrap().push(info.statement.sql.clone())
+        });
+        assert_eq!(server::optimize_fsrs_once(&db).await.unwrap(), 0);
+        let first = queries
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|sql| sql.contains("flashcard_attempts") && sql.contains("ORDER BY"))
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(first.len(), 1);
+        assert!(!first[0].contains("snapshot"));
+        assert!(!first[0].contains("parameters"));
+        let checked = models::Entity::find_by_id(app.owner_id)
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(checked.checked_at > Utc::now().fixed_offset() - Duration::minutes(1));
+        queries.lock().unwrap().clear();
+        assert_eq!(server::optimize_fsrs_once(&db).await.unwrap(), 0);
+        assert!(!queries
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|sql| sql.contains("flashcard_attempts") && sql.contains("ORDER BY")));
+        if !broken_chain {
+            // Hourly checks must not indefinitely postpone the independent 30-day evaluation.
+            db.execute(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                "UPDATE flashcard_models SET evaluated_at=$1, checked_at=$2 WHERE user_id=$3",
+                [
+                    (Utc::now().fixed_offset() - Duration::days(31)).into(),
+                    (Utc::now().fixed_offset() - Duration::hours(2)).into(),
+                    app.owner_id.into(),
+                ],
+            ))
+            .await
+            .unwrap();
+            server::optimize_fsrs_once(&db).await.unwrap();
+            let fitted = models::Entity::find_by_id(app.owner_id)
+                .one(&db)
+                .await
+                .unwrap()
+                .unwrap();
+            assert!(
+                fitted.evaluated_at.unwrap() > Utc::now().fixed_offset() - Duration::minutes(1)
+            );
+        }
+        app.cleanup().await;
+    }
+}

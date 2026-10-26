@@ -1177,6 +1177,7 @@ async fn memory_progress_estimates_recall_without_duplicates_or_schedule_writes(
         version: Set(1),
         trained_reviews: Set(2),
         training_samples: Set(2),
+        evaluated_at: Set(Some(Utc::now().fixed_offset())),
         baseline_loss: Set(0.5),
         fitted_loss: Set(0.4),
         optimized_at: Set(Some(Utc::now().fixed_offset())),

@@ -67,9 +67,14 @@ async fn british_backfill_preserves_source_note_and_existing_memory() {
         .unwrap()
         .unwrap();
     // Emulate the previous projection, then exercise the production up/down/up migration.
-    Migrator::down(app.db.as_ref(), Some(1)).await.unwrap();
+    let migration = Migrator::migrations()
+        .into_iter()
+        .find(|m| m.name() == "m20261025_010001_british_pronunciation")
+        .unwrap();
+    let manager = migration::SchemaManager::new(app.db.as_ref());
+    migration.down(&manager).await.unwrap();
     app.db.execute_unprepared("UPDATE vocabulary_cards SET examples = (SELECT jsonb_agg(value - 'ipaUK' - 'ipaUS') FROM jsonb_array_elements(examples))").await.unwrap();
-    Migrator::up(app.db.as_ref(), None).await.unwrap();
+    migration.up(&manager).await.unwrap();
     let card = vocabulary_cards::Entity::find()
         .one(app.db.as_ref())
         .await

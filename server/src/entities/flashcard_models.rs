@@ -11,6 +11,7 @@ pub struct Model {
     pub baseline_loss: f32,
     pub fitted_loss: f32,
     pub optimized_at: Option<DateTimeWithTimeZone>,
+    pub evaluated_at: Option<DateTimeWithTimeZone>,
     pub checked_at: DateTimeWithTimeZone,
 }
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

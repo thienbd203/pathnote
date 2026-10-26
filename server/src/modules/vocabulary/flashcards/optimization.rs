@@ -98,34 +98,12 @@ async fn fit(data: &history::Dataset, parameters: Vec<f32>) -> Result<Fit, AppEr
         .map_err(|_| AppError::Unavailable("Tối ưu FSRS vượt thời gian cho phép.".into()))?
         .map_err(|_| AppError::Unavailable("Lượt tối ưu FSRS bị gián đoạn.".into()))?
 }
-async fn optimize(db: &DatabaseConnection, user: i64) -> Result<bool, AppError> {
-    let profile = personal::load(db, user).await?;
-    let now = chrono::Utc::now().fixed_offset();
-    if profile
-        .model
-        .as_ref()
-        .is_some_and(|m| now - m.checked_at < chrono::Duration::hours(1))
-    {
-        return Ok(false);
-    }
-    let data = history::load(db, user).await?;
-    let samples = data.sample_count();
-    if samples < history::MIN_SAMPLES {
-        return Ok(false);
-    }
-    if profile.model.as_ref().is_some_and(|m| {
-        samples < (m.training_samples as usize + history::MIN_SAMPLES)
-            && (samples <= m.training_samples as usize
-                || now - m.checked_at < chrono::Duration::days(30))
-    }) {
-        return Ok(false);
-    }
-    // Record the attempt before CPU work: a crash/error retries after an hour, not every tick.
-    let txn = db.begin().await?;
-    users::Entity::find_by_id(user)
-        .lock(LockType::Update)
-        .one(&txn)
-        .await?;
+async fn mark_checked<C: sea_orm::ConnectionTrait>(
+    db: &C,
+    user: i64,
+    profile: &personal::Profile,
+    now: chrono::DateTime<chrono::FixedOffset>,
+) -> Result<(), AppError> {
     models::Entity::insert(models::ActiveModel {
         user_id: Set(user),
         parameters: Set(serde_json::to_value(&profile.parameters)
@@ -136,6 +114,7 @@ async fn optimize(db: &DatabaseConnection, user: i64) -> Result<bool, AppError> 
         baseline_loss: Set(profile.model.as_ref().map_or(0.0, |m| m.baseline_loss)),
         fitted_loss: Set(profile.model.as_ref().map_or(0.0, |m| m.fitted_loss)),
         optimized_at: Set(profile.model.as_ref().and_then(|m| m.optimized_at)),
+        evaluated_at: Set(profile.model.as_ref().and_then(|m| m.evaluated_at)),
         checked_at: Set(now),
     })
     .on_conflict(
@@ -143,9 +122,35 @@ async fn optimize(db: &DatabaseConnection, user: i64) -> Result<bool, AppError> 
             .update_column(models::Column::CheckedAt)
             .to_owned(),
     )
-    .exec(&txn)
+    .exec(db)
     .await?;
-    txn.commit().await?;
+    Ok(())
+}
+async fn optimize(db: &DatabaseConnection, user: i64) -> Result<bool, AppError> {
+    let profile = personal::load(db, user).await?;
+    let now = chrono::Utc::now().fixed_offset();
+    if profile
+        .model
+        .as_ref()
+        .is_some_and(|m| now - m.checked_at < chrono::Duration::hours(1))
+    {
+        return Ok(false);
+    }
+    // Persist the check before reading history: skipped or failed work retries after an hour.
+    mark_checked(db, user, &profile, now).await?;
+    let data = history::load(db, user).await?;
+    let samples = data.sample_count();
+    if samples < history::MIN_SAMPLES {
+        return Ok(false);
+    }
+    if profile.model.as_ref().is_some_and(|m| {
+        samples < (m.training_samples as usize + history::MIN_SAMPLES)
+            && (samples <= m.training_samples as usize
+                || m.evaluated_at
+                    .is_some_and(|at| now - at < chrono::Duration::days(30)))
+    }) {
+        return Ok(false);
+    }
     let fitted = fit(&data, profile.parameters.clone()).await?;
     let changed =
         fitted.fitted_loss < fitted.baseline_loss && fitted.parameters != profile.parameters;
@@ -176,6 +181,7 @@ async fn optimize(db: &DatabaseConnection, user: i64) -> Result<bool, AppError> 
         } else {
             profile.model.as_ref().and_then(|m| m.optimized_at)
         }),
+        evaluated_at: Set(Some(finished)),
         checked_at: Set(finished),
     })
     .on_conflict(
@@ -189,6 +195,7 @@ async fn optimize(db: &DatabaseConnection, user: i64) -> Result<bool, AppError> 
                 models::Column::FittedLoss,
                 models::Column::OptimizedAt,
                 models::Column::CheckedAt,
+                models::Column::EvaluatedAt,
             ])
             .to_owned(),
     )
