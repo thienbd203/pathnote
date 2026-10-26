@@ -243,12 +243,11 @@ pub async fn create(db: &DatabaseConnection, user: i64, input: Create) -> Result
                     part_of_speech: card.part_of_speech,
                     topics: card.topics,
                     examples: serde_json::Value::Array(examples),
-                    source: serde_json::to_value(Source {
+                    source: Source {
                         id: source.id,
                         title: source.title.clone(),
                         shared: owners.get(&source.place_id) != Some(&user),
-                    })
-                    .map_err(|e| AppError::Internal(e.to_string()))?,
+                    },
                 },
                 options,
                 letters,

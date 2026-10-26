@@ -54,7 +54,7 @@ pub struct Card {
     pub part_of_speech: String,
     pub topics: Value,
     pub examples: Value,
-    pub source: Value,
+    pub source: Source,
 }
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Question {
@@ -110,7 +110,7 @@ pub struct QuestionResource {
 pub struct ReviewResource {
     pub id: i64,
     pub mode: Mode,
-    pub filters: Value,
+    pub filters: Filters,
     pub total: usize,
     pub answered: usize,
     pub correct: usize,
@@ -124,7 +124,7 @@ pub struct AnswerResource {
     pub review: ReviewResource,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Source {
     pub id: i64,
     pub title: String,

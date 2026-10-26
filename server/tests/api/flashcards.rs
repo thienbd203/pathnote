@@ -1260,3 +1260,68 @@ async fn next_loads_source_in_the_candidate_query_and_keeps_the_overview_contrac
     );
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn invalid_saved_run_settings_fail_before_creating_a_ticket_instead_of_defaulting_direction()
+{
+    use sea_orm::PaginatorTrait;
+    use server::entities::{flashcard_attempts as attempts, flashcard_runs as runs};
+    let app = LearningApp::spawn().await;
+    let (session, _) = seed(&app).await;
+    let created = app
+        .api
+        .post("/api/v1/flashcards/runs")
+        .add_header("authorization", auth(&app.owner_token))
+        .json(&json!({"session_id":session}))
+        .await;
+    created.assert_status(StatusCode::CREATED);
+    let data = created.json::<Value>()["data"].clone();
+    let id = uuid::Uuid::parse_str(data["id"].as_str().unwrap()).unwrap();
+    let original = data["settings"].clone();
+    for settings in [
+        json!({}),
+        json!({"direction":"broken","retention":0.9}),
+        json!({"direction":"vi_en","retention":null}),
+        json!({"direction":"vi_en","retention":0.1}),
+    ] {
+        let row = runs::Entity::find_by_id(id)
+            .one(app.db.as_ref())
+            .await
+            .unwrap()
+            .unwrap();
+        let mut row: runs::ActiveModel = row.into();
+        row.settings = Set(settings);
+        row.update(app.db.as_ref()).await.unwrap();
+        app.api
+            .post("/api/v1/flashcards/next")
+            .add_header("authorization", auth(&app.owner_token))
+            .json(&json!({"run_id":id}))
+            .await
+            .assert_status(StatusCode::INTERNAL_SERVER_ERROR);
+        app.api
+            .get(&format!("/api/v1/flashcards/runs/{id}"))
+            .add_header("authorization", auth(&app.owner_token))
+            .await
+            .assert_status(StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(
+            attempts::Entity::find()
+                .count(app.db.as_ref())
+                .await
+                .unwrap(),
+            0
+        );
+    }
+    let row = runs::Entity::find_by_id(id)
+        .one(app.db.as_ref())
+        .await
+        .unwrap()
+        .unwrap();
+    let mut row: runs::ActiveModel = row.into();
+    row.settings = Set(original.clone());
+    row.update(app.db.as_ref()).await.unwrap();
+    let restored = next(&app, &app.owner_token, json!({"run_id":id})).await;
+    assert_eq!(restored["run"]["settings"], original);
+    assert_eq!(restored["run"]["filters"], data["filters"]);
+    assert!(restored["card"].is_object());
+    app.cleanup().await;
+}

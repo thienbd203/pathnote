@@ -59,11 +59,8 @@ pub async fn next(
     }
     queue::authorize(db, user, &f).await?;
     let (direction, retention) = if let Some(run) = &saved_run {
-        (
-            serde_json::from_value::<dto::Direction>(run.settings["direction"].clone())
-                .unwrap_or_default(),
-            run.settings["retention"].as_f64().unwrap_or(0.9) as f32,
-        )
+        let config = dto::Configuration::from_saved(run.settings.clone())?;
+        (config.direction, config.retention)
     } else {
         queue::configuration(db, user, &f).await?
     };

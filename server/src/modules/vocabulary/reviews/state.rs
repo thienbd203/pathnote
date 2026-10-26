@@ -36,9 +36,12 @@ pub struct Review {
     pub mode: Mode,
     pub questions: Vec<Question>,
     pub answers: Vec<Answer>,
+    pub filters: Filters,
 }
 impl Review {
     pub fn parse(model: reviews::Model) -> Result<Self, AppError> {
+        let filters = serde_json::from_value(model.filters.clone())
+            .map_err(|_| AppError::Internal("Invalid saved review filters".into()))?;
         let questions = serde_json::from_value(model.questions.clone())
             .map_err(|_| AppError::Internal("Invalid review questions".into()))?;
         let answers = serde_json::from_value(model.answers.clone())
@@ -53,6 +56,7 @@ impl Review {
             mode,
             questions,
             answers,
+            filters,
         })
     }
     pub async fn authorize<C: ConnectionTrait>(&self, db: &C) -> Result<(), AppError> {
@@ -113,7 +117,7 @@ impl Review {
         ReviewResource {
             id: self.model.id,
             mode: self.mode,
-            filters: self.model.filters.clone(),
+            filters: self.filters.clone(),
             total: self.questions.len(),
             answered: self.answers.len(),
             correct: self.answers.iter().filter(|a| a.correct).count(),

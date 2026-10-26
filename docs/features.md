@@ -519,3 +519,5 @@ Readiness collaboration `/up` kiểm Rust qua URL cấu hình (timeout 2s, cache
 ### Rà soát Rust C3 (26/10)
 
 - C3.1: ghi rõ ngoại lệ A.3 tại các handler bulk/IPA/flashcard/review/library: giữ thông báo theo field nghiệp vụ để tương thích giao diện, không thay JSON/status. Các extractor thông thường tiếp tục đi qua AppJson/AppQuery/AppPath.
+
+- C3.2: cấu hình run được deserialize bằng Configuration và kiểm retention, không mặc định khi direction/retention đã lưu bị hỏng. RunSummary filters/settings, HistoryEntry.card, review Card.source và filters dùng DTO có kiểu; shape hợp lệ giữ nguyên, không thay snapshot accent cũ. Test cấu hình lỗi trả 500 trước INSERT ticket, khôi phục config đọc được; toàn bộ test JSON/history/review hiện có.

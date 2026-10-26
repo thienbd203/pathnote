@@ -1,5 +1,5 @@
 use super::super::{
-    dto::{Filters, RunSummary},
+    dto::{Configuration, Filters, RunSummary},
     queue,
 };
 use crate::{
@@ -54,8 +54,9 @@ pub async fn summary<C: ConnectionTrait>(
     ];
     Ok(RunSummary {
         id: run.id,
-        filters: run.filters.clone(),
-        settings: run.settings.clone(),
+        filters: serde_json::from_value(run.filters.clone())
+            .map_err(|_| AppError::Internal("Invalid saved flashcard filters".into()))?,
+        settings: Configuration::from_saved(run.settings.clone())?,
         initial_total: run.initial_total,
         reviewed,
         unique_reviewed: unique,

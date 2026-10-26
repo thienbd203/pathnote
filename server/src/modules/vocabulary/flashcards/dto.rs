@@ -114,10 +114,23 @@ pub struct HistoryFilters {
 use chrono::{DateTime, FixedOffset};
 use serde_json::Value;
 use uuid::Uuid;
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Configuration {
     pub direction: Direction,
     pub retention: f32,
+}
+impl Configuration {
+    pub fn from_saved(value: Value) -> Result<Self, AppError> {
+        let config: Self = serde_json::from_value(value)
+            .map_err(|_| AppError::Internal("Invalid saved flashcard settings".into()))?;
+        if !config.retention.is_finite() || !(0.7..=0.97).contains(&config.retention) {
+            return Err(AppError::Internal(
+                "Invalid saved flashcard retention".into(),
+            ));
+        }
+        Ok(config)
+    }
 }
 #[derive(Serialize)]
 pub struct MemoryProgress {
@@ -190,7 +203,7 @@ pub struct GradeResult {
     pub rating: i32,
     pub due_at: Option<DateTime<FixedOffset>>,
 }
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct Snapshot {
     pub word: String,
     pub meaning: String,
@@ -203,8 +216,8 @@ pub struct Snapshot {
 #[derive(Serialize)]
 pub struct RunSummary {
     pub id: Uuid,
-    pub filters: Value,
-    pub settings: Value,
+    pub filters: Filters,
+    pub settings: Configuration,
     pub initial_total: i64,
     pub reviewed: u64,
     pub unique_reviewed: i64,
@@ -224,7 +237,7 @@ pub struct HistoryEntry {
     pub reviewed_at: Option<DateTime<FixedOffset>>,
     pub due_at: Option<DateTime<FixedOffset>>,
     pub snapshot: bool,
-    pub card: Option<Value>,
+    pub card: Option<Snapshot>,
     pub source: Source,
 }
 

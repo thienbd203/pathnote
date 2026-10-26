@@ -256,3 +256,5 @@ Các document schema 1–3 vẫn đọc được; client hiện tại lưu bằn
 | 26/10 C1.5 | `GET /sessions/search` | Ngày DST không có midnight duy nhất trả 422 | Chọn mốc đầu ngày hợp lệ, giữ cả hai giờ trùng; ngày bị bỏ toàn bộ chỉ tìm tiêu đề, trả 200. |
 
 | 26/10 C2.7 | Flashcard history và grade thiếu snapshot | Fallback có thể dùng IPA/locale gốc và chỉ một nghĩa | Fallback dùng cùng snapshot factory với reveal: UK, IPA ví dụ UK, nghĩa gộp theo identity. Snapshot lịch sử đã lưu không bị đổi; vẫn trả null nếu nguồn đã đổi content_key. JSON shape không đổi. |
+
+| 26/10 C3.2 | Flashcard run/next/history và vocabulary review | JSONB response truyền thẳng Value; settings thiếu field âm thầm dùng mặc định | DTO có kiểu, JSON hợp lệ giữ shape. Config đã lưu sai/thiếu field hoặc retention ngoài miền trả 500 và không tạo ticket, cần sửa dữ liệu thay vì đổi chiều ôn ngầm. |

@@ -54,9 +54,6 @@ Các mục dưới đây là lỗi đã được đọc lại đúng dòng code.
 
 *C3 — Dọn dẹp nhỏ (ưu tiên thấp, có thể gộp vài mục vào một commit cùng module)*
 
-- **C3.2 JSONB đọc bằng index chuỗi:**
-  - `cards.rs:64-66` đọc `run.settings["direction"]`, khi thiếu thì âm thầm dùng mặc định. Deserialize vào struct có kiểu.
-  - `RunSummary.filters/settings`, `HistoryEntry.card` và `reviews::Card.source` trả struct thay vì `Value` (A.4).
 - **C3.3 Guard NaN:** `vocabulary/flashcards/scheduler.rs:45`. NaN đi qua `clamp`, ép kiểu thành 0, thẻ đến hạn ngay. Kiểm `is_finite` trước.
 - **C3.4 Gom hằng số** đang viết tay ở nhiều nơi:
   - Retention mặc định 0.9: `queue.rs:86`, `cards.rs:66`.

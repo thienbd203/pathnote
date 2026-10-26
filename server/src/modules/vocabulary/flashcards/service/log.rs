@@ -140,44 +140,46 @@ pub async fn history(
         })
         .collect();
     let meanings = queue::meanings_for(db, user, &fallback_cards).await?;
-    let data = rows
-        .into_iter()
-        .filter_map(|(attempt, card)| {
-            let card = card?;
-            let (session, place) = sources.get(&card.session_id)?;
-            let snapshot = attempt.snapshot.is_some();
-            let content = match attempt.snapshot {
-                Some(value) => Some(value),
-                None if queue::content_key(&card) == attempt.content_key => Some(
-                    serde_json::to_value(super::snapshot::snapshot(
-                        &card,
-                        meanings
-                            .get(&card.id)
-                            .cloned()
-                            .unwrap_or_else(|| card.meaning.clone()),
-                    ))
-                    .expect("Snapshot serialization"),
-                ),
-                None => None,
-            };
-            Some(dto::HistoryEntry {
-                id: attempt.id,
-                card_id: card.id,
-                run_id: attempt.run_id,
-                direction: attempt.direction,
-                rating: attempt.rating,
-                reviewed_at: attempt.reviewed_at,
-                due_at: attempt.due_at,
-                snapshot,
-                card: content,
-                source: dto::Source {
-                    id: session.id,
-                    title: session.title.clone(),
-                    shared: place.as_ref().is_some_and(|p| p.user_id != user),
-                },
-            })
-        })
-        .collect();
+    let mut data = Vec::with_capacity(rows.len());
+    for (attempt, card) in rows {
+        let Some(card) = card else { continue };
+        let Some((session, place)) = sources.get(&card.session_id) else {
+            continue;
+        };
+        let snapshot = attempt.snapshot.is_some();
+        let content = match attempt.snapshot {
+            Some(value) => Some(
+                serde_json::from_value::<dto::Snapshot>(value)
+                    .map_err(|_| AppError::Internal("Invalid saved flashcard snapshot".into()))?,
+            ),
+            None if queue::content_key(&card) == attempt.content_key => {
+                Some(super::snapshot::snapshot(
+                    &card,
+                    meanings
+                        .get(&card.id)
+                        .cloned()
+                        .unwrap_or_else(|| card.meaning.clone()),
+                ))
+            }
+            None => None,
+        };
+        data.push(dto::HistoryEntry {
+            id: attempt.id,
+            card_id: card.id,
+            run_id: attempt.run_id,
+            direction: attempt.direction,
+            rating: attempt.rating,
+            reviewed_at: attempt.reviewed_at,
+            due_at: attempt.due_at,
+            snapshot,
+            card: content,
+            source: dto::Source {
+                id: session.id,
+                title: session.title.clone(),
+                shared: place.as_ref().is_some_and(|p| p.user_id != user),
+            },
+        });
+    }
     Ok(Page {
         data,
         meta: PageMeta {
