@@ -1,3 +1,4 @@
+mod persist;
 mod sharing;
 pub use sharing::{invite, members, revoke, shared};
 pub(in crate::modules::notes) mod collaboration;
@@ -10,9 +11,8 @@ use crate::{
 };
 use sea_orm::{
     sea_query::{Expr, Func, LikeExpr, Query},
-    ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, EntityTrait,
-    JoinType, ModelTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, RelationTrait,
-    Select, Set,
+    ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, EntityTrait, JoinType, ModelTrait,
+    PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, RelationTrait, Select, Set,
 };
 fn missing() -> AppError {
     AppError::NotFound("Không tìm thấy ghi chép.".into())
@@ -135,28 +135,7 @@ async fn save(
             "Ghi chép này dùng realtime. Hãy tải lại trang để tiếp tục.".into(),
         ));
     }
-    let next = notes::ActiveModel {
-        session_id: Set(id),
-        content: Set(input.content),
-        yjs_state: Set(None),
-        schema_version: Set(schema_version),
-        revision: Set(current.revision + 1),
-        saved_at: Set(chrono::Utc::now().fixed_offset()),
-    };
-    let saved = if current.revision == 0 && current.saved_at.is_none() {
-        next.insert(&txn).await?
-    } else {
-        next.update(&txn).await?
-    };
-    sessions::Entity::update_many()
-        .col_expr(
-            sessions::Column::UpdatedAt,
-            Expr::value(chrono::Utc::now().fixed_offset()),
-        )
-        .filter(sessions::Column::Id.eq(id))
-        .exec(&txn)
-        .await?;
-    let result = resource(id, Some(saved));
+    let result = persist::persist(&txn, id, input.content, None, schema_version, &current).await?;
     crate::modules::ai_study::service::attach(&txn, id, &references).await?;
     crate::modules::vocabulary::sync::sync(&txn, id, vocabulary).await?;
     txn.commit().await?;

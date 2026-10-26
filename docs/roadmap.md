@@ -54,9 +54,6 @@ Các mục dưới đây là lỗi đã được đọc lại đúng dòng code.
 
 *C2 — Gộp logic bị chép (ưu tiên trung bình; đã bắt đầu lệch nhau)*
 
-- **C2.1 Ghi ghi chú bị chép giữa REST và bridge**
-  - **Vị trí:** `notes/service/mod.rs:136-160` và `collaboration.rs:127-149`.
-  - **Sửa:** tách `persist(txn, id, content, yjs, version, current)`. Thống nhất điều kiện insert hay update, và dùng một mốc `now` cho cả `saved_at` lẫn `updated_at`.
 - **C2.2 Xóa mềm theo tầng chép ở 3 nơi**
   - **Vị trí:** `places/service.rs:126-155`, `courses/service.rs:163-182`, `bulk/service.rs:74-108`.
   - **Sửa:** handler xóa đơn lẻ gọi `bulk::service` với một ID. Nếu không được thì tách helper `soft_delete_cascade`.

@@ -7,8 +7,7 @@ use crate::{
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
 use sea_orm::{
-    sea_query::Expr, ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection,
-    EntityTrait, QueryFilter, QuerySelect, Set,
+    ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect,
 };
 pub async fn config(
     db: &DatabaseConnection,
@@ -110,7 +109,6 @@ pub async fn store(
     let txn = places::write_tx(db, place.user_id, place.id).await?;
     active_session(&txn, id).await?;
     let loaded = notes::Entity::find_by_id(id).one(&txn).await?;
-    let existed = loaded.is_some();
     let unchanged = loaded
         .as_ref()
         .is_some_and(|n| n.yjs_state.as_ref() == Some(&bytes) && n.content == input.content);
@@ -127,26 +125,8 @@ pub async fn store(
             data: serde_json::to_value(current).map_err(|e| AppError::Internal(e.to_string()))?,
         });
     }
-    let now = chrono::Utc::now().fixed_offset();
-    let next = notes::ActiveModel {
-        session_id: Set(id),
-        content: Set(input.content),
-        yjs_state: Set(Some(bytes)),
-        schema_version: Set(version),
-        revision: Set(current.revision + 1),
-        saved_at: Set(now),
-    };
-    let saved = if existed {
-        next.update(&txn).await?
-    } else {
-        next.insert(&txn).await?
-    };
-    sessions::Entity::update_many()
-        .col_expr(sessions::Column::UpdatedAt, Expr::value(now))
-        .filter(sessions::Column::Id.eq(id))
-        .exec(&txn)
-        .await?;
-    let note = service::resource(id, Some(saved));
+    let note =
+        service::persist::persist(&txn, id, input.content, Some(bytes), version, &current).await?;
     crate::modules::ai_study::service::attach(&txn, id, &references).await?;
     crate::modules::vocabulary::sync::sync(&txn, id, vocabulary).await?;
     txn.commit().await?;

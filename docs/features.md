@@ -499,3 +499,7 @@ Readiness collaboration `/up` kiểm Rust qua URL cấu hình (timeout 2s, cache
 - C1.8: multipart chọn cap trước khi đọc chunk: ảnh 5 MiB, MP3/M4A/MP4 (không phân biệt hoa/thường) 100 MiB, các đuôi còn lại 10 MiB. Vẫn kiểm bytes/đuôi thực trong blocking pool; đuôi recording không bỏ qua kiểm định dạng. Test response chặn trước inspect và recording trên 10 MiB vẫn nhận. Giữ buffering hiện tại (tối đa cap) vì chuyển temp-file cần thay cả đường inspect/storage và quản lý lease/cleanup; mục này áp dụng bản sửa tối thiểu.
 
 - C1.9: bridge fetch/store chỉ SELECT note một lần/request (bao gồm Yjs); fetch dựng note/state từ cùng snapshot, store dùng model INSERT/UPDATE trả về. Giữ kiểm quyền, schema, reference, revision và retry idempotent. Test metric SQL với state 2 MiB xác nhận một SELECT cho fetch, lưu, retry và conflict; conflict không thay content/revision/state.
+
+### Rà soát Rust C2 (26/10)
+
+- C2.1: REST và bridge dùng chung persist trong transaction; cùng điều kiện tồn tại dựa saved_at (kể cả note legacy revision 0), cùng mốc saved_at/updated_at. Kiểm quyền/schema/conflict/idempotence vẫn ở caller; đồng bộ projection và commit vẫn nguyên tử. Test tạo/cập nhật cả hai đường, note legacy và timestamp bằng nhau.

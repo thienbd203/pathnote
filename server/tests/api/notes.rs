@@ -435,3 +435,59 @@ async fn old_schema_save_cannot_erase_dual_accent_ipa() {
     assert_eq!(persisted["data"]["revision"], 1);
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn rest_and_bridge_persist_new_and_legacy_revision_zero_notes_with_identical_timestamps() {
+    use sea_orm::{ActiveModelTrait, Set};
+    use server::entities::sessions;
+    for bridge in [false, true] {
+        let app = LearningApp::spawn_with_collaboration(bridge).await;
+        for legacy in [false, true] {
+            let id = lesson(&app).await;
+            if legacy {
+                notes::ActiveModel {
+                    session_id: Set(id),
+                    content: Set(doc()),
+                    yjs_state: Set(None),
+                    schema_version: Set(3),
+                    revision: Set(0),
+                    saved_at: Set(chrono::Utc::now().fixed_offset()),
+                }
+                .insert(app.db.as_ref())
+                .await
+                .unwrap();
+            }
+            for revision in 0..2 {
+                let mut content = doc();
+                content["content"][0]["content"][0]["text"] = json!(format!("Revision {revision}"));
+                let response = if bridge {
+                    app.api.put(&format!("/api/v1/internal/notes/{id}"))
+                        .add_header("x-collaboration-secret", "test-collaboration-secret-32-characters")
+                        .json(&json!({"content":content,"schema_version":4,"base_revision":revision,"state":if revision == 0 {"AAA="} else {"AQI="}})).await
+                } else {
+                    app.api
+                        .put(&format!("/api/v1/sessions/{id}/note"))
+                        .add_header("authorization", token(&app.owner_token))
+                        .json(&save(content.clone(), revision))
+                        .await
+                };
+                response.assert_status_ok();
+                let note = notes::Entity::find_by_id(id)
+                    .one(app.db.as_ref())
+                    .await
+                    .unwrap()
+                    .unwrap();
+                let session = sessions::Entity::find_by_id(id)
+                    .one(app.db.as_ref())
+                    .await
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(note.saved_at, session.updated_at);
+                assert_eq!(note.revision, revision + 1);
+                assert_eq!(note.content, content);
+                assert_eq!(note.yjs_state.is_some(), bridge);
+            }
+        }
+        app.cleanup().await;
+    }
+}
