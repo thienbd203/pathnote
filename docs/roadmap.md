@@ -54,11 +54,6 @@ Các mục dưới đây là lỗi đã được đọc lại đúng dòng code.
 
 *C1 — Hiệu năng và đúng đắn (ưu tiên cao)*
 
-- **C1.4 Ghi chú mới vẫn mang `schema_version` 3**
-  - **Vị trí:** `sessions/service/mod.rs:211`, `sessions/service/initial_note.rs:42`.
-  - **Lỗi:** ghi chú tạo từ template hoặc cấu trúc buổi trước lọt vào nhánh chuyển tiếp D1, nên writer cũ vẫn ghi đè được.
-  - **Sửa:** dùng `notes::schema::NOTE_SCHEMA_VERSION`. Thay luôn các số `3` viết tay: `notes/service/mod.rs:92,111`, `notes/service/collaboration.rs:101`, `ai_study/service.rs:41`, `ipa/dto.rs:96`. Chỗ nào cố ý giữ 3 (ví dụ validate dữ liệu cũ) thì đặt hằng riêng có tên rõ nghĩa.
-  - **Test:** ghi chú vừa tạo có version = `NOTE_SCHEMA_VERSION`; writer không gửi version thì bị 409 `client_outdated`.
 - **C1.5 Tìm buổi học theo ngày trả 422 ở múi giờ có nửa đêm bị nhảy giờ (DST)**
   - **Vị trí:** `sessions/service/search.rs:94-111`.
   - **Sửa:** dùng `.earliest()`. Khi nửa đêm không tồn tại thì lấy mốc hợp lệ đầu tiên, hoặc bỏ điều kiện ngày, không báo lỗi.

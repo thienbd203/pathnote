@@ -42,6 +42,7 @@ async fn creation_initializes_notes_atomically_and_structure_does_not_copy_conte
     r.assert_status_ok();
     let initial = r.json::<Value>()["data"].clone();
     assert_eq!(initial["revision"], 1);
+    assert_eq!(initial["schema_version"], 4);
     assert_eq!(initial["content"]["content"][3]["type"], "vocabulary");
     let original_id = initial["content"]["content"][3]["content"][0]["attrs"]["id"]
         .as_str()
@@ -70,6 +71,7 @@ async fn creation_initializes_notes_atomically_and_structure_does_not_copy_conte
         .add_header("authorization", auth.clone())
         .await;
     r.assert_status_ok();
+    assert_eq!(r.json::<Value>()["data"]["schema_version"], 4);
     let copy = r.json::<Value>()["data"]["content"].clone();
     assert_eq!(copy["content"][0]["content"][0]["text"], "Ghi chú");
     assert!(!copy.to_string().contains("Private old answer"));
@@ -88,6 +90,26 @@ async fn creation_initializes_notes_atomically_and_structure_does_not_copy_conte
         .add_header("authorization", auth.clone())
         .await;
     assert_eq!(r.json::<Value>()["data"]["revision"], 0);
+    assert_eq!(r.json::<Value>()["data"]["schema_version"], 4);
+    for (id, content, revision) in [
+        (source_id, initial["content"].clone(), 2),
+        (copied, copy, 1),
+        (
+            blank,
+            json!({"type":"doc","content":[{"type":"paragraph"}]}),
+            0,
+        ),
+    ] {
+        let rejected = app
+            .api
+            .put(&format!("/api/v1/sessions/{id}/note"))
+            .add_header("authorization", auth.clone())
+            .json(&json!({"content":content,"base_revision":revision}))
+            .await;
+        rejected.assert_status(StatusCode::CONFLICT);
+        assert_eq!(rejected.json::<Value>()["code"], "client_outdated");
+    }
+
     input["initial_note"] = json!({"mode":"structure","session_id":99999999});
     app.api
         .post(&url)

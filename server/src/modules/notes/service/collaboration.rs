@@ -98,7 +98,9 @@ pub async fn store(
     if let Some(version) = input.schema_version {
         super::super::schema::check_client(version)?;
     }
-    let version = input.schema_version.unwrap_or(3);
+    let version = input
+        .schema_version
+        .unwrap_or(crate::modules::notes::schema::LEGACY_NOTE_SCHEMA_VERSION);
     let references = crate::modules::notes::document::validate(&input.content, version)?;
     let vocabulary = crate::modules::vocabulary::sync::prepare(&input.content)?;
     let place = crate::entities::places::Entity::find_by_id(session.place_id)

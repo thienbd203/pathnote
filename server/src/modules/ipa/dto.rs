@@ -93,7 +93,7 @@ impl Entry {
         }
         document::validate(
             &document::builders::vocabulary_import(locale, value(self)?),
-            3,
+            crate::modules::notes::schema::NOTE_SCHEMA_VERSION,
         )?;
         Ok(())
     }

@@ -38,7 +38,10 @@ pub async fn prepare(
             return Err(invalid());
         }
     }
-    let refs = validate(&input.content, 3)?;
+    let refs = validate(
+        &input.content,
+        crate::modules::notes::schema::NOTE_SCHEMA_VERSION,
+    )?;
     let mut slots = Vec::new();
     for reference in refs {
         match reference {

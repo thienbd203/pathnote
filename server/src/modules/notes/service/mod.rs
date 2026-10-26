@@ -89,7 +89,7 @@ fn resource(id: i64, model: Option<notes::Model>) -> NoteResource {
         None => NoteResource {
             session_id: id,
             content: crate::modules::notes::document::builders::empty(),
-            schema_version: 3,
+            schema_version: crate::modules::notes::schema::NOTE_SCHEMA_VERSION,
             revision: 0,
             saved_at: None,
         },
@@ -108,7 +108,9 @@ async fn save(
 ) -> Result<SaveOutcome, AppError> {
     let references = crate::modules::notes::document::validate(
         &input.content,
-        input.schema_version.unwrap_or(3),
+        input
+            .schema_version
+            .unwrap_or(crate::modules::notes::schema::LEGACY_NOTE_SCHEMA_VERSION),
     )?;
     let vocabulary = crate::modules::vocabulary::sync::prepare(&input.content)?;
     if !(0..i32::MAX).contains(&input.base_revision) {

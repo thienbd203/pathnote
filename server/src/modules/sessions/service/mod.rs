@@ -208,7 +208,7 @@ pub async fn create(
             session_id: Set(session.id),
             content: Set(content),
             yjs_state: Set(None),
-            schema_version: Set(3),
+            schema_version: Set(crate::modules::notes::schema::NOTE_SCHEMA_VERSION),
             revision: Set(1),
             saved_at: Set(now),
         }

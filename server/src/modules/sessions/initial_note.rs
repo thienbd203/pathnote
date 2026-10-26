@@ -39,6 +39,6 @@ pub async fn prepare(
             }
         }
     };
-    document::validate(&content, 3)?;
+    document::validate(&content, crate::modules::notes::schema::NOTE_SCHEMA_VERSION)?;
     Ok(Some(content))
 }

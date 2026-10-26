@@ -3,6 +3,8 @@ use crate::AppError;
 use serde_json::Value;
 
 pub const NOTE_SCHEMA_VERSION: i32 = 4;
+/// Only unversioned writers of persisted, pre-v4 documents use this transition.
+pub const LEGACY_NOTE_SCHEMA_VERSION: i32 = 3;
 
 pub fn check_client(version: i32) -> Result<(), AppError> {
     if version < NOTE_SCHEMA_VERSION {
@@ -48,7 +50,7 @@ pub fn write_version(
             && !has_dual_ipa(&current.content)
             && !has_dual_ipa(content) =>
         {
-            Ok(current.schema_version.max(3))
+            Ok(current.schema_version.max(LEGACY_NOTE_SCHEMA_VERSION))
         }
         None => Err(AppError::ClientOutdated),
     }

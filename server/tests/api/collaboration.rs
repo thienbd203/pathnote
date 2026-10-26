@@ -290,6 +290,18 @@ async fn schema_guard_rejects_old_bridge_and_old_realtime_clients_before_writing
 async fn schema_four_transition_accepts_missing_version_only_for_plain_legacy_notes() {
     let app = LearningApp::spawn_with_collaboration(true).await;
     let id = lesson(&app).await;
+    // Grace applies to a persisted legacy document, never a newly created note.
+    server::entities::notes::ActiveModel {
+        session_id: Set(id),
+        content: Set(doc()),
+        schema_version: Set(3),
+        revision: Set(0),
+        saved_at: Set(chrono::Utc::now().fixed_offset()),
+        yjs_state: Set(None),
+    }
+    .insert(app.db.as_ref())
+    .await
+    .unwrap();
     let path = format!("/api/v1/internal/notes/{id}");
     app.api
         .put(&path)
