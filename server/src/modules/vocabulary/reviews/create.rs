@@ -1,6 +1,6 @@
 use super::{
     dto::*,
-    state::{key, Review},
+    state::{key_fields, Review},
 };
 use crate::{
     entities::{
@@ -13,11 +13,50 @@ use crate::{
 use rand::seq::SliceRandom;
 use sea_orm::{
     sea_query::{Alias, Expr, Func},
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder,
-    QuerySelect, Set,
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, DerivePartialModel, EntityTrait,
+    FromQueryResult, IsolationLevel, QueryFilter, QueryOrder, QuerySelect, Set, TransactionTrait,
 };
 
 use std::collections::{HashMap, HashSet};
+#[derive(DerivePartialModel, FromQueryResult)]
+#[sea_orm(entity = "cards::Entity")]
+struct Distractor {
+    session_id: i64,
+    word: String,
+    word_key: String,
+    locale: String,
+    part_of_speech: String,
+    meaning: String,
+}
+#[derive(DerivePartialModel, FromQueryResult)]
+#[sea_orm(entity = "cards::Entity")]
+struct Candidate {
+    id: i64,
+    session_id: i64,
+    word: String,
+    word_key: String,
+    locale: String,
+    ipa: String,
+    ipa_uk: String,
+    part_of_speech: String,
+    meaning: String,
+    topics: serde_json::Value,
+    examples: serde_json::Value,
+}
+#[derive(DerivePartialModel, FromQueryResult)]
+#[sea_orm(entity = "sessions::Entity")]
+struct SourceRow {
+    id: i64,
+    place_id: i64,
+    title: String,
+}
+#[derive(DerivePartialModel, FromQueryResult)]
+#[sea_orm(entity = "places::Entity")]
+struct OwnerRow {
+    id: i64,
+    user_id: i64,
+}
+
 pub async fn create(db: &DatabaseConnection, user: i64, input: Create) -> Result<Review, AppError> {
     let limit = input.limit.unwrap_or(20);
     if !(1..=50).contains(&limit)
@@ -31,6 +70,12 @@ pub async fn create(db: &DatabaseConnection, user: i64, input: Create) -> Result
             "Bộ lọc không hợp lệ; mỗi lượt từ 1 đến 50 câu.",
         ));
     }
+    // One consistent source/permission snapshot while creating this private review.
+    // show/answer still recheck current rights and content before exposing/grading.
+    let txn = db
+        .begin_with_config(Some(IsolationLevel::RepeatableRead), None)
+        .await?;
+    let db = &txn;
     if let Some(id) = input.course_id {
         crate::modules::courses::service::model(db, user, id).await?;
     }
@@ -43,12 +88,23 @@ pub async fn create(db: &DatabaseConnection, user: i64, input: Create) -> Result
         topic: input.topic,
         q: input.q,
     };
-    let pool = super::super::library::scope(user, None)
-        .filter(cards::Column::Meaning.ne(""))
-        .order_by_asc(Expr::expr(Func::cust(Alias::new("random"))))
-        .limit(1000)
-        .all(db)
-        .await?;
+    let pool = if input.mode == Mode::Choice {
+        super::super::library::scope(user, None)
+            .filter(cards::Column::Meaning.ne(""))
+            .order_by_asc(Expr::expr(Func::cust(Alias::new("random"))))
+            .limit(1000)
+            .into_partial_model::<Distractor>()
+            .all(db)
+            .await?
+            .into_iter()
+            .map(|mut card| {
+                card.meaning = super::super::sync::normalize(&card.meaning);
+                card
+            })
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
     let mut candidates = super::super::library::filtered(
         super::super::library::within_course(
             super::super::library::scope(user, filters.session_id),
@@ -60,31 +116,47 @@ pub async fn create(db: &DatabaseConnection, user: i64, input: Create) -> Result
     .filter(cards::Column::Meaning.ne(""))
     .order_by_asc(Expr::expr(Func::cust(Alias::new("random"))))
     .limit(1000)
+    .into_partial_model::<Candidate>()
     .all(db)
-    .await?;
+    .await?
+    .into_iter()
+    .map(|card| {
+        let key = key_fields(
+            &card.word,
+            &card.locale,
+            &card.part_of_speech,
+            &card.meaning,
+        );
+        (card, key)
+    })
+    .collect::<Vec<_>>();
     let old: HashMap<_, _> = progress::Entity::find()
         .filter(progress::Column::UserId.eq(user))
-        .filter(progress::Column::CardId.is_in(candidates.iter().map(|c| c.id)))
+        .filter(progress::Column::CardId.is_in(candidates.iter().map(|(c, _)| c.id)))
+        .select_only()
+        .columns([
+            progress::Column::CardId,
+            progress::Column::StudyKey,
+            progress::Column::Incorrect,
+        ])
+        .into_tuple::<(i64, String, i32)>()
         .all(db)
         .await?
         .into_iter()
-        .map(|p| (p.card_id, p))
+        .map(|(id, key, incorrect)| (id, (key, incorrect)))
         .collect();
     // SQL samples a bounded random pool; incorrect words in that pool are prioritized.
-    candidates.sort_by_key(|c| {
+    candidates.sort_by_key(|(c, key)| {
         std::cmp::Reverse(
             old.get(&c.id)
-                .filter(|p| p.study_key == key(c))
-                .map_or(0, |p| p.incorrect),
+                .filter(|(study_key, _)| study_key == key)
+                .map_or(0, |(_, incorrect)| *incorrect),
         )
     });
-    let source_ids: HashSet<_> = candidates
-        .iter()
-        .chain(pool.iter())
-        .map(|c| c.session_id)
-        .collect();
+    let source_ids: HashSet<_> = candidates.iter().map(|(c, _)| c.session_id).collect();
     let sources: HashMap<_, _> = sessions::Entity::find()
         .filter(sessions::Column::Id.is_in(source_ids))
+        .into_partial_model::<SourceRow>()
         .all(db)
         .await?
         .into_iter()
@@ -92,6 +164,7 @@ pub async fn create(db: &DatabaseConnection, user: i64, input: Create) -> Result
         .collect();
     let owners: HashMap<_, _> = places::Entity::find()
         .filter(places::Column::Id.is_in(sources.values().map(|s| s.place_id)))
+        .into_partial_model::<OwnerRow>()
         .all(db)
         .await?
         .into_iter()
@@ -101,8 +174,7 @@ pub async fn create(db: &DatabaseConnection, user: i64, input: Create) -> Result
     let mut seen = HashSet::new();
     {
         let mut rng = rand::thread_rng();
-        for card in candidates {
-            let study_key = key(&card);
+        for (card, study_key) in candidates {
             if !seen.insert(study_key.clone()) {
                 continue;
             }
@@ -111,11 +183,11 @@ pub async fn create(db: &DatabaseConnection, user: i64, input: Create) -> Result
             if input.mode == Mode::Choice {
                 let mut words = HashSet::new();
                 words.insert(card.word_key.clone());
+                let normalized_meaning = super::super::sync::normalize(&card.meaning);
                 for other in &pool {
                     if other.locale == card.locale
                         && other.part_of_speech == card.part_of_speech
-                        && super::super::sync::normalize(&other.meaning)
-                            != super::super::sync::normalize(&card.meaning)
+                        && other.meaning != normalized_meaning
                         && words.insert(other.word_key.clone())
                     {
                         options.push(other.word.clone());
@@ -146,8 +218,11 @@ pub async fn create(db: &DatabaseConnection, user: i64, input: Create) -> Result
                     letters.swap(0, i);
                 }
             }
-            let ipa = super::super::pronunciation::ipa(&card);
-            let british_examples = super::super::pronunciation::examples(&card);
+            let ipa =
+                super::super::pronunciation::british_ipa(&card.ipa_uk, &card.ipa, &card.locale)
+                    .into();
+            let british_examples =
+                super::super::pronunciation::example_values(&card.examples, &card.locale);
             let examples: Vec<_> = british_examples
                 .as_array()
                 .into_iter()
@@ -213,7 +288,6 @@ pub async fn create(db: &DatabaseConnection, user: i64, input: Create) -> Result
         .insert(db)
         .await?;
     let review = Review::parse(model)?;
-    review.authorize(db).await?;
-    review.current(db).await?;
+    txn.commit().await?;
     Ok(review)
 }

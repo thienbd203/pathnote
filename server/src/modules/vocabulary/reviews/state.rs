@@ -9,19 +9,28 @@ use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, PaginatorTrait, QueryFi
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 pub fn key(card: &cards::Model) -> String {
+    key_fields(
+        &card.word,
+        &card.locale,
+        &card.part_of_speech,
+        &card.meaning,
+    )
+}
+pub(super) fn key_fields(word: &str, locale: &str, part_of_speech: &str, meaning: &str) -> String {
     format!(
         "{:x}",
         Sha256::digest(
             serde_json::to_vec(&(
-                super::super::sync::normalize(&card.word),
-                &card.locale,
-                &card.part_of_speech,
-                super::super::sync::normalize(&card.meaning)
+                super::super::sync::normalize(word),
+                locale,
+                part_of_speech,
+                super::super::sync::normalize(meaning),
             ))
             .expect("String serialization")
         )
     )
 }
+
 pub struct Review {
     pub model: reviews::Model,
     pub mode: Mode,

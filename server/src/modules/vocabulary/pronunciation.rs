@@ -15,13 +15,17 @@ pub fn british_ipa<'a>(uk: &'a str, legacy: &'a str, source_locale: &str) -> &'a
 }
 
 pub fn examples(card: &vocabulary_cards::Model) -> Value {
-    let mut examples = card.examples.clone();
+    example_values(&card.examples, &card.locale)
+}
+
+pub fn example_values(examples: &Value, source_locale: &str) -> Value {
+    let mut examples = examples.clone();
     if let Some(rows) = examples.as_array_mut() {
         for row in rows {
             let ipa = british_ipa(
                 row["ipaUK"].as_str().unwrap_or_default(),
                 row["ipa"].as_str().unwrap_or_default(),
-                &card.locale,
+                source_locale,
             )
             .to_owned();
             row["ipa"] = Value::String(ipa);

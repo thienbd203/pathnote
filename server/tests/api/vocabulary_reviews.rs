@@ -279,3 +279,44 @@ async fn reviews_hide_revoked_and_deleted_sources_and_validate_empty_sets() {
         .assert_status_not_found();
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn creation_projects_only_needed_columns_and_never_uses_same_meaning_distractors() {
+    let (app, queries) = LearningApp::spawn_with_queries(false).await;
+    let (session, mut content) = seed(&app).await;
+    content["content"][0]["content"][0]["content"]
+        .as_array_mut()
+        .unwrap()
+        .push(entry("tutor", " GIÁO VIÊN ", &["Jobs"]));
+    save(&app, session, &content, 1).await;
+    for mode in ["choice", "typing"] {
+        queries.lock().unwrap().clear();
+        let (_, result) = start(&app, &app.owner_token, mode, "teacher").await;
+        if mode == "choice" {
+            assert!(!result["question"]["options"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("tutor")));
+        }
+        let sql = queries.lock().unwrap().clone();
+        let sampled: Vec<_> = sql
+            .iter()
+            .filter(|sql| sql.contains("ORDER BY random()"))
+            .collect();
+        assert_eq!(sampled.len(), if mode == "choice" { 2 } else { 1 });
+        assert!(sampled
+            .iter()
+            .all(|sql| !sql.contains("source_entry_id") && !sql.contains("created_at")));
+        if mode == "choice" {
+            assert!(!sampled[0].contains("examples"));
+        }
+        let inserted = sql
+            .iter()
+            .position(|sql| sql.starts_with("INSERT INTO \"vocabulary_reviews\""))
+            .unwrap();
+        assert!(!sql[inserted + 1..]
+            .iter()
+            .any(|sql| sql.starts_with("SELECT")));
+    }
+    app.cleanup().await;
+}

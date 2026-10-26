@@ -54,13 +54,6 @@ Các mục dưới đây là lỗi đã được đọc lại đúng dòng code.
 
 *C2 — Gộp logic bị chép (ưu tiên trung bình; đã bắt đầu lệch nhau)*
 
-- **C2.5 Tạo vocabulary review tải dữ liệu thừa**
-  - **Vị trí:** `vocabulary/reviews/create.rs`.
-  - **Lỗi:**
-    - Tải 2×1000 thẻ đủ cột với `ORDER BY random()` (dòng 46-64).
-    - Gọi `normalize` lặp trong vòng chọn đáp án nhiễu (dòng 114-127).
-    - Gọi lại `authorize`/`current` sau khi đã insert, nằm ngoài transaction (dòng 215-217).
-  - **Sửa:** select ít cột, chuẩn hóa một lần trước vòng lặp, bỏ hai lời gọi thừa.
 - **C2.6 `exercises::Question` lặp 5 field ở cả 7 variant**
   - **Vị trí:** `exercises/question.rs:8-119,290-298`.
   - **Sửa:** chuyển thành `struct Question { #[serde(flatten)] kind: Kind, … }`. JSON vào và ra phải giữ nguyên.
