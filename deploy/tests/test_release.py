@@ -98,7 +98,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.jobs = self.workflow['jobs']
 
     def test_no_deployment_can_start_before_both_builds_succeed(self):
-        self.assertEqual(set(self.jobs['deploy-backend']['needs']), {'release', 'check', 'build-backend', 'build-frontend', 'build-collaboration', 'browser-contract'})
+        self.assertEqual(set(self.jobs['deploy-backend']['needs']), {'release', 'check', 'build-backend', 'build-frontend', 'build-collaboration'})
         self.assertEqual(set(self.jobs['deploy-frontend']['needs']), {'release', 'build-frontend', 'deploy-backend', 'deploy-collaboration'})
         for name in ('deploy-backend', 'deploy-collaboration', 'deploy-frontend'):
             job = self.jobs[name]
@@ -119,17 +119,9 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertEqual(checkout['ref'], '${{ needs.release.outputs.frontend_sha }}')
         self.assertFalse(checkout['persist-credentials'])
         self.assertEqual(self.jobs['deploy-frontend']['env']['FRONTEND_SHA'], checkout['ref'])
-        browser = self.jobs['browser-contract']
-        self.assertNotIn('if', browser)  # Failed release selection must skip this gate.
-        self.assertEqual(browser['needs'], 'release')
-        checkouts = [step['with'] for step in browser['steps'] if step.get('uses', '').startswith('actions/checkout@')]
-        self.assertEqual(checkouts[1]['repository'], checkout['repository'])
-        self.assertEqual(checkouts[1]['ref'], checkout['ref'])
-        self.assertFalse(checkouts[1]['persist-credentials'])
-        commands = '\n'.join(step.get('run', '') for step in browser['steps'])
-        self.assertIn('npm run e2e:build', commands)
-        self.assertIn('npm run e2e:integration', commands)
-        self.assertNotIn('continue-on-error', json.dumps(browser))
+        self.assertNotIn('browser-contract', self.jobs)
+        self.assertNotIn('playwright', json.dumps(self.workflow).lower())
+        self.assertNotIn('npm run e2e', json.dumps(self.workflow))
         artifacts = [step['with'] for step in self.jobs['deploy-frontend']['steps'] if step.get('uses', '').startswith('actions/download-artifact@')]
         self.assertEqual(artifacts, [{'name': 'pathnote-web-release', 'path': 'web-release'}])
 
@@ -148,7 +140,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertLess(activation.index('python3 deploy/healthcheck.py'), activation.index('< web-release/deploy.sh'))
         self.assertLess(activation.index('\"$COLLABORATION_SHA\" collaboration'), activation.index('< web-release/deploy.sh'))
         self.assertEqual(deploy['env']['COLLABORATION_SHA'], '${{ needs.release.outputs.collaboration_sha }}')
-        for name in ('check', 'build-backend', 'build-frontend', 'build-collaboration', 'browser-contract'):
+        for name in ('check', 'build-backend', 'build-frontend', 'build-collaboration'):
             self.assertNotIn('SSH_PRIVATE_KEY', json.dumps(self.jobs[name]))
         guard = self.jobs['release']['if']
         self.assertIn("github.event_name != 'pull_request'", guard)
@@ -168,6 +160,8 @@ class ReleaseWorkflowTests(unittest.TestCase):
         if not frontend.exists():
             self.skipTest('Adjacent frontend checkout only available in the local paired workspace')
         workflow = self.load(frontend)
+        self.assertNotIn('e2e', workflow['jobs'])
+        self.assertNotIn('playwright', json.dumps(workflow).lower())
         for job in workflow['jobs'].values():
             self.assertNotIn('environment', job)
             for step in job['steps']:

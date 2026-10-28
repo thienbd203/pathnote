@@ -38,7 +38,7 @@ impl LearningApp {
         Self::spawn_config(false, false, Some((ipa, translation))).await
     }
     async fn spawn_config(enabled: bool, network: bool, service_url: Option<(&str, &str)>) -> Self {
-        Self::spawn_migrations(enabled, network, service_url, None, None, None).await
+        Self::spawn_migrations(enabled, network, service_url, None, None).await
     }
     pub async fn spawn_before_flashcard_grouping() -> Self {
         Self::spawn_migrations(
@@ -54,17 +54,12 @@ impl LearningApp {
                     .expect("shared-memory migration is registered") as u32,
             ),
             None,
-            None,
         )
         .await
     }
-    pub async fn spawn_browser() -> Self {
-        Self::spawn_migrations(false, true, None, None, Some(4180), None).await
-    }
     pub async fn spawn_with_queries(enabled: bool) -> (Self, Queries) {
         let queries = Queries::default();
-        let app =
-            Self::spawn_migrations(enabled, false, None, None, None, Some(queries.clone())).await;
+        let app = Self::spawn_migrations(enabled, false, None, None, Some(queries.clone())).await;
         (app, queries)
     }
     async fn spawn_migrations(
@@ -72,7 +67,6 @@ impl LearningApp {
         network: bool,
         service_url: Option<(&str, &str)>,
         steps: Option<u32>,
-        browser_port: Option<u16>,
         queries: Option<Queries>,
     ) -> Self {
         dotenvy::dotenv().ok();
@@ -126,12 +120,7 @@ impl LearningApp {
             google_redirect_url: "http://localhost:3000/api/v1/auth/google/callback".into(),
             cookie_secure: true,
             bind_addr: "127.0.0.1:3000".into(),
-            frontend_url: if browser_port.is_some() {
-                "http://127.0.0.1:4173"
-            } else {
-                "https://frontend.example.test"
-            }
-            .into(),
+            frontend_url: "https://frontend.example.test".into(),
             database_max_connections: 10,
             database_acquire_timeout_secs: 5,
             database_url: "unused".into(),
@@ -163,7 +152,7 @@ impl LearningApp {
         };
         let builder = if network {
             TestServer::builder()
-                .http_transport_with_ip_port(Some("127.0.0.1".parse().unwrap()), browser_port)
+                .http_transport_with_ip_port(Some("127.0.0.1".parse().unwrap()), None)
         } else {
             TestServer::builder()
         };

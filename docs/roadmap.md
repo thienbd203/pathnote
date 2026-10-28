@@ -4,13 +4,6 @@ Cập nhật 27/10/2026. Đây là nơi duy nhất ghi việc chưa làm của t
 
 Khi bắt đầu một mục, ghi kế hoạch ngắn ngay dưới mục đó; khi xong, cập nhật `docs/features.md` (hoặc `docs/architecture.md`) và xóa mục khỏi đây.
 
-**Xác minh bản tối ưu R1–R8 trên CI**
-
-R1–R8 đã triển khai, đo lại bằng Playwright và hạ ngân sách tương ứng. Hành vi hiện tại ở `docs/features.md`; ngân sách ở `pathnote-web/e2e/request-budgets.ts`.
-
-- Sau khi push frontend và coordinator, xác minh browser gate của đúng cặp SHA mới xanh. Bộ test/gate gốc R0 đã qua trên GitHub ở run `39037695883`; không còn chờ xác minh R0.
-- Không tăng ngân sách hoặc cập nhật ảnh chỉ để làm CI xanh. Khi bản tối ưu đã qua CI, xóa mục này.
-
 **An toàn triển khai và rollback** (review 21/10/2026, D1 đã sửa/test ở local; còn các bước dưới đây)
 
 Thứ tự kích hoạt Rust → collaboration → frontend là đúng: backend nhận dữ liệu mới trước khi có client ghi nó. Rollback tự động trong lúc deploy cũng an toàn vì xảy ra trước khi frontend mới được kích hoạt. Rủi ro nằm ở ba chỗ: tab cũ, rollback thủ công, và cấu hình collaboration chưa được kiểm tra. Các mục dưới đây xử lý ba rủi ro đó.

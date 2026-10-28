@@ -433,14 +433,11 @@ Cài đặt cá nhân có chọn UK/US: chọn là phát mẫu ngay, bấm Lưu 
 
 ## Kiểm thử tự động và điều kiện phát hành
 
-- Web có bộ Playwright Chromium cho desktop 1440×900 và Pixel 7 (touch/user agent), context và cache mới mỗi kịch bản. API fixture có kiểu theo contract thật; dữ liệu/giờ/font cố định, chặn host ngoài loopback và endpoint chưa khai báo.
-- Đo 16 màn cùng các thao tác mở form, tìm kiếm, AI copy sau khi cache hết hạn, reveal/grade/next, drawer và buổi trước/sau trên mobile. Mỗi bước có ngân sách request, cấm request trùng (không còn ngoại lệ sau R3) và cấm ghi ngoài lệnh đã khai báo. JSON và bảng CI chỉ rõ request khi vượt ngân sách; tối ưu phải hạ ngân sách cùng commit.
-- So sánh ảnh ghi chép, thư viện, flashcard và hộp tạo buổi trên cả hai kích thước. Baseline macOS/Linux riêng; Linux dùng official Playwright image cùng phiên bản Chromium/Ubuntu của CI. Thay ảnh chuẩn phải xem ảnh/diff, không tự cập nhật trong CI.
-- Bộ browser contract dùng backend Rust thật và schema PostgreSQL dùng một lần, kiểm tra tạo buổi qua UI, autosave/F5, chấm bài và ẩn đáp án, chia sẻ/thu hồi giữa hai user, lưu lịch ôn flashcard. Harness chỉ nằm trong test binary; JWT test ở file tạm mode 600, không có đường đăng nhập tắt trong production.
-- Coordinator checkout đúng backend SHA và frontend SHA từ manifest; kiểm tra request/giao diện và contract phải qua trước deploy backend. Bản build dành cho test dùng loopback, độc lập artifact production. Khi lỗi, CI giữ trace/ảnh/report 7 ngày.
-- Phạm vi còn cần thử thật: OAuth Google, realtime hai người, Safari iOS. Mock network không chứng minh độ trễ production; bộ contract không thay phép đo đường truyền/DB trên VPS.
-
-Code: web `e2e/`, `playwright*.config.ts`; Rust `server/tests/api/browser.rs`, `.github/workflows/deploy.yml`. Cách chạy: README web.
+Từ 28/10, bỏ toàn bộ E2E/Playwright, fixture trình duyệt, ảnh baseline và browser gate khỏi code và CI/deploy theo yêu cầu sử dụng.
+Rust giữ bộ test API/PostgreSQL và unit, migration, fmt/Clippy; frontend giữ unit logic, typecheck/build và format. Collaboration giữ test dịch vụ hiện có.
+Coordinator pin SHA, chờ check/build, triển khai Rust → collaboration → frontend và kiểm health/version/database như trước; backup và rollback không đổi.
+UI được kiểm trực tiếp khi thay đổi trên desktop/mobile, gồm trạng thái tải/lỗi, submit/retry và thao tác liên quan. Không coi giả lập là kiểm tra thiết bị thật.
+Các số đo/test trình duyệt ghi dưới đây là kết quả lịch sử trước khi bỏ E2E; không còn là lệnh chạy hoặc điều kiện phát hành hiện hành.
 
 - Hiệu năng R1: sao chép prompt AI dùng reader public bulk tối đa 100 ID và cache từng bài; note 24 bài cần 1 GET sau khi cache cũ (trước 24), không đọc definition/đáp án quản lý. Đã đo trên desktop/mobile.
 
@@ -458,7 +455,7 @@ Code: web `e2e/`, `playwright*.config.ts`; Rust `server/tests/api/browser.rs`, `
 
 - Hiệu năng R8: trang IPA mặc định chỉ tải pairs (2 → 1 API sau R2; 4 → 1 từ baseline gốc). Chuyển Tất cả từ mới tải words; vẫn giữ từ phát sinh từ pairs. Hai endpoint `POST /ipa-vocabulary/duplicates` và `/ipa-pairs/duplicates` là lookup read-only, dùng chung validator/canonical keys với import, SELECT theo user/locale/kind và khóa payload, có kiểm tra trùng nội bộ. Import thật vẫn kiểm tra trong transaction và giữ idempotency. Browser thử kho ba trang xác nhận preview chỉ gọi một lookup; Rust thử từ ở trang hai, đảo cặp, trùng payload và user khác.
 
-- Xác minh R0: coordinator run [39037695883](https://github.com/thienbd203/pathnote/actions/runs/39037695883) đã qua check, build, browser contract đúng cặp SHA và deploy. Bản tối ưu R1–R8 được kiểm tra local với cùng bộ test, cần chạy CI riêng sau khi push cặp SHA mới.
+- Xác minh R0: coordinator run [39037695883](https://github.com/thienbd203/pathnote/actions/runs/39037695883) đã qua check, build, browser contract đúng cặp SHA và deploy. Bản tối ưu R1–R8 được kiểm tra local với cùng bộ test, việc xác minh giao diện sau 28/10 thực hiện trực tiếp, không có browser gate.
 
 
 ### Số đo tổng thể sau R1–R8

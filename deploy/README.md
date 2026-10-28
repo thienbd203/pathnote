@@ -270,10 +270,8 @@ flowchart TD
     Pair --> Collab[Test và đóng gói collaboration]
     Pair --> Check[Test và lint backend]
     Pair --> Rust
-    Pair --> Browser[Test trình duyệt với cặp phiên bản]
     Rust[Build backend] --> DeployRust[Triển khai backend]
     Check --> DeployRust
-    Browser --> DeployRust
     Web --> DeployRust[Triển khai backend]
     Collab --> DeployRust
     DeployRust --> Health[Kiểm tra đúng phiên bản backend và database]
@@ -305,7 +303,7 @@ Thứ tự kích hoạt production: **Rust → collaboration → frontend**. Bui
 
 1. Push frontend và collaboration để chạy CI; hai repo này không tự triển khai production.
 2. Điền chính xác `frontend_sha`, `collaboration_sha` đã push vào `.github/release.json` cùng thay đổi Rust, review rồi push `master` ở repo Rust.
-3. Coordinator kiểm tra Rust, build ba artifact theo SHA cố định và chạy browser gate. Bất kỳ gate/build nào lỗi đều giữ production cũ.
+3. Coordinator chạy test API/Rust và lint, build ba artifact theo SHA cố định. Bất kỳ check/build nào lỗi đều giữ production cũ. Không chạy E2E/trình duyệt trong deploy.
 4. Deploy Rust bằng blue–green (hoặc in-place khi được cấu hình): checksum, backup/migration tương thích, health phải đúng SHA và database ok.
 Artifact collaboration bao gồm cả file ẩn của npm để khớp SHA256SUMS; chỉ upload thư mục release chứa server/dependencies/package files/script deploy, không đưa `.env` hay SSH credentials vào artifact.
 
@@ -435,20 +433,12 @@ Sau sự cố migration breaking: xác minh DB đích, dừng mọi writer, rest
 chọn code khớp schema rồi mới restart. Log và health: mục 4.5.
 
 
-### Browser gate của release
+### Kiểm tra trước deploy
 
-Coordinator chạy bộ request/ảnh và browser contract với đúng frontend SHA trong
-`.github/release.json` và backend SHA của workflow, trước khi cho phép deploy.
-Browser gate và build release không chờ backend checks mới bắt đầu; job deploy
-phụ thuộc trực tiếp cả checks, builds và browser gate. Việc chạy song song rút ngắn
-thời gian chờ, không bỏ bước kiểm tra nào.
-Job dùng PostgreSQL 17 dùng một lần, không dùng database hay Google account production.
-`FRONTEND_READ_TOKEN` hiện có phải đọc được frontend revision đó; không cần secret mới.
-Bản web dành cho test dùng `127.0.0.1:4173`, tuyệt đối không dùng artifact test để deploy.
-Khi nâng bộ Playwright lần đầu, frontend SHA trong manifest phải chứa scripts/test mới.
-Nếu gate lỗi, xem `release-browser-diagnostics` và job summary; không tăng ngân sách
-hay ghi đè ảnh chuẩn chỉ để bỏ qua lỗi. OAuth thật, Safari iOS và realtime vẫn theo
-checklist smoke riêng.
+Không còn browser gate, Playwright, baseline ảnh hoặc E2E trong các repository.
+Coordinator giữ test API/Rust/PostgreSQL, lint, build theo SHA đã chốt và kiểm tra health/version/database khi triển khai.
+Build/test ba phía chạy song song; kích hoạt Rust → collaboration → frontend giữ nguyên, cùng backup/migration/rollback hiện có.
+Giao diện được kiểm trực tiếp khi sửa trên desktop/mobile; đây không phải job chặn deploy.
 
 ## 7. Blue–green trên VPS đang chạy
 

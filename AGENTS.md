@@ -19,3 +19,7 @@ Docs live in `docs/` and `deploy/README.md`; update them in the same commit when
 - `deploy/README.md`: VPS setup, coordinated release, backup and rollback.
 
 Do not create new doc or plan files without need; extend these instead. Git history holds older plans.
+
+# Verification
+
+Keep API/PostgreSQL and unit tests. Do not add a browser E2E harness or gate to CI/deploy. UI verification is performed directly on desktop/mobile when changing the frontend; preserve build/lint and release health/version checks.
