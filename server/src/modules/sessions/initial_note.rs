@@ -13,6 +13,7 @@ pub async fn prepare(
     let content = match input {
         InitialNote::Blank => return Ok(None),
         InitialNote::LessonTemplate => builders::lesson_template(),
+        InitialNote::Vocabulary => builders::vocabulary_template(),
         InitialNote::Structure { session_id } => {
             let source = service::model(db, user, *session_id).await?;
             if course_id.is_none() || source.course_id != course_id {

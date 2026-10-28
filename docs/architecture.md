@@ -264,3 +264,5 @@ Các document schema 1–3 vẫn đọc được; client hiện tại lưu bằn
 | 26/10 C3.7 | `GET /sessions/{id}/collaboration`, `PUT /sessions/{id}/note` | 400 khi note đã dùng realtime hoặc bridge bị tắt | 409 Conflict với message cũ, không có data revision mới; client giữ nháp và tải lại/khôi phục realtime, không coi đây là bản note cho ghi đè. Các lỗi schema/revision/permission khác giữ nguyên. |
 
 | 28/10 IPA flashcard US | Flashcard next/reveal và fallback thiếu snapshot | Mặc định UK | Chuyển riêng flashcard sang en-US, lấy ipaUS từ projection; legacy chỉ dùng khi source en-US. Giọng mặt trước khớp đáp án. Snapshot lịch sử bất biến, thư viện/ôn gõ giữ UK; JSON shape/identity/FSRS không đổi. Migration thêm ipa_us/backfill từ note. |
+
+| 28/10 Buổi mới từ vựng | `POST /courses/{id}/sessions`, `POST /places/{id}/sessions` | initial_note: blank/lesson_template/structure | Bổ sung `initial_note:{mode:"vocabulary"}` để tạo một bảng từ vựng rỗng và đoạn phía sau trong cùng transaction tạo buổi. Các mode cũ vẫn hợp lệ; không migration hay sửa note cũ. Frontend Buổi mới chỉ chọn blank/vocabulary, cần backend mới trước frontend. |

@@ -26,6 +26,7 @@ pub enum InitialNote {
     #[default]
     Blank,
     LessonTemplate,
+    Vocabulary,
     Structure {
         session_id: i64,
     },

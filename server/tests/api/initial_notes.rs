@@ -24,6 +24,24 @@ async fn creation_initializes_notes_atomically_and_structure_does_not_copy_conte
     let course = r.json::<Value>()["data"]["id"].as_i64().unwrap();
     let url = format!("/api/v1/courses/{course}/sessions");
     let base = json!({"title":"New lesson","starts_at":"2026-10-15T11:00:00Z","duration_minutes":90,"timezone":"Asia/Ho_Chi_Minh"});
+    let r = app.api.post(&url).add_header("authorization", auth.clone())
+        .json(&json!({"title":"Vocabulary", "starts_at":"2026-10-15T11:00:00Z", "duration_minutes":90, "timezone":"Asia/Ho_Chi_Minh", "initial_note":{"mode":"vocabulary"}})).await;
+    r.assert_status(StatusCode::CREATED);
+    let vocabulary_id = r.json::<Value>()["data"]["id"].as_i64().unwrap();
+    let r = app
+        .api
+        .get(&format!("/api/v1/sessions/{vocabulary_id}/note"))
+        .add_header("authorization", auth.clone())
+        .await;
+    r.assert_status_ok();
+    let vocabulary = r.json::<Value>()["data"].clone();
+    assert_eq!(vocabulary["revision"], 1);
+    assert_eq!(vocabulary["content"]["content"][0]["type"], "vocabulary");
+    assert_eq!(vocabulary["content"]["content"][1]["type"], "paragraph");
+    assert_eq!(
+        vocabulary["content"]["content"].as_array().unwrap().len(),
+        2
+    );
     let mut input = base.clone();
     input["initial_note"] = json!({"mode":"lesson_template"});
     let r = app
@@ -129,7 +147,7 @@ async fn creation_initializes_notes_atomically_and_structure_does_not_copy_conte
         .get(&url)
         .add_header("authorization", auth.clone())
         .await;
-    assert_eq!(r.json::<Value>()["meta"]["total"], 3);
+    assert_eq!(r.json::<Value>()["meta"]["total"], 4);
     input["initial_note"] = json!({"mode":"structure","session_id":source_id});
     app.api
         .post(&url)
@@ -172,6 +190,6 @@ async fn creation_initializes_notes_atomically_and_structure_does_not_copy_conte
         .get(&url)
         .add_header("authorization", auth.clone())
         .await;
-    assert_eq!(r.json::<Value>()["meta"]["total"], 3);
+    assert_eq!(r.json::<Value>()["meta"]["total"], 4);
     app.cleanup().await;
 }

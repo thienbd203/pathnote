@@ -561,3 +561,7 @@ Readiness collaboration `/up` kiểm Rust qua URL cấu hình (timeout 2s, cache
 ### IPA flashcard Anh–Mỹ (28/10)
 
 Flashcard mới và fallback thiếu snapshot dùng `en-US`: ưu tiên `ipaUS` cho từ/câu, chỉ dự phòng `ipa` legacy nếu nguồn là `en-US`; thiếu IPA Mỹ thì để trống. Giọng đọc mặt trước/đáp án dùng US theo cài đặt giọng US của thiết bị. Các khu vực khác giữ UK; lịch sử có snapshot giữ accent đã lưu. Migration `m20261028_010001_flashcard_american_ipa` thêm `vocabulary_cards.ipa_us`, backfill từ note lồng nhau; sync tiếp tục cập nhật theo note. Không sửa note/revision/Yjs, locale nguồn, identity, memory hay lịch FSRS.
+
+### Buổi mới từ bảng từ vựng (28/10)
+
+Hộp Buổi học mới đặt Bắt đầu từ trên tiêu đề, chỉ có Trang trống và Từ vựng (mặc định). Từ vựng gợi ý tên `Từ vựng · DD/MM — 20 từ` theo ngày hiện tại trên thiết bị, không theo ngày học; vẫn sửa được. Trang trống xóa gợi ý chưa sửa, giữ tên tùy chỉnh. Tạo từ vựng khởi tạo đúng một bảng rỗng và đoạn trống phía sau, không chèn heading Ghi chú. Không tạo sẵn 20 hàng; “20 từ” là tiêu đề gợi ý. Bỏ lựa chọn sao chép buổi cũ khỏi hộp nên không truy vấn buổi nguồn. API vẫn nhận lesson_template/structure cho client cũ; không đổi note hoặc buổi đã tồn tại.

@@ -66,6 +66,9 @@ pub fn from_nodes(content: Vec<Value>) -> Value {
 pub fn empty() -> Value {
     from_nodes(vec![paragraph()])
 }
+pub fn vocabulary_template() -> Value {
+    from_nodes(vec![vocabulary("en-GB"), paragraph()])
+}
 pub fn lesson_template() -> Value {
     from_nodes(vec![
         heading("Ghi chú"),
