@@ -242,7 +242,7 @@ async fn history_paginates_by_review_time_respects_dst_and_hides_other_users_and
 }
 
 #[tokio::test]
-async fn legacy_snapshot_fallbacks_match_reveal_and_grade_use_uk_and_batch_grouped_meanings() {
+async fn legacy_snapshot_fallbacks_match_reveal_and_grade_use_us_and_batch_grouped_meanings() {
     let (app, queries) = LearningApp::spawn_with_queries(false).await;
     let session = lesson(&app, &app.owner_token).await;
     let mut entries = vec![
@@ -250,8 +250,8 @@ async fn legacy_snapshot_fallbacks_match_reveal_and_grade_use_uk_and_batch_group
         entry("teacher", "người dạy học", &["Jobs"]),
     ];
     for entry in &mut entries {
-        entry["attrs"]["ipaUK"] = json!("/UK word/");
-        entry["content"][0]["content"][0]["attrs"]["ipaUK"] = json!("/UK example/");
+        entry["attrs"]["ipaUS"] = json!("/US word/");
+        entry["content"][0]["content"][0]["attrs"]["ipaUS"] = json!("/US example/");
     }
     save(&app, session, &doc(entries), 0).await;
     let id = start(&app, &app.owner_token, "teacher").await;
@@ -268,9 +268,9 @@ async fn legacy_snapshot_fallbacks_match_reveal_and_grade_use_uk_and_batch_group
         .unwrap()
         .unwrap();
     let expected = model.snapshot.clone().unwrap();
-    assert_eq!(expected["locale"], "en-GB");
-    assert_eq!(expected["ipa"], "/UK word/");
-    assert_eq!(expected["examples"][0]["ipa"], "/UK example/");
+    assert_eq!(expected["locale"], "en-US");
+    assert_eq!(expected["ipa"], "/US word/");
+    assert_eq!(expected["examples"][0]["ipa"], "/US example/");
     assert!(expected["meaning"].as_str().unwrap().contains("giáo viên"));
     assert!(expected["meaning"]
         .as_str()

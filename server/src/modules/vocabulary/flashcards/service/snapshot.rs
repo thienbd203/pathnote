@@ -7,10 +7,10 @@ pub(super) fn snapshot(card: &vocabulary_cards::Model, meanings: String) -> Snap
     Snapshot {
         word: card.word.clone(),
         meaning: meanings,
-        ipa: pronunciation::ipa(card),
-        locale: pronunciation::DEFAULT_LOCALE.into(),
+        ipa: pronunciation::flashcard_ipa(card),
+        locale: pronunciation::FLASHCARD_LOCALE.into(),
         part_of_speech: card.part_of_speech.clone(),
         topics: card.topics.clone(),
-        examples: pronunciation::examples(card),
+        examples: pronunciation::flashcard_examples(card),
     }
 }

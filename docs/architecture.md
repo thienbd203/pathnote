@@ -262,3 +262,5 @@ Các document schema 1–3 vẫn đọc được; client hiện tại lưu bằn
 | 26/10 C3.2 | Flashcard run/next/history và vocabulary review | JSONB response truyền thẳng Value; settings thiếu field âm thầm dùng mặc định | DTO có kiểu, JSON hợp lệ giữ shape. Config đã lưu sai/thiếu field hoặc retention ngoài miền trả 500 và không tạo ticket, cần sửa dữ liệu thay vì đổi chiều ôn ngầm. |
 
 | 26/10 C3.7 | `GET /sessions/{id}/collaboration`, `PUT /sessions/{id}/note` | 400 khi note đã dùng realtime hoặc bridge bị tắt | 409 Conflict với message cũ, không có data revision mới; client giữ nháp và tải lại/khôi phục realtime, không coi đây là bản note cho ghi đè. Các lỗi schema/revision/permission khác giữ nguyên. |
+
+| 28/10 IPA flashcard US | Flashcard next/reveal và fallback thiếu snapshot | Mặc định UK | Chuyển riêng flashcard sang en-US, lấy ipaUS từ projection; legacy chỉ dùng khi source en-US. Giọng mặt trước khớp đáp án. Snapshot lịch sử bất biến, thư viện/ôn gõ giữ UK; JSON shape/identity/FSRS không đổi. Migration thêm ipa_us/backfill từ note. |

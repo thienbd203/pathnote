@@ -28,6 +28,7 @@ async fn british_backfill_preserves_source_note_and_existing_memory() {
     word["attrs"]["ipaUS"] = json!("/US word/");
     word["content"][0]["content"][0]["attrs"]["ipa"] = json!("/US sentence/");
     word["content"][0]["content"][0]["attrs"]["ipaUK"] = json!("/UK sentence/");
+    word["content"][0]["content"][0]["attrs"]["ipaUS"] = json!("/US sentence/");
     let content = doc(vec![word]);
     save(&app, session, &content, 0).await;
     let note_before = notes::Entity::find_by_id(session)
@@ -43,7 +44,7 @@ async fn british_backfill_preserves_source_note_and_existing_memory() {
         .await
         .assert_status_ok();
     let front = next(&app).await;
-    assert_eq!(front["card"]["audio"]["locale"], "en-GB");
+    assert_eq!(front["card"]["audio"]["locale"], "en-US");
     let ticket = front["card"]["id"].as_str().unwrap();
     let response = app
         .api
@@ -52,9 +53,9 @@ async fn british_backfill_preserves_source_note_and_existing_memory() {
         .await;
     response.assert_status_ok();
     let back = response.json::<Value>()["data"]["back"].clone();
-    assert_eq!(back["locale"], "en-GB");
-    assert_eq!(back["ipa"], "/UK word/");
-    assert_eq!(back["examples"][0]["ipa"], "/UK sentence/");
+    assert_eq!(back["locale"], "en-US");
+    assert_eq!(back["ipa"], "/US word/");
+    assert_eq!(back["examples"][0]["ipa"], "/US sentence/");
     app.api
         .post(&format!("/api/v1/flashcards/{ticket}/grade"))
         .add_header("authorization", auth.clone())
@@ -66,6 +67,19 @@ async fn british_backfill_preserves_source_note_and_existing_memory() {
         .await
         .unwrap()
         .unwrap();
+    let american = Migrator::migrations()
+        .into_iter()
+        .find(|m| m.name() == "m20261028_010001_flashcard_american_ipa")
+        .unwrap();
+    let manager = migration::SchemaManager::new(app.db.as_ref());
+    american.down(&manager).await.unwrap();
+    american.up(&manager).await.unwrap();
+    let rebuilt = vocabulary_cards::Entity::find()
+        .one(app.db.as_ref())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(rebuilt.ipa_us, "/US word/");
     // Emulate the previous projection, then exercise the production up/down/up migration.
     let migration = Migrator::migrations()
         .into_iter()
@@ -157,8 +171,8 @@ async fn us_only_ipa_is_not_presented_as_uk_and_new_review_uses_british_voice() 
         .add_header("authorization", auth.clone())
         .await;
     response.assert_status_ok();
-    assert_eq!(response.json::<Value>()["data"]["back"]["ipa"], "");
-    assert_eq!(response.json::<Value>()["data"]["back"]["locale"], "en-GB");
+    assert_eq!(response.json::<Value>()["data"]["back"]["ipa"], "/tiːtʃə/");
+    assert_eq!(response.json::<Value>()["data"]["back"]["locale"], "en-US");
     let response = app
         .api
         .post("/api/v1/vocabulary-reviews")

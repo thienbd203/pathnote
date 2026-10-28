@@ -26,7 +26,7 @@ async fn grouping_migration_preserves_latest_schedule_and_reconstructs_its_origi
     // Current handlers need the later projection column while this test seeds the old grouping schema.
     app.db
         .execute_unprepared(
-            "ALTER TABLE vocabulary_cards ADD COLUMN ipa_uk TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE vocabulary_cards ADD COLUMN ipa_uk TEXT NOT NULL DEFAULT '', ADD COLUMN ipa_us TEXT NOT NULL DEFAULT ''",
         )
         .await
         .unwrap();
@@ -101,7 +101,7 @@ async fn grouping_migration_preserves_latest_schedule_and_reconstructs_its_origi
         .unwrap()
         .unwrap();
     app.db
-        .execute_unprepared("ALTER TABLE vocabulary_cards DROP COLUMN ipa_uk")
+        .execute_unprepared("ALTER TABLE vocabulary_cards DROP COLUMN ipa_uk, DROP COLUMN ipa_us")
         .await
         .unwrap();
     Migrator::up(app.db.as_ref(), None).await.unwrap();
@@ -486,7 +486,7 @@ async fn edits_and_revoked_access_cannot_reveal_or_grade_old_cards() {
     let (id, mut content) = seed(&app).await;
     let first = next(&app, &app.owner_token, json!({})).await;
     let t = first["card"]["id"].as_str().unwrap();
-    content["content"][0]["content"][0]["content"][0]["attrs"]["ipaUK"] = json!("/new/");
+    content["content"][0]["content"][0]["content"][0]["attrs"]["ipaUS"] = json!("/new/");
     save(&app, id, &content, 1).await;
     assert_eq!(
         reveal(&app, &app.owner_token, t).await["back"]["ipa"],

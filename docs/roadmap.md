@@ -1,6 +1,6 @@
 # Việc còn mở
 
-Cập nhật 18/10/2026. Đây là nơi duy nhất ghi việc chưa làm của toàn project.
+Cập nhật 27/10/2026. Đây là nơi duy nhất ghi việc chưa làm của toàn project.
 
 Khi bắt đầu một mục, ghi kế hoạch ngắn ngay dưới mục đó; khi xong, cập nhật `docs/features.md` (hoặc `docs/architecture.md`) và xóa mục khỏi đây.
 
