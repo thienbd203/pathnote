@@ -562,3 +562,5 @@ Flashcard mới và fallback thiếu snapshot dùng `en-US`: ưu tiên `ipaUS` c
 ### Buổi mới từ bảng từ vựng (28/10)
 
 Hộp Buổi học mới đặt Bắt đầu từ trên tiêu đề, chỉ có Trang trống và Từ vựng (mặc định). Từ vựng gợi ý tên `Từ vựng · DD/MM — 20 từ` theo ngày hiện tại trên thiết bị, không theo ngày học; vẫn sửa được. Trang trống xóa gợi ý chưa sửa, giữ tên tùy chỉnh. Tạo từ vựng khởi tạo đúng một bảng rỗng và đoạn trống phía sau, không chèn heading Ghi chú. Không tạo sẵn 20 hàng; “20 từ” là tiêu đề gợi ý. Bỏ lựa chọn sao chép buổi cũ khỏi hộp nên không truy vấn buổi nguồn. API vẫn nhận lesson_template/structure cho client cũ; không đổi note hoặc buổi đã tồn tại.
+
+Cài đặt Học tập (28/10): kiểm tra dirty bằng VeeValidate trước khi gửi; nút Lưu chỉ bật khi có thay đổi. Trả lại giá trị cũ thì tắt; lưu thành công reset baseline, lỗi lưu giữ draft để thử lại. Dùng chung cho trang Cài đặt và hộp Giờ học mặc định; API không đổi.
