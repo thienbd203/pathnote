@@ -38,25 +38,6 @@ pub fn ipa(card: &vocabulary_cards::Model) -> String {
     british_ipa(&card.ipa_uk, &card.ipa, &card.locale).into()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn american_ipa_prefers_us_and_does_not_relabel_uk() {
-        assert_eq!(american_ipa(" /US/ ", "/UK/", "en-GB"), "/US/");
-        assert_eq!(american_ipa("", " /legacy US/ ", "en-US"), "/legacy US/");
-        assert_eq!(american_ipa(" ", "/UK/", "en-GB"), "");
-    }
-
-    #[test]
-    fn prefer_uk_and_never_relabel_legacy_us_as_british() {
-        assert_eq!(british_ipa(" /UK/ ", "/US/", "en-US"), "/UK/");
-        assert_eq!(british_ipa("", " /legacy UK/ ", "en-GB"), "/legacy UK/");
-        assert_eq!(british_ipa(" ", "/US/", "en-US"), "");
-    }
-}
-
 /// Flashcards use American pronunciation without changing source identities or other reviews.
 pub const FLASHCARD_LOCALE: &str = "en-US";
 
@@ -89,4 +70,23 @@ pub fn flashcard_examples(card: &vocabulary_cards::Model) -> Value {
         }
     }
     examples
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn american_ipa_prefers_us_and_does_not_relabel_uk() {
+        assert_eq!(american_ipa(" /US/ ", "/UK/", "en-GB"), "/US/");
+        assert_eq!(american_ipa("", " /legacy US/ ", "en-US"), "/legacy US/");
+        assert_eq!(american_ipa(" ", "/UK/", "en-GB"), "");
+    }
+
+    #[test]
+    fn prefer_uk_and_never_relabel_legacy_us_as_british() {
+        assert_eq!(british_ipa(" /UK/ ", "/US/", "en-US"), "/UK/");
+        assert_eq!(british_ipa("", " /legacy UK/ ", "en-GB"), "/legacy UK/");
+        assert_eq!(british_ipa(" ", "/US/", "en-US"), "");
+    }
 }
