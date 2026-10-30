@@ -87,7 +87,7 @@ async fn notes_typed_nodes_reject_wrong_attributes_shapes_links_and_limits() {
         json!({"type":"image","attrs":{"mediaId":1}}),
         json!({"type":"exercise","attrs":{"exerciseId":1}}),
         json!({"type":"table","content":[{"type":"tableRow","content":[{"type":"tableCell","attrs":{"rowspan":2},"content":[{"type":"paragraph"}]}]}]}),
-        json!({"type":"paragraph","content":[{"type":"text","text":"x".repeat(262144)}]}),
+        json!({"type":"paragraph","content":[{"type":"text","text":"x".repeat(2 * 1024 * 1024)}]}),
     ];
     for node in cases {
         app.api
@@ -528,5 +528,46 @@ async fn persisted_realtime_note_with_disabled_bridge_returns_conflict_and_prese
             .unwrap(),
         saved
     );
+    app.cleanup().await;
+}
+#[tokio::test]
+async fn notes_accept_two_mib_reject_overflow_and_preserve_saved_content() {
+    let app = LearningApp::spawn().await;
+    let id = lesson(&app).await;
+    let path = format!("/api/v1/sessions/{id}/note");
+    let auth = token(&app.owner_token);
+    let limit = 2 * 1024 * 1024;
+    let mut content = json!({"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":""}]}]});
+    let overhead = serde_json::to_vec(&content).unwrap().len();
+    content["content"][0]["content"][0]["text"] = json!("x".repeat(limit - overhead));
+    assert_eq!(serde_json::to_vec(&content).unwrap().len(), limit);
+    let response = app
+        .api
+        .put(&path)
+        .add_header("authorization", &auth)
+        .json(&save(content.clone(), 0))
+        .await;
+    response.assert_status_ok();
+    assert_eq!(response.json::<Value>()["data"]["content"], content);
+    let mut overflow = content.clone();
+    overflow["content"][0]["content"][0]["text"] = json!("x".repeat(limit - overhead + 1));
+    app.api
+        .put(&path)
+        .add_header("authorization", &auth)
+        .json(&save(overflow, 1))
+        .await
+        .assert_status_unprocessable_entity();
+    let response = app.api.get(&path).add_header("authorization", &auth).await;
+    response.assert_status_ok();
+    assert_eq!(response.json::<Value>()["data"]["content"], content);
+    assert_eq!(response.json::<Value>()["data"]["revision"], 1);
+    let mut huge = content.clone();
+    huge["content"][0]["content"][0]["text"] = json!("x".repeat(limit + 65536));
+    app.api
+        .put(&path)
+        .add_header("authorization", &auth)
+        .json(&save(huge, 1))
+        .await
+        .assert_status_unprocessable_entity();
     app.cleanup().await;
 }

@@ -16,7 +16,11 @@ pub fn routes(state: AppState) -> Router<AppState> {
         .route("/sessions/{id}/collaboration", get(handlers::collaboration))
         .route(
             "/sessions/{id}/note",
-            get(handlers::show).put(handlers::save),
+            get(handlers::show)
+                .put(handlers::save)
+                .layer(axum::extract::DefaultBodyLimit::max(
+                    limits::NOTE_BODY_BYTES,
+                )),
         )
         .route(
             "/sessions/{id}/collaborators",

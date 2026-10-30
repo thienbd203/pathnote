@@ -325,8 +325,11 @@ async fn bridge_reads_note_once_per_request_and_preserves_large_state_on_retry_a
     let (app, queries) = LearningApp::spawn_with_queries(true).await;
     let id = lesson(&app).await;
     let path = format!("/api/v1/internal/notes/{id}");
-    let state = STANDARD.encode(vec![42u8; 2 * 1024 * 1024]);
-    let payload = json!({"content":doc(),"schema_version":4,"state":state,"base_revision":0});
+    let state = STANDARD.encode(vec![42u8; 8 * 1024 * 1024]);
+    let mut content = doc();
+    content["content"][0]["content"][0]["text"] = json!("x".repeat(2 * 1024 * 1024 - 1024));
+    let payload =
+        json!({"content":content.clone(),"schema_version":4,"state":state,"base_revision":0});
     let note_reads = || {
         queries
             .lock()
@@ -356,7 +359,7 @@ async fn bridge_reads_note_once_per_request_and_preserves_large_state_on_retry_a
     fetched.assert_status_ok();
     assert_eq!(note_reads(), 1);
     assert_eq!(fetched.json::<Value>()["data"]["state"], state);
-    assert_eq!(fetched.json::<Value>()["data"]["content"], doc());
+    assert_eq!(fetched.json::<Value>()["data"]["content"], content);
     let mut stale = payload.clone();
     stale["content"]["content"][0]["content"][0]["text"] = json!("Must not overwrite");
     queries.lock().unwrap().clear();
@@ -374,7 +377,7 @@ async fn bridge_reads_note_once_per_request_and_preserves_large_state_on_retry_a
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(saved.content, doc());
+    assert_eq!(saved.content, content);
     assert_eq!(saved.revision, 1);
     assert_eq!(STANDARD.encode(saved.yjs_state.unwrap()), state);
     app.cleanup().await;

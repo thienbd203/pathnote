@@ -43,7 +43,7 @@ Code: `server/src/modules/{places,courses,sessions,bulk.rs}`; tìm ngày ở `se
 ### Hành vi
 
 - Mỗi session một note: JSON Tiptap lưu nguyên vào JSONB (không serialize lại struct để tránh thêm field/null). Không cam kết giữ thứ tự key.
-- Validate bằng kiểu Serde (`deny_unknown_fields`, `#[serde(tag="type")]`) + luật riêng: heading 1..3, ≤256 KiB, ≤10.000 node, sâu ≤32, bảng không chồng rowspan/colspan, link an toàn.
+- Validate bằng kiểu Serde (`deny_unknown_fields`, `#[serde(tag="type")]`) + luật riêng: heading 1..3, ≤2 MiB, ≤10.000 node, sâu ≤32, bảng không chồng rowspan/colspan, link an toàn.
 - Hỗ trợ: text, heading, list/checklist, blockquote, code, bảng, marks, vocabulary, pronunciation, image/file (mediaId), exercise (exerciseId), heading `aiImportId`.
 - `schema_version` nhận 1..3; note mới là 3; không cho hạ phiên bản đã tải.
 - Note chưa lưu: GET trả paragraph trống, schema 3, revision 0, `saved_at=null`.
@@ -135,7 +135,7 @@ Kiểm thử: fixture tổng hợp MP3/M4A/MP4 bằng FFmpeg; API/PostgreSQL ki�
 - `notes.yjs_state` (BYTEA, nullable). Lần đầu Hocuspocus dựng Yjs từ JSON đúng một lần; sau đó luôn nạp binary đã lưu (dựng lại từ JSON sẽ mất lịch sử/nhân đôi nội dung).
 - PUT internal: validate Tiptap, decode base64, chuẩn bị từ vựng ngoài khóa; trong khóa cha kiểm tra quyền, revision/schema, reference. JSONB và binary lưu cùng transaction. Retry cùng nội dung là idempotent. Rust tin binary của bridge, không tự giải mã Yjs.
 - Khi bật realtime hoặc note đã có binary: HTTP autosave bị chặn, không fallback âm thầm khi mất kết nối; frontend giữ nội dung và cảnh báo khi rời trang.
-- Endpoint internal yêu cầu header `x-collaboration-secret` (so sánh constant-time); secret <32 ký tự hoặc thiếu `COLLABORATION_URL` → bridge tắt (403). Body tối đa 3 MiB.
+- Endpoint internal yêu cầu header `x-collaboration-secret` (so sánh constant-time); secret <32 ký tự hoặc thiếu `COLLABORATION_URL` → bridge tắt (403). Body tối đa 14 MiB (JSON bài ≤2 MiB, Yjs binary ≤8 MiB trước base64).
 - Chỉ chạy một Hocuspocus instance (chưa có Redis coordination).
 
 ### Cấu hình
@@ -573,4 +573,8 @@ Flashcard Space (30/10): Space lật ở mặt trước, Space ở mặt đáp �
 
 Frontend có chế độ Chi tiết / Gọn (Từ, Từ loại, Nghĩa) lưu riêng theo tài khoản trên trình duyệt, dùng chung các bảng và giữ qua tải lại/chuyển bài. Chế độ chỉ ảnh hưởng hiển thị, giữ toàn bộ IPA UK/US, chủ đề, ví dụ và không thay đổi cách đồng bộ flashcard. Các ô gọn vẫn chỉnh sửa đúng node gốc.
 
-Hộp nhập từ vựng nhận một/nhiều file JSON hoặc kéo thả; đọc local, validate bằng parser v1 cũ, xem trước rồi xác nhận theo luồng merge hiện hành. Giới hạn 256 KB cho tổng batch và JSON chuẩn hóa, vẫn kiểm giới hạn toàn note trước nhập. Lỗi bất kỳ file nào chặn cả batch; khác locale nhập riêng. Không đổi contract API, schema note, migration hoặc dữ liệu production.
+Hộp nhập từ vựng nhận một/nhiều file JSON hoặc kéo thả; đọc local, validate bằng parser v1 cũ, xem trước rồi xác nhận theo luồng merge hiện hành. Giới hạn 2 MB cho tổng batch và JSON chuẩn hóa, vẫn kiểm giới hạn toàn note trước nhập. Lỗi bất kỳ file nào chặn cả batch; khác locale nhập riêng. Không đổi contract API, schema note, migration hoặc dữ liệu production.
+
+Giới hạn bài và nhập từ vựng (30/10): nâng từ 256 KiB lên 2 MiB UTF-8 cho JSON nội dung và JSON nhập từ vựng/tổng file. PUT note có body budget 2 MiB + 64 KiB để chứa envelope. Realtime nhận update/state Yjs tối đa 8 MiB, internal bridge body 14 MiB chứa base64 + JSON. Vẫn giữ 10.000 node, độ sâu 32 và giới hạn field; không migration, không sửa note cũ. Các endpoint import IPA/bài tập/AI vẫn giữ giới hạn request riêng 256 KiB; kiểm tổng note sau bổ sung theo 2 MiB.
+
+UI nhập JSON có hai tab Chọn file / Dán JSON, mặc định file; drop zone thống nhất kiểu khung ảnh, giữ chọn nhiều/kéo thả. Tab dán có mẫu và textarea; chuyển tab giữ raw. Xem trước/xác nhận, giữ draft khi lưu lỗi và giới hạn 2 MiB dùng chung như trên.

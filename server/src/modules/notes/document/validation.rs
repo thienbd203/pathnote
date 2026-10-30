@@ -345,8 +345,8 @@ pub fn validate(content: &serde_json::Value, version: i32) -> Result<Vec<Referen
     }
     let raw = serde_json::to_vec(content)
         .map_err(|_| AppError::validation("content", "JSON không hợp lệ."))?;
-    if raw.len() > 262144 {
-        return Err(AppError::validation("content", "Ghi chép tối đa 256 KiB."));
+    if raw.len() > super::super::limits::DOCUMENT_BYTES {
+        return Err(AppError::validation("content", "Ghi chép tối đa 2 MiB."));
     }
     let doc: Document = serde_json::from_slice(&raw).map_err(|_| {
         AppError::validation(
