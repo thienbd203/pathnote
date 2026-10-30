@@ -566,3 +566,5 @@ Hộp Buổi học mới đặt Bắt đầu từ trên tiêu đề, chỉ có T
 Cài đặt Học tập (28/10): kiểm tra dirty bằng VeeValidate trước khi gửi; nút Lưu chỉ bật khi có thay đổi. Trả lại giá trị cũ thì tắt; lưu thành công reset baseline, lỗi lưu giữ draft để thử lại. Dùng chung cho trang Cài đặt và hộp Giờ học mặc định; API không đổi.
 
 Rà form dirty (30/10): frontend chặn lưu không thay đổi cho cấu hình flashcard, sửa nơi học/khóa học/buổi học, đổi tên file, giọng đọc và sửa đề bài; sửa đề vẫn xem trước được. Popover link kiểm vùng mark đang phủ toàn bộ selection để phân biệt giữ link cũ và áp dụng URL cũ cho văn bản mới. Form tạo mới/import/mời chia sẻ, thao tác xóa/bỏ link và autosave editor giữ hành vi hiện có. Kiểm tra trực tiếp dữ liệu tạm, giữ draft khi lưu lỗi; không đổi API hay migration.
+
+Flashcard Space (30/10): Space lật ở mặt trước, Space ở mặt đáp án khi sẵn sàng chấm gửi rating 4 (Dễ) qua API grade hiện có. Giữ nguyên chặn phím lặp, busy/animation và input/control/dialog; không đổi FSRS hay API. Kiểm tra trực tiếp với dữ liệu local tạm gồm hai lần Space, giữ phím, bấm nhanh khi reveal đang tải và Space trên button đang focus.
