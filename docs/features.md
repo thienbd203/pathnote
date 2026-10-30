@@ -580,3 +580,5 @@ Giới hạn bài và nhập từ vựng (30/10): nâng từ 256 KiB lên 2 MiB 
 UI nhập JSON có hai tab Chọn file / Dán JSON, mặc định file; drop zone thống nhất kiểu khung ảnh, giữ chọn nhiều/kéo thả. Tab dán có mẫu và textarea; chuyển tab giữ raw. Xem trước/xác nhận, giữ draft khi lưu lỗi và giới hạn 2 MiB dùng chung như trên.
 
 Bảng gọn: thay select Chi tiết/Gọn bằng toggle Gọn cùng style IPA câu, giữ preference hiện có. Trong ô Từ hiển thị IPA Anh Mỹ cạnh từ; màn hình hẹp tự xuống dòng. Chỉ dùng ipaUS hoặc ipa legacy khi locale US; thiếu US hiện —, không gắn nhãn nhầm IPA UK. Không thay dữ liệu note, schema/API hoặc flashcard.
+
+Bảng từ vựng gọn có nút nghe/dừng giọng Mỹ cạnh IPA US. Dùng giọng cá nhân US trên thiết bị và cơ chế đọc chung; từ trống bị khóa, thiếu IPA vẫn đọc theo từ. Không thay API, dữ liệu note, projection hay lịch ôn.
