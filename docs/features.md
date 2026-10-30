@@ -568,3 +568,9 @@ Cài đặt Học tập (28/10): kiểm tra dirty bằng VeeValidate trước kh
 Rà form dirty (30/10): frontend chặn lưu không thay đổi cho cấu hình flashcard, sửa nơi học/khóa học/buổi học, đổi tên file, giọng đọc và sửa đề bài; sửa đề vẫn xem trước được. Popover link kiểm vùng mark đang phủ toàn bộ selection để phân biệt giữ link cũ và áp dụng URL cũ cho văn bản mới. Form tạo mới/import/mời chia sẻ, thao tác xóa/bỏ link và autosave editor giữ hành vi hiện có. Kiểm tra trực tiếp dữ liệu tạm, giữ draft khi lưu lỗi; không đổi API hay migration.
 
 Flashcard Space (30/10): Space lật ở mặt trước, Space ở mặt đáp án khi sẵn sàng chấm gửi rating 4 (Dễ) qua API grade hiện có. Giữ nguyên chặn phím lặp, busy/animation và input/control/dialog; không đổi FSRS hay API. Kiểm tra trực tiếp với dữ liệu local tạm gồm hai lần Space, giữ phím, bấm nhanh khi reveal đang tải và Space trên button đang focus.
+
+### Bảng từ vựng gọn và nhập file JSON (30/10/2026)
+
+Frontend có chế độ Chi tiết / Gọn (Từ, Từ loại, Nghĩa) lưu riêng theo tài khoản trên trình duyệt, dùng chung các bảng và giữ qua tải lại/chuyển bài. Chế độ chỉ ảnh hưởng hiển thị, giữ toàn bộ IPA UK/US, chủ đề, ví dụ và không thay đổi cách đồng bộ flashcard. Các ô gọn vẫn chỉnh sửa đúng node gốc.
+
+Hộp nhập từ vựng nhận một/nhiều file JSON hoặc kéo thả; đọc local, validate bằng parser v1 cũ, xem trước rồi xác nhận theo luồng merge hiện hành. Giới hạn 256 KB cho tổng batch và JSON chuẩn hóa, vẫn kiểm giới hạn toàn note trước nhập. Lỗi bất kỳ file nào chặn cả batch; khác locale nhập riêng. Không đổi contract API, schema note, migration hoặc dữ liệu production.
