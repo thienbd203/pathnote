@@ -578,3 +578,5 @@ Hộp nhập từ vựng nhận một/nhiều file JSON hoặc kéo thả; đọ
 Giới hạn bài và nhập từ vựng (30/10): nâng từ 256 KiB lên 2 MiB UTF-8 cho JSON nội dung và JSON nhập từ vựng/tổng file. PUT note có body budget 2 MiB + 64 KiB để chứa envelope. Realtime nhận update/state Yjs tối đa 8 MiB, internal bridge body 14 MiB chứa base64 + JSON. Vẫn giữ 10.000 node, độ sâu 32 và giới hạn field; không migration, không sửa note cũ. Các endpoint import IPA/bài tập/AI vẫn giữ giới hạn request riêng 256 KiB; kiểm tổng note sau bổ sung theo 2 MiB.
 
 UI nhập JSON có hai tab Chọn file / Dán JSON, mặc định file; drop zone thống nhất kiểu khung ảnh, giữ chọn nhiều/kéo thả. Tab dán có mẫu và textarea; chuyển tab giữ raw. Xem trước/xác nhận, giữ draft khi lưu lỗi và giới hạn 2 MiB dùng chung như trên.
+
+Bảng gọn: thay select Chi tiết/Gọn bằng toggle Gọn cùng style IPA câu, giữ preference hiện có. Trong ô Từ hiển thị IPA Anh Mỹ cạnh từ; màn hình hẹp tự xuống dòng. Chỉ dùng ipaUS hoặc ipa legacy khi locale US; thiếu US hiện —, không gắn nhãn nhầm IPA UK. Không thay dữ liệu note, schema/API hoặc flashcard.
