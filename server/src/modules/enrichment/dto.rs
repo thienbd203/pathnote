@@ -20,14 +20,28 @@ pub struct Text {
 #[derive(Serialize)]
 pub struct IpaResource {
     pub ipa: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_ipa: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub normalization: Option<String>,
     pub locale: String,
     pub engine: &'static str,
 }
 #[derive(Serialize, Clone)]
 #[serde(untagged)]
 pub enum BatchItemResource {
-    Success { text: String, ipa: String },
-    Error { text: String, error: String },
+    Success {
+        text: String,
+        ipa: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        raw_ipa: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        normalization: Option<String>,
+    },
+    Error {
+        text: String,
+        error: String,
+    },
 }
 #[derive(Serialize)]
 pub struct BatchResource {
@@ -44,6 +58,8 @@ pub struct TranslationResource {
 }
 #[derive(Deserialize)]
 pub struct UpstreamIpa {
+    pub raw_ipa: Option<String>,
+    pub normalization: Option<String>,
     pub locale: String,
     pub ipa: String,
 }
@@ -54,6 +70,8 @@ pub struct UpstreamBatch {
 }
 #[derive(Deserialize)]
 pub struct UpstreamItem {
+    pub raw_ipa: Option<String>,
+    pub normalization: Option<String>,
     pub text: String,
     pub ipa: Option<String>,
     pub error: Option<String>,

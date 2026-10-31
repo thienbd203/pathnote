@@ -190,3 +190,98 @@ async fn batch_size_limit_includes_the_json_envelope() {
     assert!(response.json::<Value>()["errors"]["texts"].is_array());
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn normalized_ipa_preserves_raw_metadata_and_never_rewrites_manual_note_ipa() {
+    let mock = MockServer::start().await;
+    let app = LearningApp::spawn_services(&mock.uri()).await;
+    let id = lesson(&app, &app.owner_token).await;
+    let note_path = format!("/api/v1/sessions/{id}/note");
+    let token = auth(&app.owner_token);
+    let mut entry = super::vocabulary::entry("dare", "dám", &[]);
+    entry["attrs"]["ipa"] = json!("/manual legacy/");
+    entry["attrs"]["ipaUK"] = json!("/manual UK/");
+    entry["attrs"]["ipaUS"] = json!("/manual US/");
+    entry["content"][0]["content"][0]["attrs"]["ipaUS"] = json!("/manual example US/");
+    let content = super::vocabulary::doc(vec![entry]);
+    app.api
+        .put(&note_path)
+        .add_header("authorization", &token)
+        .json(&json!({"content":content,"base_revision":0,"schema_version":4}))
+        .await
+        .assert_status_ok();
+    let before = app
+        .api
+        .get(&note_path)
+        .add_header("authorization", &token)
+        .await
+        .json::<Value>();
+    let generated =
+        json!({"ipa":"/der/","raw_ipa":"/dˈɛɹ/","normalization":"learner-en-v1","locale":"en-US"});
+    Mock::given(path("/ipa"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(generated))
+        .mount(&mock)
+        .await;
+    let route = format!("/api/v1/sessions/{id}/pronunciation");
+    let response = app
+        .api
+        .post(&route)
+        .add_header("authorization", &token)
+        .json(&json!({"text":"dare","locale":"en-US"}))
+        .await;
+    response.assert_status_ok();
+    let data = response.json::<Value>();
+    assert_eq!(data["data"]["ipa"], "/der/");
+    assert_eq!(data["data"]["raw_ipa"], "/dˈɛɹ/");
+    assert_eq!(data["data"]["normalization"], "learner-en-v1");
+    Mock::given(path("/ipa/batch")).respond_with(ResponseTemplate::new(200).set_body_json(json!({"locale":"en-US","results":[{"text":"dare","ipa":"/der/","raw_ipa":"/dˈɛɹ/","normalization":"learner-en-v1"}]}))).mount(&mock).await;
+    let response = app
+        .api
+        .post(&format!("{route}/batch"))
+        .add_header("authorization", &token)
+        .json(&json!({"texts":["dare","dare"],"locale":"en-US"}))
+        .await;
+    response.assert_status_ok();
+    let rows = response.json::<Value>()["data"]["results"].clone();
+    assert_eq!(rows[0]["raw_ipa"], "/dˈɛɹ/");
+    assert_eq!(rows[0]["normalization"], "learner-en-v1");
+    assert_eq!(rows[0], rows[1]);
+    let after = app
+        .api
+        .get(&note_path)
+        .add_header("authorization", &token)
+        .await
+        .json::<Value>();
+    assert_eq!(before, after);
+    app.cleanup().await;
+}
+
+#[tokio::test]
+async fn batch_keeps_raw_ipa_for_maximum_batch_without_truncating_response() {
+    let mock = MockServer::start().await;
+    let app = LearningApp::spawn_services(&mock.uri()).await;
+    let id = lesson(&app, &app.owner_token).await;
+    let texts: Vec<String> = (0..50).map(|i| format!("word{i}")).collect();
+    let ipa = format!("/{} /", "ʃ".repeat(5997));
+    let rows: Vec<Value> = texts
+        .iter()
+        .map(|text| json!({"text":text,"ipa":ipa,"raw_ipa":ipa,"normalization":"learner-en-v1"}))
+        .collect();
+    Mock::given(path("/ipa/batch"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({"locale":"en-US","results":rows})),
+        )
+        .mount(&mock)
+        .await;
+    let response = app
+        .api
+        .post(&format!("/api/v1/sessions/{id}/pronunciation/batch"))
+        .add_header("authorization", auth(&app.owner_token))
+        .json(&json!({"texts":texts,"locale":"en-US"}))
+        .await;
+    response.assert_status_ok();
+    let rows = response.json::<Value>()["data"]["results"].clone();
+    assert_eq!(rows.as_array().unwrap().len(), 50);
+    assert_eq!(rows[49]["raw_ipa"], ipa);
+    app.cleanup().await;
+}

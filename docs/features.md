@@ -584,3 +584,7 @@ Bảng gọn: thay select Chi tiết/Gọn bằng toggle Gọn cùng style IPA c
 Bảng từ vựng gọn có nút nghe/dừng giọng Mỹ cạnh IPA US. Dùng giọng cá nhân US trên thiết bị và cơ chế đọc chung; từ trống bị khóa, thiếu IPA vẫn đọc theo từ. Không thay API, dữ liệu note, projection hay lịch ôn.
 
 Cài đặt phát âm: frontend chặn ô chọn giọng dài tràn popover; nhãn chọn rút gọn và danh sách hiển thị tên đầy đủ xuống dòng. Không đổi cấu hình/locale giọng đọc hoặc API.
+
+Chuẩn hóa pronunciation (31/10): eSpeak giữ engine gốc, thêm lớp `learner-en-v1` cho US/UK (ɹ→r, ɛ→e, tie affricate, bỏ stress của headword đơn âm tiết được nhận diện). Không tự thêm độ dài/chia âm tiết, sửa nguyên âm hay chọn biến thể theo ngữ cảnh; không cam kết giống mọi mục Cambridge. API chuyển tiếp raw_ipa/normalization tùy chọn để đối chiếu, vẫn tương thích dịch vụ cũ. Chỉ kết quả tra mới thay đổi; không migration/backfill hoặc ghi đè IPA thủ công. Đã kiểm corpus 44 ca và API xác nhận content/revision/IPA nhập tay giữ nguyên.
+
+Menu bảng từ vựng chia nhóm IPA / Nhập dữ liệu & AI / Thao tác bảng. Frontend thêm Tạo lại toàn bộ IPA… qua API batch hiện có: xác nhận phạm vi UK/US cho từ và ví dụ, cảnh báo thay cả IPA thủ công. Điền IPA còn thiếu vẫn giữ mọi IPA có sẵn. Tạo lại chỉ thay khi request thành công và nội dung chưa bị sửa lúc chờ; lỗi giữ IPA cũ, retry tạo lại cần xác nhận. Không migration/API mới hay tự chạy cập nhật dữ liệu production.

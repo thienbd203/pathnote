@@ -51,14 +51,31 @@ impl LearningServices {
         if !response.status().is_success() {
             return Err(unavailable());
         }
+        // IPA responses retain both raw and normalized strings for up to 50 texts.
+        let response_limit = if matches!(path, "/ipa" | "/ipa/batch") {
+            4 * 1024 * 1024
+        } else {
+            512 * 1024
+        };
         let mut bytes = Vec::new();
         while let Some(chunk) = response.chunk().await.map_err(|_| unavailable())? {
-            if bytes.len() + chunk.len() > 512 * 1024 {
+            if bytes.len() + chunk.len() > response_limit {
                 return Err(unavailable());
             }
             bytes.extend_from_slice(&chunk);
         }
         serde_json::from_slice(&bytes).map_err(|_| unavailable())
+    }
+
+    fn validate_presentation(
+        raw_ipa: &Option<String>,
+        normalization: &Option<String>,
+    ) -> Result<(), AppError> {
+        match (raw_ipa, normalization) {
+            (None, None) => Ok(()), // Older pronunciation deployments remain compatible.
+            (Some(raw), Some(version)) if valid(raw) && version == "learner-en-v1" => Ok(()),
+            _ => Err(unavailable()),
+        }
     }
 
     pub async fn ipa(&self, text: &str, locale: &str) -> Result<IpaResource, AppError> {
@@ -76,8 +93,11 @@ impl LearningServices {
         if result.locale != locale || !valid(&result.ipa) {
             return Err(unavailable());
         }
+        Self::validate_presentation(&result.raw_ipa, &result.normalization)?;
         Ok(IpaResource {
             ipa: result.ipa,
+            raw_ipa: result.raw_ipa,
+            normalization: result.normalization,
             locale: locale.into(),
             engine: "espeak-ng",
         })
@@ -108,10 +128,13 @@ impl LearningServices {
             if row.text != *text {
                 return Err(unavailable());
             }
+            Self::validate_presentation(&row.raw_ipa, &row.normalization)?;
             let answer = match row.ipa {
                 Some(ipa) if valid(&ipa) => BatchItemResource::Success {
                     text: text.clone(),
                     ipa,
+                    raw_ipa: row.raw_ipa,
+                    normalization: row.normalization,
                 },
                 None if row.error.as_deref() == Some("generation_failed") => {
                     BatchItemResource::Error {
