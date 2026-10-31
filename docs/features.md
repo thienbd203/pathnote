@@ -582,3 +582,5 @@ UI nhập JSON có hai tab Chọn file / Dán JSON, mặc định file; drop zon
 Bảng gọn: thay select Chi tiết/Gọn bằng toggle Gọn cùng style IPA câu, giữ preference hiện có. Trong ô Từ hiển thị IPA Anh Mỹ cạnh từ; màn hình hẹp tự xuống dòng. Chỉ dùng ipaUS hoặc ipa legacy khi locale US; thiếu US hiện —, không gắn nhãn nhầm IPA UK. Không thay dữ liệu note, schema/API hoặc flashcard.
 
 Bảng từ vựng gọn có nút nghe/dừng giọng Mỹ cạnh IPA US. Dùng giọng cá nhân US trên thiết bị và cơ chế đọc chung; từ trống bị khóa, thiếu IPA vẫn đọc theo từ. Không thay API, dữ liệu note, projection hay lịch ôn.
+
+Cài đặt phát âm: frontend chặn ô chọn giọng dài tràn popover; nhãn chọn rút gọn và danh sách hiển thị tên đầy đủ xuống dòng. Không đổi cấu hình/locale giọng đọc hoặc API.
