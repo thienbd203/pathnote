@@ -31,8 +31,6 @@ pub enum Root {
 mod vocabulary;
 pub(in crate::modules) use vocabulary::{extract, ExtractedSense};
 
-pub(in crate::modules) use attributes::{Locale, PartOfSpeech};
-
 #[cfg(test)]
 mod dual_accent_tests {
     use super::validate;

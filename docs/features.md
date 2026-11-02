@@ -371,27 +371,12 @@ Code: `server/src/modules/exercises/` (`question.rs` luật từng dạng + proj
 
 Code: `server/src/modules/ai_study/` (`service.rs`, `cleanup.rs`); web `lib/ai-study.ts`, `AIStudyDialog.vue`.
 
-## Trang IPA và block phát âm
+## Block phát âm trong ghi chú
 
-### Hành vi
-
-- Route web `/ipa`: bảng 44 âm, audio mẫu UK, giọng trình duyệt US/UK, minimal pairs, tìm kiếm, import JSON.
-- Kho IPA riêng theo user + locale; mỗi word/pair là một row JSONB, unique `(user_id, locale, kind, key)`. Không giới hạn tổng số mục.
-- GET trả trang 100 row. Chế độ cặp âm chỉ tải pairs; Tất cả từ cần cả words và pairs để giữ các từ nhập qua cặp âm. Tìm kiếm local vẫn tải các trang của nguồn đang cần (chưa phù hợp kho cực lớn). Preview import không tải lại toàn bộ kho, chỉ lookup các khóa trong payload.
-- Import ≤256 KiB; pairs 1–50/request. Từ được trim + gom whitespace + lowercase để dedup; US/UK tách riêng. Entry/Sense/Example dùng chung enum locale/POS và validator với node từ vựng.
-- Cặp âm: hai âm thuộc bảng 44 âm; IPA hai từ khác đúng một phoneme ở cùng vị trí. Longest match cho âm ghép; alias US quy về âm tham chiếu. Cặp đảo chiều là cùng identity (lưu canonical). Một cặp sai → 422 cả batch.
-- Import khóa row user để tuần tự hóa, insert lô 100, unique DB chặn trùng. Chưa có API sửa/xóa kho IPA.
-- Block phát âm trong note (`/` → Phát âm): nhập từ/cụm, chọn US/UK, tạo IPA/dịch tự động (debounce/cancel, không áp nếu text/locale/field đã đổi) hoặc nhập tay.
-- "Thêm vào từ vựng": thêm vào bảng cùng giọng của bài (tạo bảng nếu chưa có) bằng merge giữ UUID/nội dung; từ đã có giữ loại từ, từ mới dùng other/phrase; ví dụ để trống (không bịa). Kho/flashcard cập nhật khi note lưu. "Ôn tập" mở kho từ lọc theo buổi.
-
-### API
-
-- `GET /ipa-vocabulary?locale=en-US&page=1` — `data.version/locale/entries` + meta.
-- `GET /ipa-pairs?locale=en-GB&page=1` — `data.version/locale/sets` + meta; một set có thể trải nhiều trang.
-- `POST /ipa-vocabulary/import` — vocabulary JSON v1 → `data.added/skipped`.
-- `POST /ipa-pairs/import` — ipa-pairs JSON v1 → `data.added/skipped`.
-
-Code: `server/src/modules/ipa/` (`phonemes.rs`); web `IpaView.vue`, `lib/ipa-library.ts`, `EditorPronunciationView.vue`, `vocabulary-json.ts`.
+- Slash `/` → Phát âm: nhập từ/cụm, chọn US/UK, tạo IPA/dịch tự động (debounce/cancel, không áp nếu text/locale/field đã đổi) hoặc nhập tay.
+- Thêm vào từ vựng vẫn merge vào bảng ghi chú; IPA, nghĩa và flashcard cập nhật sau khi lưu bài. Ôn tập mở Flashcard lọc theo buổi.
+- Đã gỡ trang `/ipa`, bảng âm/audio mẫu, minimal pairs, nhập JSON vào kho IPA riêng và các API `/ipa-vocabulary*`, `/ipa-pairs*`. Không gỡ enrichment `/ipa` và `/ipa/batch` dùng cho tạo IPA; không đổi note schema, vocabulary_cards hoặc lịch FSRS.
+- Giữ migration lịch sử và bảng ipa_library cũ trong DB, không drop/backfill/xóa dữ liệu. Không còn code ứng dụng đọc/ghi bảng này.
 
 ## Cài đặt cá nhân
 
@@ -453,7 +438,6 @@ Các số đo/test trình duyệt ghi dưới đây là kết quả lịch sử 
 
 - Hiệu năng R7: tab Lịch sử chỉ tải danh sách lịch sử, không overview/recent dashboard (3 → 1 API sau R2, hai kích thước). Quay lại Ôn tập bật lại query đúng lúc, dùng cache còn mới hoặc tải lại nếu cũ. Browser kiểm tra cả lịch sử cold và quay lại khi cache hết hạn.
 
-- Hiệu năng R8: trang IPA mặc định chỉ tải pairs (2 → 1 API sau R2; 4 → 1 từ baseline gốc). Chuyển Tất cả từ mới tải words; vẫn giữ từ phát sinh từ pairs. Hai endpoint `POST /ipa-vocabulary/duplicates` và `/ipa-pairs/duplicates` là lookup read-only, dùng chung validator/canonical keys với import, SELECT theo user/locale/kind và khóa payload, có kiểm tra trùng nội bộ. Import thật vẫn kiểm tra trong transaction và giữ idempotency. Browser thử kho ba trang xác nhận preview chỉ gọi một lookup; Rust thử từ ở trang hai, đảo cặp, trùng payload và user khác.
 
 - Xác minh R0: coordinator run [39037695883](https://github.com/thienbd203/pathnote/actions/runs/39037695883) đã qua check, build, browser contract đúng cặp SHA và deploy. Bản tối ưu R1–R8 được kiểm tra local với cùng bộ test, việc xác minh giao diện sau 28/10 thực hiện trực tiếp, không có browser gate.
 
@@ -473,7 +457,6 @@ không phải cam kết thời gian tải trên mạng production.
 | Lịch sử flashcard | 5 → 1 | 5 → 1 |
 | Mở lượt ôn | 6 → 2 | 6 → 2 |
 | Chấm rồi chuyển thẻ | 5 → 2 | 5 → 2 |
-| IPA mặc định | 4 → 1 | 4 → 1 |
 | Cài đặt | 3 → 1 | 3 → 1 |
 
 Kiểm tra bản ghép: 206 test frontend; 63 ca Playwright qua cả macOS và Linux,
@@ -591,5 +574,9 @@ Menu bảng từ vựng chia nhóm IPA / Nhập dữ liệu & AI / Thao tác b�
 
 Prompt tạo từ vựng và thêm ví dụ yêu cầu IPA UK/US theo quy ước ký âm Cambridge, phân biệt cách ký âm với dữ liệu đã đối chiếu nguồn. Chọn phát âm theo loại từ/ngữ cảnh, không chắc thì để trống từng giọng; `ipa` khớp giọng của `locale`. IPA câu được suy ra theo ngữ cảnh, không nhận là dữ liệu câu từ Cambridge. Prompt thêm ví dụ giữ IPA cũ, chỉ áp dụng yêu cầu mới cho câu thêm. Không thay format JSON v1 hoặc tự sửa dữ liệu đang lưu.
 
+Lịch sử flashcard ưu tiên từ tiếng Anh ở danh sách đầy đủ và bản gọn, nghĩa tiếng Việt ở dòng phụ; IPA và nhãn UK/US lấy đúng snapshot của lượt ôn (fallback hiện có cho lượt cũ không snapshot). Nút loa ngay trong hàng dùng giọng theo locale và cài đặt cá nhân trên thiết bị, có phát/dừng, không mở chi tiết hoặc thay đổi lịch ôn. Thiếu IPA hiển thị thông báo ngắn nhưng vẫn nghe từ; thiếu nội dung ẩn loa. Nút mở chi tiết và nút nghe độc lập, dùng được bàn phím; từ/IPA dài tự xuống dòng trên mobile. Không đổi API hay snapshot lịch sử.
+
 
 Nhóm từ (02/11): menu riêng `/word-groups`, bản Danh sách đối chiếu. Lưu name/note và danh sách ID vocabulary_cards có thứ tự vào word_groups/word_group_members (migration additive). Nhóm riêng từng tài khoản, lấy từ active trong ghi chú đang được đọc (cả nguồn được chia sẻ); đọc lại quyền khi hiển thị, không snapshot nội dung. Từ cập nhật IPA/nghĩa được phản ánh khi tải lại nhóm; xóa/thu hồi quyền thành placeholder, undo khôi phục cùng ID. Search phân trang theo chuỗi word/meaning không phân biệt hoa thường, escape LIKE; không có AI semantic search. Hiển thị US theo helper flashcard, không relabel IPA UK cũ. Giữ tên/ghi chú nháp khi lỗi hoặc xung đột; optimistic revision + user row lock ngăn lost update và vượt quota khi ghi song song. Giới hạn 200 nhóm/user, 100 mục/nhóm, tên 100 và note 6000 Unicode scalar. Gỡ mục hoặc xóa nhóm chỉ thay metadata nhóm, không sửa cards/note/lịch nhớ. Card bị hard-delete cascade membership; group giữ lại.
+
+Frontend bỏ màn Kho từ vựng độc lập `/vocabulary`; URL cũ chuyển tới Flashcard, menu/lối mở kho được gỡ. API `/vocabulary` và vocabulary_cards vẫn phục vụ tìm kiếm chung, bảng ghi chú, Nhóm từ và ôn tập; không đổi backend/schema hoặc dữ liệu.

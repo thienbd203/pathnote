@@ -21,8 +21,6 @@ pub mod exercises;
 
 pub mod ai_imports;
 
-pub mod ipa_library;
-
 pub mod flashcard_attempts;
 pub mod flashcard_memory;
 pub mod flashcard_settings;

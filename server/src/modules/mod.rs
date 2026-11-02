@@ -15,5 +15,4 @@ pub mod exercises;
 
 pub mod ai_study;
 
-pub mod ipa;
 pub mod settings;

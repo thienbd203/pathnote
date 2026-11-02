@@ -68,11 +68,7 @@ pub fn build_app<S: SessionStore + Clone>(state: AppState, config: &Config, stor
                 StatusCode::REQUEST_TIMEOUT,
                 Duration::from_secs(120),
             )),
-        )
-        .merge(modules::ipa::routes().layer(TimeoutLayer::with_status_code(
-            StatusCode::REQUEST_TIMEOUT,
-            Duration::from_secs(120),
-        )));
+        );
 
     Router::new()
         .nest("/api/v1", api)
