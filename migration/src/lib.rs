@@ -1,3 +1,4 @@
+mod m20261102_010001_word_groups;
 pub use sea_orm_migration::prelude::*;
 
 mod m20261012_101052_create_users_table;
@@ -65,6 +66,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261025_010001_british_pronunciation::Migration),
             Box::new(m20261026_010001_fsrs_evaluated_at::Migration),
             Box::new(m20261028_010001_flashcard_american_ipa::Migration),
+            Box::new(m20261102_010001_word_groups::Migration),
         ]
     }
 }

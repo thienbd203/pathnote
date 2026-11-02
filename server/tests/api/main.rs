@@ -47,3 +47,5 @@ mod recordings;
 
 mod british_pronunciation;
 mod flashcard_statistics;
+
+mod word_groups;
