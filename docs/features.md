@@ -582,3 +582,5 @@ Nhóm từ (02/11): menu riêng `/word-groups`, bản Danh sách đối chiếu.
 Frontend bỏ màn Kho từ vựng độc lập `/vocabulary`; URL cũ chuyển tới Flashcard, menu/lối mở kho được gỡ. API `/vocabulary` và vocabulary_cards vẫn phục vụ tìm kiếm chung, bảng ghi chú, Nhóm từ và ôn tập; không đổi backend/schema hoặc dữ liệu.
 
 Nhóm từ: bản nháp bỏ trống tên không báo lỗi khi chọn từ; lúc gửi tạo nhóm, frontend suy tên từ các từ đã chọn (bỏ trùng, tối đa 100 Unicode scalar, không có từ dùng Nhóm từ mới). Nhóm đã lưu vẫn bắt buộc tên; backend không thay validator/API. Thanh lưu đặt dưới phần đối chiếu/ghi chú, sticky đáy và xếp dọc ô tên/actions khi thiếu chỗ.
+
+Flashcard (04/11): mặt đáp án hiện nhãn loại từ phía trên đáp án, cùng kiểu với mặt trước ở cả hai chiều ôn. Thiếu loại từ thì ẩn nhãn; không đổi API, dữ liệu hoặc lịch ôn.
