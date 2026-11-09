@@ -584,3 +584,5 @@ Frontend bỏ màn Kho từ vựng độc lập `/vocabulary`; URL cũ chuyển 
 Nhóm từ: bản nháp bỏ trống tên không báo lỗi khi chọn từ; lúc gửi tạo nhóm, frontend suy tên từ các từ đã chọn (bỏ trùng, tối đa 100 Unicode scalar, không có từ dùng Nhóm từ mới). Nhóm đã lưu vẫn bắt buộc tên; backend không thay validator/API. Thanh lưu đặt dưới phần đối chiếu/ghi chú, sticky đáy và xếp dọc ô tên/actions khi thiếu chỗ.
 
 Flashcard (04/11): mặt đáp án hiện nhãn loại từ phía trên đáp án, cùng kiểu với mặt trước ở cả hai chiều ôn. Thiếu loại từ thì ẩn nhãn; không đổi API, dữ liệu hoặc lịch ôn.
+
+Các ô ngày trong buổi học, thiết lập ban đầu, khóa học và bộ lọc Lịch sử Flashcard dùng lịch shadcn-vue tiếng Việt. Ngày kết thúc khóa học có thể bỏ trống. Tab Dán JSON giới hạn chiều cao ô nhập để nội dung dài cuộn bên trong.
