@@ -199,6 +199,18 @@ Quy tắc:
 
 Kiểm chứng chuyển cách viết 24/10/2026: ba migration `create_flashcard_runs`, `add_learning_query_indexes`, `flashcard_meanings_index` được so với bản `35abeb2` trên hai database PostgreSQL 17 trống riêng. Toàn bộ `pg_dump --schema-only --no-owner --no-privileges` giống nhau (chỉ bỏ token ngẫu nhiên `\restrict`/`\unrestrict` của pg_dump). Mỗi migration đổi cách viết được chạy `up → down → up` trước migration kế tiếp; migration thời gian ôn mới cũng qua `down/up`. Không áp lại migration cũ trên production.
 
+## MCP từ vựng cá nhân
+
+`deploy/mcp/setup.sql` cài schema tùy chọn cho dịch vụ FastMCP riêng. Hàm
+`SECURITY DEFINER` dùng search path cố định và truy vấn theo Google subject đã
+xác thực. Role dịch vụ gọi các hàm đã cấp quyền. Chỉ mục trên biểu thức chuẩn
+hóa cho phép tra ứng viên trên projection hiện có mà không sửa hash của thẻ.
+
+Các lần ghi đề xuất khóa hàng tài khoản bằng `FOR NO KEY UPDATE` trong
+transaction `READ COMMITTED`. Lần đọc sau khi lấy khóa thấy lịch sử đã commit
+của yêu cầu trước. Lịch sử nằm trong schema MCP và độc lập với bảng ghi chú
+và flashcard. Contract JSON v1 và REST của frontend dùng luồng hiện có.
+
 ## Thay đổi contract API
 
 Ghi mỗi thay đổi response/request mà frontend thấy. Cột đầu là đợt hoặc commit.

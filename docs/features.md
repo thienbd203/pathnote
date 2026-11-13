@@ -587,10 +587,11 @@ Flashcard (04/11): mặt đáp án hiện nhãn loại từ phía trên đáp á
 
 Các ô ngày trong buổi học, thiết lập ban đầu, khóa học và bộ lọc Lịch sử Flashcard dùng lịch shadcn-vue tiếng Việt. Ngày kết thúc khóa học có thể bỏ trống. Tab Dán JSON giới hạn chiều cao ô nhập để nội dung dài cuộn bên trong.
 
-MCP từ vựng cá nhân có một tool đọc `check_vocabulary` để tác vụ ChatGPT đối
-chiếu ứng viên với kho từ Pathnote đang hoạt động. Mỗi lượt gọi lấy Google
-subject từ token OAuth đã xác thực, tìm tài khoản qua `users.google_id` và
-đối chiếu ghi chú do tài khoản đó sở hữu. Tài khoản chưa liên kết bị từ chối.
-PostgreSQL chỉ cấp role MCP quyền gọi hàm đối chiếu. Tool chuẩn hóa hoa thường
-và khoảng trắng, gộp ứng viên lặp và trả những từ đã có hoặc chưa có. Các từ
-đã gửi được đối chiếu sau khi lưu vào kho. Xem `deploy/README.md` để cấu hình.
+MCP từ vựng cá nhân dùng Google subject của mỗi lượt gọi để tìm tài khoản
+Pathnote. `check_vocabulary` đối chiếu ứng viên với kho từ đang hoạt động,
+lịch sử đề xuất của tài khoản và các ứng viên cùng lượt. Có ba mức `exact`,
+`lemma` và `word_family`. Lịch ChatGPT dùng `word_family`.
+`record_generated_vocabulary` kiểm tra lại trong transaction rồi ghi đúng
+20 từ vào lịch sử riêng, tối đa một lô mỗi ngày. ChatGPT gửi JSON v1 để người
+dùng tự nhập. Chỉ sau khi nhập, từ mới vào kho và được đồng bộ sang flashcard
+theo luồng ghi chú hiện có. Xem `deploy/README.md` để cấu hình và thử lịch.

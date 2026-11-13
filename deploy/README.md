@@ -701,11 +701,27 @@ Release schema 4 chỉ cho grace một release với writer thiếu version trê
 ## MCP từ vựng cá nhân (tùy chọn)
 
 Dịch vụ độc lập, chạy một instance trên loopback cổng 8017. Dùng FastMCP cho
-Streamable HTTP và OAuth với Google. ChatGPT gọi `check_vocabulary` với tối đa
-50 ứng viên, nhận `new_words` và `known_words`. Mỗi lần gọi dùng Google
-subject đã xác thực để tìm tài khoản Pathnote tương ứng. Kết quả chỉ xét từ
-đang hoạt động trong ghi chú do tài khoản đó sở hữu. PostgreSQL cấp role MCP
-quyền gọi một hàm đối chiếu, không cấp quyền đọc trực tiếp các bảng ứng dụng.
+Streamable HTTP và OAuth với Google. Google subject đã xác thực xác định tài
+khoản Pathnote cho mỗi lượt gọi. Role MCP chỉ gọi được các hàm được cấp quyền.
+Lịch sử đề xuất nằm trong schema `pathnote_mcp`. ChatGPT gửi JSON v1 để người
+dùng tự nhập bằng luồng nhập từ vựng hiện tại.
+
+| Tool | Đầu vào | Kết quả |
+| --- | --- | --- |
+| `check_vocabulary` | `words` từ 1 đến 50, `match_mode` mặc định `exact`, tùy chọn `batch_date` theo YYYY-MM-DD | `new_words`, `known_words`, `matches` có từ đối chiếu, mức khớp và nguồn. Có `batch_date` thì trả thêm `daily_batch` hoặc `null`. |
+| `record_generated_vocabulary` | `words` đúng 20, `source: "chatgpt_daily"`, `batch_date` theo YYYY-MM-DD, `idempotency_key`, `match_mode` mặc định `word_family` | Thành công trả `batch_id`, `recorded_words`, `recorded_count`, `idempotent_replay`. Xung đột trả `error_code`, `duplicates` và số mục ghi bằng 0. |
+
+`exact` chuẩn hóa NFC, chữ hoa thường và khoảng trắng. `lemma` dùng từ điển
+LemmInflect để xét biến thể, giữ so khớp chính xác cho từ mơ hồ trừ các trường
+hợp đã được chọn rõ. `word_family` xét thêm danh sách `word_families.json`.
+Có thể bổ sung họ từ trong file này. Từ đồng nghĩa và từ ghép độc lập được
+xét riêng. Kết quả ưu tiên exact, lemma, rồi word family. Khi cùng mức, ưu
+tiên kho từ, lịch sử đề xuất, rồi ứng viên đã chọn trong cùng lượt.
+
+Mỗi tài khoản có một lô thành công mỗi ngày. Gọi lại cùng khóa và payload
+trả lô cũ. Khóa trùng với payload khác trả `IDEMPOTENCY_CONFLICT`.
+`DUPLICATE_VOCABULARY` từ chối toàn lô. `DAILY_BATCH_EXISTS` trả lô đã lưu
+cùng ngày. Lịch sử bắt đầu từ các lô được ghi sau khi nâng cấp.
 
 1. Chuẩn bị subdomain HTTPS riêng cho MCP. Trong
    `sudo -u postgres psql -X -d pathnote_rust`, tạo role nếu chưa có rồi đặt
@@ -723,10 +739,9 @@ quyền gọi một hàm đối chiếu, không cấp quyền đọc trực ti�
    sudo -u postgres psql -X -d pathnote_rust < deploy/mcp/setup.sql
    ```
 
-   Nếu đã chạy SQL của bản cũ, dùng lại role và mật khẩu hiện có. Chạy
-   `setup.sql` mới cùng bản `server.py` mới. Script thay view cũ bằng hàm
-   đối chiếu trong một transaction. Xóa `PATHNOTE_MCP_GOOGLE_SUB` khỏi file
-   env cũ và khởi động lại dịch vụ sau khi cập nhật.
+   PostgreSQL cần database UTF-8 và collation ICU `und-x-icu`. Script tạo
+   chỉ mục tra cứu trên `vocabulary_cards` trong transaction, nên chạy lúc ít
+   lưu ghi chú. Nếu nâng cấp dịch vụ đang chạy, xem lệnh ở cuối mục này.
 
 2. Tạo Google OAuth client loại **Web application**, callback
    `https://MCP_DOMAIN/auth/callback`. Nếu consent screen ở Testing, thêm đúng
@@ -740,7 +755,7 @@ quyền gọi một hàm đối chiếu, không cấp quyền đọc trực ti�
    sudo apt install -y python3-venv
    sudo useradd --system --user-group --no-create-home --shell /usr/sbin/nologin pathnote-mcp
    sudo install -d -m 755 /opt/pathnote-mcp
-   sudo install -m 644 deploy/mcp/server.py deploy/mcp/requirements.txt /opt/pathnote-mcp/
+   sudo install -m 644 deploy/mcp/{server.py,dedup.py,history.py,word_families.json,requirements.txt} /opt/pathnote-mcp/
    sudo python3 -m venv /opt/pathnote-mcp/.venv
    sudo /opt/pathnote-mcp/.venv/bin/pip install -r /opt/pathnote-mcp/requirements.txt
    sudo install -m 600 deploy/mcp/production.env.example /etc/pathnote-mcp.env
@@ -788,18 +803,53 @@ quyền gọi một hàm đối chiếu, không cấp quyền đọc trực ti�
    ChatGPT; Google Cloud dùng callback riêng ở bước 2.
    Xem [OAuth cho ChatGPT](https://developers.openai.com/plugins/build/auth).
 
-6. Kết nối bằng tài khoản Google đang đăng nhập Pathnote. Dùng
-   `check_vocabulary` thử một từ đã học và một từ mới trong chat. Kiểm tra
-   chúng nằm đúng trong `known_words` và `new_words`. Tạo một tác vụ chạy một
-   lần trong cùng workspace và chế độ với lịch buổi sáng, yêu cầu gọi đúng
-   tool với cùng hai từ. Chỉ sửa tác vụ 20 từ hiện tại sau khi lần chạy theo
-   lịch trả về kết quả đúng:
+6. Kết nối bằng tài khoản Google đang đăng nhập Pathnote. Thử
+   `check_vocabulary` với một từ đã học và một từ mới. Sau đó chạy thử một
+   tác vụ theo lịch trên tài khoản thử nghiệm để xác nhận ChatGPT thấy và
+   được phép gọi cả hai tool. Chỉ cập nhật lịch buổi sáng sau khi nhận được
+   JSON v1 đủ 20 mục từ lần chạy thử.
 
-   > Mỗi sáng tạo một danh sách ứng viên, rồi gọi Pathnote
-   > check_vocabulary để chọn đúng 20 từ khác nhau từ new_words.
-   > Nếu thiếu, tạo thêm và gọi tiếp. Kiểm tra lại danh sách 20 từ cuối
-   > qua cùng tool trước khi gửi JSON theo format Pathnote. Nếu không gọi
-   > được tool hoặc kết quả còn thiếu, báo lỗi cho tôi và dừng lượt này.
+### Nâng cấp dịch vụ đang chạy
+
+Chạy từ checkout backend mới. Dùng lại OAuth, systemd, role PostgreSQL và
+`/etc/pathnote-mcp.pgpass` hiện có.
+
+```sh
+sudo -u postgres psql -X -v ON_ERROR_STOP=1 -d pathnote_rust < deploy/mcp/setup.sql
+sudo install -m 644 deploy/mcp/{server.py,dedup.py,history.py,word_families.json,requirements.txt} /opt/pathnote-mcp/
+sudo /opt/pathnote-mcp/.venv/bin/pip install -r /opt/pathnote-mcp/requirements.txt
+sudo systemctl restart pathnote-mcp
+sudo systemctl is-active pathnote-mcp
+curl -i -X POST https://MCP_DOMAIN/mcp
+```
+
+Lệnh curl không có token nên dự kiến trả 401 kèm OAuth challenge. Làm mới
+danh sách tool của kết nối ChatGPT nếu nó vẫn chỉ hiện `check_vocabulary`.
+
+### Nội dung cho lịch 20 từ mỗi sáng
+
+Giữ lịch theo giờ Việt Nam. Bổ sung phần sau vào prompt JSON v1 hiện có.
+
+> Mỗi sáng tạo 40–50 từ gốc tiếng Anh trình độ A1–A2. Gọi
+> `check_vocabulary` với `match_mode: "word_family"` và `batch_date` là ngày
+> hôm nay ở Asia/Ho_Chi_Minh. Nếu có `daily_batch`, lấy đúng 20 từ đã ghi theo
+> thứ tự đó và tạo lại JSON để gửi. Nếu chưa có, chọn đúng 20 từ từ
+> `new_words`. Nếu thiếu, tạo thêm ứng viên rồi kiểm tra lại danh sách đã
+> chọn cùng ứng viên mới, tối đa 50 từ mỗi lượt.
+>
+> Chuẩn bị và kiểm tra JSON hợp lệ với `version: 1`, `locale: "en-US"`,
+> `entries` có đúng 20 mục. Giữ các trường từ, IPA UK/US, chủ đề, nghĩa, loại
+> từ và ví dụ theo prompt nhập Pathnote hiện có. Gọi
+> `record_generated_vocabulary` với 20 headword theo thứ tự JSON, ngày đó,
+> `source: "chatgpt_daily"` và `match_mode: "word_family"`. Giữ nguyên
+> `idempotency_key` và payload khi thử lại vì mất phản hồi. Nếu báo
+> `DUPLICATE_VOCABULARY`, thay ứng viên trùng, kiểm tra lại cả lô, cập nhật
+> JSON và dùng khóa mới. Nếu báo `DAILY_BATCH_EXISTS`, dùng 20 từ trong lô đã
+> ghi. Nếu báo `IDEMPOTENCY_CONFLICT`, tra lại lô theo ngày trước khi thử tiếp.
+>
+> Gửi đúng một JSON v1 cho tôi tự nhập sau khi xác nhận đã ghi đủ 20 từ.
+> Dùng đúng danh sách và thứ tự trong `recorded_words`. Nếu MCP lỗi hoặc
+> thiếu từ, báo lỗi và dừng lượt này. JSON chỉ chứa trường của định dạng v1.
 
 Để ngắt kết nối, dừng `pathnote-mcp`, thu hồi quyền trong tài khoản Google
 và gỡ plugin khỏi ChatGPT.
