@@ -55,3 +55,8 @@ Bản WAAPI và bố cục giữ chiều cao đã triển khai; thông số ở 
 - Tìm toàn văn trong nội dung ghi chú.
 - Flashcard: import/export `.apkg`, giới hạn thẻ mỗi ngày, bury sibling, day cutoff/fuzz như Anki.
 - Menu avatar ghi "Hồ sơ" nhưng màn chỉ hiển thị tài khoản: đổi nhãn thành "Tài khoản" hoặc làm chức năng sửa hồ sơ.
+
+**MCP từ vựng cá nhân**
+- Server và phân quyền đã có ở `deploy/mcp`. Bước còn lại là cấu hình OAuth
+  trên VPS theo `deploy/README.md`, thử Google login thật và xác nhận một
+  lượt chạy trong ChatGPT Scheduled trước khi cập nhật lịch buổi sáng.

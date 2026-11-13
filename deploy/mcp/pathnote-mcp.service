@@ -1,0 +1,27 @@
+[Unit]
+Description=Pathnote personal vocabulary MCP
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pathnote-mcp
+Group=pathnote-mcp
+WorkingDirectory=/opt/pathnote-mcp
+EnvironmentFile=/etc/pathnote-mcp.env
+StateDirectory=pathnote-mcp
+StateDirectoryMode=0700
+Environment=XDG_DATA_HOME=/var/lib/pathnote-mcp
+Environment=XDG_CACHE_HOME=/var/lib/pathnote-mcp/cache
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/pathnote-mcp/.venv/bin/python /opt/pathnote-mcp/server.py
+Restart=on-failure
+RestartSec=5s
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -697,3 +697,106 @@ Release D1 tăng capability ghi chú lên schema 4 ở cả Rust, bridge và fro
 Release schema 4 chỉ cho grace một release với writer thiếu version trên plain legacy notes chưa nâng cấp và không có attr hai giọng; không cho client WebSocket thiếu version. Khi chuyển sang schema 5, nhánh grace tự mất hiệu lực, phải xóa mã chuyển tiếp trong release đó.
 
 `/up` của collaboration giờ yêu cầu kết nối Rust và database khỏe, trả thêm rust:ok; probe timeout 2s, cache 10s. Job hiện tại không được bỏ kiểm checksum hay chấp nhận process Node sống khi Rust chết. Production `.env` phải dùng COLLABORATION_API_URL=http://127.0.0.1:3010 với blue–green; lệnh kiểm tra/sửa do người vận hành chạy ở README collaboration mục D3. Không có env/migration DB mới cho fix này; cần deploy cả ba phía cùng bộ version.
+
+## MCP từ vựng cá nhân (tùy chọn)
+
+Dịch vụ độc lập, chạy một instance trên loopback cổng 8017. Dùng FastMCP cho
+Streamable HTTP và OAuth với Google. ChatGPT gọi `check_vocabulary` với tối đa
+50 ứng viên, nhận `new_words` và `known_words`. Chỉ đối chiếu kho từ đang hoạt
+động trong ghi chú do một tài khoản Pathnote sở hữu. Ghi chú được người khác
+chia sẻ nằm ngoài phạm vi. PostgreSQL chỉ cấp quyền đọc view của chủ tài khoản.
+
+1. Chuẩn bị subdomain HTTPS riêng cho MCP và chọn đúng tài khoản Pathnote trong
+   PostgreSQL. Trong `sudo -u postgres psql -X -d pathnote_rust`, tra theo email
+   đăng nhập Pathnote và dùng `id` cùng `google_id` từ đúng một hàng:
+
+   ```sql
+   SELECT id, google_id FROM public.users WHERE email = 'email-cua-anh@example.com';
+   CREATE ROLE pathnote_mcp LOGIN;
+   \password pathnote_mcp
+   \q
+   ```
+
+   Chạy từ checkout backend trên VPS, thay `123` bằng ID thực:
+
+   ```sh
+   sudo -u postgres psql -X -d pathnote_rust -v owner_id=123 < deploy/mcp/setup.sql
+   ```
+
+2. Tạo Google OAuth client loại **Web application**, callback
+   `https://MCP_DOMAIN/auth/callback`. Nếu consent screen ở Testing, thêm đúng
+   tài khoản Google của chủ kho vào Test users. MCP chỉ xin scope `openid`.
+   Giữ Client ID và Client Secret để điền ở bước 3.
+
+3. Cài trên VPS với Python 3.10+ có hỗ trợ venv. Tạo system user
+   `pathnote-mcp` và cài file từ checkout:
+
+   ```sh
+   sudo apt install -y python3-venv
+   sudo useradd --system --user-group --no-create-home --shell /usr/sbin/nologin pathnote-mcp
+   sudo install -d -m 755 /opt/pathnote-mcp
+   sudo install -m 644 deploy/mcp/server.py deploy/mcp/requirements.txt /opt/pathnote-mcp/
+   sudo python3 -m venv /opt/pathnote-mcp/.venv
+   sudo /opt/pathnote-mcp/.venv/bin/pip install -r /opt/pathnote-mcp/requirements.txt
+   sudo install -m 600 deploy/mcp/production.env.example /etc/pathnote-mcp.env
+   sudo install -o pathnote-mcp -g pathnote-mcp -m 600 /dev/null /etc/pathnote-mcp.pgpass
+   ```
+
+   Điền file env bằng `sudoedit`. Dùng `google_id` ở bước 1 cho
+   `PATHNOTE_MCP_GOOGLE_SUB`, Client ID/Secret ở bước 2 và subdomain HTTPS
+   cho `PATHNOTE_MCP_PUBLIC_URL`. Dùng `openssl rand -hex 32` để tạo khóa ký
+   riêng. Để trống `PATHNOTE_MCP_CHATGPT_REDIRECT_URI` cho lần khởi động đầu.
+   File pgpass chứa dòng `127.0.0.1:5432:pathnote_rust:pathnote_mcp:MẬT_KHẨU`.
+   Giữ nguyên chủ file và quyền 600 khi điền. Systemd lưu trạng thái OAuth
+   mã hóa trong thư mục dữ liệu riêng để phiên kết nối sống qua restart.
+
+   ```sh
+   sudo install -m 644 deploy/mcp/pathnote-mcp.service /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now pathnote-mcp
+   ```
+
+4. Trong virtual host HTTPS riêng, chuyển cả `/mcp` lẫn các đường dẫn OAuth
+   và discovery vào cùng dịch vụ. Đặt lại các header proxy như bên dưới và
+   tắt access log ở host này vì callback có authorization code.
+
+   ```nginx
+   access_log off;
+   client_max_body_size 512k;
+   location / {
+       proxy_pass http://127.0.0.1:8017;
+       proxy_http_version 1.1;
+       proxy_set_header Host $host;
+       proxy_set_header X-Forwarded-Proto $scheme;
+       proxy_set_header X-Forwarded-For $remote_addr;
+       proxy_buffering off;
+   }
+   ```
+
+   Chạy `sudo nginx -t && sudo systemctl reload nginx`. Kiểm tra
+   `curl -i -X POST https://MCP_DOMAIN/mcp` trả 401 kèm OAuth challenge và
+   `https://MCP_DOMAIN/.well-known/oauth-protected-resource/mcp` trả metadata.
+5. Trong ChatGPT web → Plugins → Add custom MCP server, dùng
+   `https://MCP_DOMAIN/mcp` và chọn OAuth với DCR nếu có tùy chọn đăng ký.
+   Khi trang cấu hình hiện redirect URI, điền đúng URI đó vào
+   `PATHNOTE_MCP_CHATGPT_REDIRECT_URI` và chạy
+   `sudo systemctl restart pathnote-mcp`. Redirect URI này thuộc kết nối
+   ChatGPT; Google Cloud dùng callback riêng ở bước 2.
+   Xem [OAuth cho ChatGPT](https://developers.openai.com/plugins/build/auth).
+
+6. Kết nối bằng tài khoản Google đang đăng nhập Pathnote. Dùng
+   `check_vocabulary` thử một từ đã học và một từ mới trong chat. Kiểm tra
+   chúng nằm đúng trong `known_words` và `new_words`. Tạo một tác vụ chạy một
+   lần trong cùng workspace và chế độ với lịch buổi sáng, yêu cầu gọi đúng
+   tool với cùng hai từ. Chỉ sửa tác vụ 20 từ hiện tại sau khi lần chạy theo
+   lịch trả về kết quả đúng:
+
+   > Mỗi sáng tạo một danh sách ứng viên, rồi gọi Pathnote
+   > check_vocabulary để chọn đúng 20 từ khác nhau từ new_words.
+   > Nếu thiếu, tạo thêm và gọi tiếp. Kiểm tra lại danh sách 20 từ cuối
+   > qua cùng tool trước khi gửi JSON theo format Pathnote. Nếu không gọi
+   > được tool hoặc kết quả còn thiếu, báo lỗi cho tôi và dừng lượt này.
+
+Để ngắt kết nối, dừng `pathnote-mcp`, thu hồi quyền trong tài khoản Google
+và gỡ plugin khỏi ChatGPT. Khi đổi chủ kho, tạo lại view cho owner mới,
+cập nhật Google subject, thay khóa ký và cấp quyền lại từ ChatGPT.
