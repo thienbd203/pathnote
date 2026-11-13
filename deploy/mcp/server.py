@@ -1,4 +1,4 @@
-"""Read-only MCP vocabulary checks for one Pathnote account."""
+"""Read-only MCP vocabulary checks scoped to the authenticated Pathnote account."""
 
 import os
 from hashlib import sha256
@@ -35,24 +35,16 @@ async def known_keys(dsn: str, subject: str, keys: list[str]) -> set[str]:
     )
     async with connection:
         cursor = await connection.execute(
-            """
-            SELECT EXISTS (
-                SELECT 1 FROM pathnote_mcp.vocabulary WHERE google_id = %s
-            ), ARRAY(
-                SELECT DISTINCT word_key
-                FROM pathnote_mcp.vocabulary
-                WHERE google_id = %s AND word_key = ANY(%s)
-            )
-            """,
-            (subject, subject, keys),
+            "SELECT word_key FROM pathnote_mcp.check_vocabulary(%s, %s)",
+            (subject, keys),
         )
-        authorized, matches = await cursor.fetchone()
-    if not authorized:
-        raise ToolError("This Google account is not linked to the configured Pathnote account.")
-    return set(matches)
+        rows = await cursor.fetchall()
+    if not rows:
+        raise ToolError("Sign in with a Google account already linked to Pathnote.")
+    return {key for (key,) in rows if key is not None}
 
 
-def build_server(auth: AuthProvider, owner_subject: str, dsn: str) -> FastMCP:
+def build_server(auth: AuthProvider, dsn: str) -> FastMCP:
     server = FastMCP("Pathnote cá nhân", auth=auth)
 
     @server.tool(annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False))
@@ -63,9 +55,9 @@ def build_server(auth: AuthProvider, owner_subject: str, dsn: str) -> FastMCP:
         ignores letter case and repeated whitespace.
         """
         token = get_access_token()
-        subject = token.claims.get("sub") if token else None
-        if subject != owner_subject:
-            raise ToolError("Sign in with the Google account linked to this Pathnote MCP.")
+        subject = token.subject if token else None
+        if not subject:
+            raise ToolError("Sign in with Google before checking Pathnote vocabulary.")
         candidates = candidate_keys(words)
         try:
             matches = await known_keys(dsn, subject, list(candidates))
@@ -81,10 +73,9 @@ def build_server(auth: AuthProvider, owner_subject: str, dsn: str) -> FastMCP:
 
 def main() -> None:
     base_url = os.environ["PATHNOTE_MCP_PUBLIC_URL"].rstrip("/")
-    subject = os.environ["PATHNOTE_MCP_GOOGLE_SUB"].strip()
     origin = urlsplit(base_url)
-    if origin.scheme != "https" or not origin.netloc or origin.path or not subject:
-        raise ValueError("Configure a public HTTPS origin and the owner's Google subject.")
+    if origin.scheme != "https" or not origin.netloc or origin.path:
+        raise ValueError("Configure a public HTTPS origin.")
     redirect_uri = os.getenv("PATHNOTE_MCP_CHATGPT_REDIRECT_URI")
     chatgpt_redirects = [
         "https://chatgpt.com/connector_platform_oauth_redirect",
@@ -101,7 +92,7 @@ def main() -> None:
         forward_resource=False,
         allowed_client_redirect_uris=[redirect_uri] if redirect_uri else chatgpt_redirects,
     )
-    build_server(auth, subject, os.environ["PATHNOTE_MCP_DATABASE_URL"]).run(
+    build_server(auth, os.environ["PATHNOTE_MCP_DATABASE_URL"]).run(
         transport="http",
         host="127.0.0.1",
         port=8017,

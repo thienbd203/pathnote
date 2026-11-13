@@ -588,8 +588,9 @@ Flashcard (04/11): mặt đáp án hiện nhãn loại từ phía trên đáp á
 Các ô ngày trong buổi học, thiết lập ban đầu, khóa học và bộ lọc Lịch sử Flashcard dùng lịch shadcn-vue tiếng Việt. Ngày kết thúc khóa học có thể bỏ trống. Tab Dán JSON giới hạn chiều cao ô nhập để nội dung dài cuộn bên trong.
 
 MCP từ vựng cá nhân có một tool đọc `check_vocabulary` để tác vụ ChatGPT đối
-chiếu ứng viên với kho từ Pathnote đang hoạt động. Google OAuth xác nhận chủ
-tài khoản theo subject và PostgreSQL giới hạn view theo ID chủ ghi chú. Tool
-chuẩn hóa hoa thường và khoảng trắng như Pathnote, gộp ứng viên lặp và trả
-những từ đã có hoặc chưa có. Các từ đã gửi chỉ được đối chiếu sau khi lưu
-vào kho. Hướng dẫn cấu hình dịch vụ nằm trong `deploy/README.md`.
+chiếu ứng viên với kho từ Pathnote đang hoạt động. Mỗi lượt gọi lấy Google
+subject từ token OAuth đã xác thực, tìm tài khoản qua `users.google_id` và
+đối chiếu ghi chú do tài khoản đó sở hữu. Tài khoản chưa liên kết bị từ chối.
+PostgreSQL chỉ cấp role MCP quyền gọi hàm đối chiếu. Tool chuẩn hóa hoa thường
+và khoảng trắng, gộp ứng viên lặp và trả những từ đã có hoặc chưa có. Các từ
+đã gửi được đối chiếu sau khi lưu vào kho. Xem `deploy/README.md` để cấu hình.

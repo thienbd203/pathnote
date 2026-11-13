@@ -57,6 +57,6 @@ Bản WAAPI và bố cục giữ chiều cao đã triển khai; thông số ở 
 - Menu avatar ghi "Hồ sơ" nhưng màn chỉ hiển thị tài khoản: đổi nhãn thành "Tài khoản" hoặc làm chức năng sửa hồ sơ.
 
 **MCP từ vựng cá nhân**
-- Server và phân quyền đã có ở `deploy/mcp`. Bước còn lại là cấu hình OAuth
+- Server lấy danh tính theo kết nối OAuth của mỗi người dùng. Bước còn lại là cấu hình OAuth
   trên VPS theo `deploy/README.md`, thử Google login thật và xác nhận một
   lượt chạy trong ChatGPT Scheduled trước khi cập nhật lịch buổi sáng.

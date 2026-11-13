@@ -702,30 +702,35 @@ Release schema 4 chỉ cho grace một release với writer thiếu version trê
 
 Dịch vụ độc lập, chạy một instance trên loopback cổng 8017. Dùng FastMCP cho
 Streamable HTTP và OAuth với Google. ChatGPT gọi `check_vocabulary` với tối đa
-50 ứng viên, nhận `new_words` và `known_words`. Chỉ đối chiếu kho từ đang hoạt
-động trong ghi chú do một tài khoản Pathnote sở hữu. Ghi chú được người khác
-chia sẻ nằm ngoài phạm vi. PostgreSQL chỉ cấp quyền đọc view của chủ tài khoản.
+50 ứng viên, nhận `new_words` và `known_words`. Mỗi lần gọi dùng Google
+subject đã xác thực để tìm tài khoản Pathnote tương ứng. Kết quả chỉ xét từ
+đang hoạt động trong ghi chú do tài khoản đó sở hữu. PostgreSQL cấp role MCP
+quyền gọi một hàm đối chiếu, không cấp quyền đọc trực tiếp các bảng ứng dụng.
 
-1. Chuẩn bị subdomain HTTPS riêng cho MCP và chọn đúng tài khoản Pathnote trong
-   PostgreSQL. Trong `sudo -u postgres psql -X -d pathnote_rust`, tra theo email
-   đăng nhập Pathnote và dùng `id` cùng `google_id` từ đúng một hàng:
+1. Chuẩn bị subdomain HTTPS riêng cho MCP. Trong
+   `sudo -u postgres psql -X -d pathnote_rust`, tạo role nếu chưa có rồi đặt
+   mật khẩu:
 
    ```sql
-   SELECT id, google_id FROM public.users WHERE email = 'email-cua-anh@example.com';
    CREATE ROLE pathnote_mcp LOGIN;
    \password pathnote_mcp
    \q
    ```
 
-   Chạy từ checkout backend trên VPS, thay `123` bằng ID thực:
+   Chạy từ checkout backend trên VPS:
 
    ```sh
-   sudo -u postgres psql -X -d pathnote_rust -v owner_id=123 < deploy/mcp/setup.sql
+   sudo -u postgres psql -X -d pathnote_rust < deploy/mcp/setup.sql
    ```
+
+   Nếu đã chạy SQL của bản cũ, dùng lại role và mật khẩu hiện có. Chạy
+   `setup.sql` mới cùng bản `server.py` mới. Script thay view cũ bằng hàm
+   đối chiếu trong một transaction. Xóa `PATHNOTE_MCP_GOOGLE_SUB` khỏi file
+   env cũ và khởi động lại dịch vụ sau khi cập nhật.
 
 2. Tạo Google OAuth client loại **Web application**, callback
    `https://MCP_DOMAIN/auth/callback`. Nếu consent screen ở Testing, thêm đúng
-   tài khoản Google của chủ kho vào Test users. MCP chỉ xin scope `openid`.
+   tài khoản Google cần thử vào Test users. MCP chỉ xin scope `openid`.
    Giữ Client ID và Client Secret để điền ở bước 3.
 
 3. Cài trên VPS với Python 3.10+ có hỗ trợ venv. Tạo system user
@@ -742,9 +747,8 @@ chia sẻ nằm ngoài phạm vi. PostgreSQL chỉ cấp quyền đọc view c�
    sudo install -o pathnote-mcp -g pathnote-mcp -m 600 /dev/null /etc/pathnote-mcp.pgpass
    ```
 
-   Điền file env bằng `sudoedit`. Dùng `google_id` ở bước 1 cho
-   `PATHNOTE_MCP_GOOGLE_SUB`, Client ID/Secret ở bước 2 và subdomain HTTPS
-   cho `PATHNOTE_MCP_PUBLIC_URL`. Dùng `openssl rand -hex 32` để tạo khóa ký
+   Điền file env bằng `sudoedit`. Dùng Client ID/Secret ở bước 2 và subdomain
+   HTTPS cho `PATHNOTE_MCP_PUBLIC_URL`. Dùng `openssl rand -hex 32` để tạo khóa ký
    riêng. Để trống `PATHNOTE_MCP_CHATGPT_REDIRECT_URI` cho lần khởi động đầu.
    File pgpass chứa dòng `127.0.0.1:5432:pathnote_rust:pathnote_mcp:MẬT_KHẨU`.
    Giữ nguyên chủ file và quyền 600 khi điền. Systemd lưu trạng thái OAuth
@@ -798,5 +802,4 @@ chia sẻ nằm ngoài phạm vi. PostgreSQL chỉ cấp quyền đọc view c�
    > được tool hoặc kết quả còn thiếu, báo lỗi cho tôi và dừng lượt này.
 
 Để ngắt kết nối, dừng `pathnote-mcp`, thu hồi quyền trong tài khoản Google
-và gỡ plugin khỏi ChatGPT. Khi đổi chủ kho, tạo lại view cho owner mới,
-cập nhật Google subject, thay khóa ký và cấp quyền lại từ ChatGPT.
+và gỡ plugin khỏi ChatGPT.

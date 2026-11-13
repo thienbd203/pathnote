@@ -6,7 +6,7 @@ CREATE TABLE places(id bigint PRIMARY KEY, user_id bigint, deleted_at timestampt
 CREATE TABLE courses(id bigint PRIMARY KEY, place_id bigint, deleted_at timestamptz);
 CREATE TABLE sessions(id bigint PRIMARY KEY, place_id bigint, course_id bigint, deleted_at timestamptz);
 CREATE TABLE vocabulary_cards(session_id bigint, word_key text, active boolean);
-INSERT INTO users VALUES (1, 'owner-google'), (2, 'other-google');
+INSERT INTO users VALUES (1, 'owner-google'), (2, 'other-google'), (3, 'empty-google');
 INSERT INTO places VALUES (1, 1, NULL), (2, 2, NULL);
 INSERT INTO courses VALUES (1, 1, now());
 INSERT INTO sessions VALUES (1, 1, NULL, NULL), (2, 2, NULL, NULL),

@@ -15,11 +15,13 @@ class PersonalMcpTests(unittest.IsolatedAsyncioTestCase):
         auth = StaticTokenVerifier(
             {
                 "owner": {"client_id": "test", "sub": "owner-google", "scopes": ["openid"]},
+                "unknown": {"client_id": "test", "sub": "unknown-google", "scopes": ["openid"]},
+                "empty": {"client_id": "test", "sub": "empty-google", "scopes": ["openid"]},
                 "other": {"client_id": "test", "sub": "other-google", "scopes": ["openid"]},
             },
             required_scopes=["openid"],
         )
-        server = build_server(auth, "owner-google", os.environ["PATHNOTE_MCP_TEST_DATABASE_URL"])
+        server = build_server(auth, os.environ["PATHNOTE_MCP_TEST_DATABASE_URL"])
         self.app = server.http_app(stateless_http=True, json_response=True)
 
     async def call(self, token, words, **extra):
@@ -43,8 +45,8 @@ class PersonalMcpTests(unittest.IsolatedAsyncioTestCase):
     async def test_auth_required(self):
         self.assertEqual((await self.call(None, ["honest"])).status_code, 401)
 
-    async def test_other_account_denied(self):
-        body = (await self.call("other", ["honest"])).json()
+    async def test_unlinked_google_account_denied(self):
+        body = (await self.call("unknown", ["honest"])).json()
         self.assertTrue("error" in body or body["result"]["isError"])
 
     async def test_only_active_owned_words_and_dedup(self):
@@ -56,8 +58,22 @@ class PersonalMcpTests(unittest.IsolatedAsyncioTestCase):
             "new_words": ["other", "deleted", "inactive", "closed"],
         })
 
+    async def test_accounts_check_their_own_words(self):
+        for token, known, new in [
+            ("owner", ["honest"], ["other"]),
+            ("other", ["other"], ["honest"]),
+            ("empty", [], ["honest", "other"]),
+            ("owner", ["honest"], ["other"]),
+        ]:
+            with self.subTest(token=token):
+                body = (await self.call(token, ["honest", "other"])).json()
+                self.assertEqual(
+                    body["result"]["structuredContent"],
+                    {"known_words": known, "new_words": new},
+                )
+
     async def test_invalid_arguments(self):
-        for words, extra in [([" "], {}), (["word"] * 51, {}), (["word"], {"user_id": 2})]:
+        for words, extra in [([" "], {}), (["word"] * 51, {}), (["word"], {"user_id": 2}), (["word"], {"google_id": "other-google"})]:
             with self.subTest(words=words, extra=extra):
                 body = (await self.call("owner", words, **extra)).json()
                 self.assertTrue("error" in body or body["result"]["isError"])
@@ -83,7 +99,7 @@ class OAuthDiscoveryTests(unittest.IsolatedAsyncioTestCase):
                 enable_cimd=False,
                 forward_resource=False,
             )
-            app = build_server(auth, "owner-google", "unused").http_app(stateless_http=True)
+            app = build_server(auth, "unused").http_app(stateless_http=True)
             async with app.lifespan(app), httpx2.AsyncClient(
                 transport=httpx2.ASGITransport(app=app), base_url=base_url
             ) as client:
